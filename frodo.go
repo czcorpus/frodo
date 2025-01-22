@@ -47,7 +47,6 @@ import (
 	"frodo/liveattrs"
 	laActions "frodo/liveattrs/actions"
 	"frodo/liveattrs/laconf"
-	"frodo/registry"
 	"frodo/root"
 
 	_ "frodo/translations"
@@ -175,7 +174,7 @@ func main() {
 		laConfRegistry,
 		version,
 	)
-	registryActions := registry.NewActions(conf.CorporaSetup)
+
 	for _, dj := range jobActions.GetDetachedJobs() {
 		if dj.IsFinished() {
 			continue
@@ -297,37 +296,6 @@ func main() {
 	engine.DELETE(
 		"/jobs/:jobId/emailNotification/:address",
 		jobActions.RemoveNotification)
-
-	engine.GET(
-		"/registry/defaults/attribute/dynamic-functions",
-		registryActions.DynamicFunctions)
-	engine.GET(
-		"/registry/defaults/wposlist", registryActions.PosSets)
-	engine.GET(
-		"/registry/defaults/wposlist/:posId", registryActions.GetPosSetInfo)
-	engine.GET(
-		"/registry/defaults/attribute/multivalue",
-		registryActions.GetAttrMultivalueDefaults)
-	engine.GET(
-		"/registry/defaults/attribute/multisep",
-		registryActions.GetAttrMultisepDefaults)
-	engine.GET(
-		"/registry/defaults/attribute/dynlib",
-		registryActions.GetAttrDynlibDefaults)
-	engine.GET(
-		"/registry/defaults/attribute/transquery",
-		registryActions.GetAttrTransqueryDefaults)
-	engine.GET(
-		"/registry/defaults/structure/multivalue",
-		registryActions.GetStructMultivalueDefaults)
-	engine.GET(
-		"/registry/defaults/structure/multisep",
-		registryActions.GetStructMultisepDefaults)
-
-	cncdbActions := cncdb.NewActions(conf.CNCDB, conf.CorporaSetup, cncDB)
-	engine.PUT(
-		"/corpora-database/:corpusId/kontextDefaults",
-		cncdbActions.InferKontextDefaults)
 
 	if conf.Logging.Level.IsDebugMode() {
 		debugActions := debug.NewActions(jobActions)
