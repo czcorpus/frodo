@@ -1,0 +1,75 @@
+{
+    "language": "cs",
+    "messages": [
+        {
+            "id": "Job of type \"{Jdesc}\" finished",
+            "message": "Job of type \"{Jdesc}\" finished",
+            "translation": "Úloha typu \"{Jdesc}\" byla dokončena",
+            "placeholders": [
+                {
+                    "id": "Jdesc",
+                    "string": "%[1]s",
+                    "type": "string",
+                    "underlyingType": "string",
+                    "argNum": 1,
+                    "expr": "jdesc"
+                }
+            ]
+        },
+        {
+            "id": "Job ID: {ItemID}",
+            "message": "Job ID: {ItemID}",
+            "translation": "ID úlohy: {ItemID}",
+            "placeholders": [
+                {
+                    "id": "ItemID",
+                    "string": "%[1]s",
+                    "type": "string",
+                    "underlyingType": "string",
+                    "argNum": 1,
+                    "expr": "upd.itemID"
+                }
+            ]
+        },
+        {
+            "id": "N-grams and query suggestion data generation",
+            "message": "N-grams and query suggestion data generation",
+            "translation": "Generování n-gramů a dat pro našeptávač"
+        },
+        {
+            "id": "Live attributes data extraction and generation",
+            "message": "Live attributes data extraction and generation",
+            "translation": "vygenerování dat pro Live attributes"
+        },
+        {
+            "id": "Testing and debugging empty job",
+            "message": "Testing and debugging empty job",
+            "translation": "Prázdný testovací a debugovací job"
+        },
+        {
+            "id": "Unknown job",
+            "message": "Unknown job",
+            "translation": "Neznámá úloha"
+        },
+        {
+            "id": "Job finished without errors",
+            "message": "Job finished without errors",
+            "translation": "Úloha skončila bez chyb"
+        },
+        {
+            "id": "Job finished with error: {Error}",
+            "message": "Job finished with error: {Error}",
+            "translation": "Úloha skončila s chybou: {Error}",
+            "placeholders": [
+                {
+                    "id": "Error",
+                    "string": "%[1]s",
+                    "type": "error",
+                    "underlyingType": "interface{Error() string}",
+                    "argNum": 1,
+                    "expr": "info.GetError()"
+                }
+            ]
+        }
+    ]
+}

@@ -1,0 +1,362 @@
+// Copyright 2019 Tomas Machalek <tomas.machalek@gmail.com>
+// Copyright 2019 Institute of the Czech National Corpus,
+//                Faculty of Arts, Charles University
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+//go:generate pigeon -o ./registry/parser/parser.go ./registry/parser/grammar.peg
+
+package main
+
+import (
+	"context"
+	"encoding/gob"
+	"flag"
+	"fmt"
+	"net/http"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"syscall"
+	"time"
+
+	"github.com/czcorpus/cnc-gokit/logging"
+	"github.com/czcorpus/cnc-gokit/uniresp"
+	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog/log"
+
+	"frodo/cncdb"
+	"frodo/cnf"
+	"frodo/corpus"
+	"frodo/corpus/query"
+	"frodo/db/mysql"
+	"frodo/debug"
+	dictActions "frodo/dictionary/actions"
+	"frodo/general"
+	"frodo/jobs"
+	"frodo/liveattrs"
+	laActions "frodo/liveattrs/actions"
+	"frodo/liveattrs/laconf"
+	"frodo/registry"
+	"frodo/root"
+
+	_ "frodo/translations"
+)
+
+var (
+	version   string
+	buildDate string
+	gitCommit string
+)
+
+func init() {
+	gob.Register(&liveattrs.LiveAttrsJobInfo{})
+	gob.Register(&liveattrs.IdxUpdateJobInfo{})
+	gob.Register(&corpus.JobInfo{})
+}
+
+func main() {
+	version := general.VersionInfo{
+		Version:   version,
+		BuildDate: buildDate,
+		GitCommit: gitCommit,
+	}
+
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "FRODO - Frequency Registry of Dictionary Objects\n\nUsage:\n\t%s [options] start [config.json]\n\t%s [options] version\n",
+			filepath.Base(os.Args[0]), filepath.Base(os.Args[0]))
+		flag.PrintDefaults()
+	}
+	flag.Parse()
+	action := flag.Arg(0)
+	if action == "version" {
+		fmt.Printf("frodo %s\nbuild date: %s\nlast commit: %s\n", version.Version, version.BuildDate, version.GitCommit)
+		return
+
+	} else if action != "start" {
+		log.Fatal().Msgf("Unknown action %s", action)
+	}
+	conf := cnf.LoadConfig(flag.Arg(1))
+	logging.SetupLogging(conf.Logging)
+	log.Info().Msg("Starting FRODO")
+	cnf.ApplyDefaults(conf)
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-ctx.Done()
+		stop()
+	}()
+
+	cTableName := "corpora"
+	if conf.CNCDB.OverrideCorporaTableName != "" {
+		log.Warn().Msgf(
+			"Overriding default corpora table name to '%s'", conf.CNCDB.OverrideCorporaTableName)
+		cTableName = conf.CNCDB.OverrideCorporaTableName
+	}
+	pcTableName := "parallel_corpus"
+	if conf.CNCDB.OverridePCTableName != "" {
+		log.Warn().Msgf(
+			"Overriding default parallel corpora table name to '%s'", conf.CNCDB.OverridePCTableName)
+		pcTableName = conf.CNCDB.OverridePCTableName
+	}
+	cncDB, err := cncdb.NewCNCMySQLHandler(
+		conf.CNCDB.Host,
+		conf.CNCDB.User,
+		conf.CNCDB.Passwd,
+		conf.CNCDB.Name,
+		cTableName,
+		pcTableName,
+	)
+	if err != nil {
+		log.Fatal().Err(err)
+	}
+	log.Info().Msgf("CNC SQL database: %s@%s", conf.CNCDB.Name, conf.CNCDB.Host)
+
+	laDB, err := mysql.OpenDB(conf.LiveAttrs.DB)
+	if err != nil {
+		log.Fatal().Err(err)
+	}
+	var dbInfo string
+	if conf.LiveAttrs.DB.Type == "mysql" {
+		dbInfo = fmt.Sprintf("%s@%s", conf.LiveAttrs.DB.Name, conf.LiveAttrs.DB.Host)
+
+	} else {
+		dbInfo = fmt.Sprintf("file://%s/*.db", conf.LiveAttrs.TextTypesDbDirPath)
+	}
+	log.Info().Msgf("LiveAttrs SQL database(s): %s", dbInfo)
+
+	if !conf.Logging.Level.IsDebugMode() {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
+	engine := gin.New()
+	engine.Use(gin.Recovery())
+	engine.Use(logging.GinMiddleware())
+	engine.Use(uniresp.AlwaysJSONContentType())
+	engine.NoMethod(uniresp.NoMethodHandler)
+	engine.NoRoute(uniresp.NotFoundHandler)
+
+	rootActions := root.Actions{Version: version, Conf: conf}
+
+	jobStopChannel := make(chan string)
+	jobActions := jobs.NewActions(conf.Jobs, conf.Language, ctx, jobStopChannel)
+
+	corpusActions := corpus.NewActions(conf.CorporaSetup, conf.Jobs, jobActions, cncDB)
+
+	concCache := query.NewCache(conf.CorporaSetup.ConcCacheDirPath, conf.GetLocation())
+	concCache.RestoreUnboundEntries()
+
+	laConfRegistry := laconf.NewLiveAttrsBuildConfProvider(
+		conf.LiveAttrs.ConfDirPath,
+		conf.LiveAttrs.DB,
+	)
+
+	liveattrsActions := laActions.NewActions(
+		laActions.LAConf{
+			LA:      conf.LiveAttrs,
+			KonText: conf.Kontext,
+			Corp:    conf.CorporaSetup,
+		},
+		ctx,
+		jobStopChannel,
+		jobActions,
+		cncDB,
+		laDB,
+		laConfRegistry,
+		version,
+	)
+	registryActions := registry.NewActions(conf.CorporaSetup)
+	for _, dj := range jobActions.GetDetachedJobs() {
+		if dj.IsFinished() {
+			continue
+		}
+		switch tdj := dj.(type) {
+		case *liveattrs.LiveAttrsJobInfo:
+			err := liveattrsActions.RestartLiveAttrsJob(ctx, tdj)
+			if err != nil {
+				log.Error().Err(err).Msgf("Failed to restart job %s. The job will be removed.", tdj.ID)
+			}
+			jobActions.ClearDetachedJob(tdj.ID)
+		case *liveattrs.IdxUpdateJobInfo:
+			err := liveattrsActions.RestartIdxUpdateJob(tdj)
+			if err != nil {
+				log.Error().Err(err).Msgf("Failed to restart job %s. The job will be removed.", tdj.ID)
+			}
+			jobActions.ClearDetachedJob(tdj.ID)
+		case *corpus.JobInfo:
+			err := corpusActions.RestartJob(tdj)
+			if err != nil {
+				log.Error().Err(err).Msgf("Failed to restart job %s. The job will be removed.", tdj.ID)
+			}
+			jobActions.ClearDetachedJob(tdj.ID)
+		default:
+			log.Error().Msg("unknown detached job type")
+		}
+	}
+
+	engine.GET(
+		"/", rootActions.RootAction)
+
+	engine.POST(
+		"/liveAttributes/:corpusId/data", liveattrsActions.Create)
+	engine.DELETE(
+		"/liveAttributes/:corpusId/data", liveattrsActions.Delete)
+	engine.GET(
+		"/liveAttributes/:corpusId/conf", liveattrsActions.ViewConf)
+	engine.PUT(
+		"/liveAttributes/:corpusId/conf", liveattrsActions.CreateConf)
+	engine.PATCH(
+		"/liveAttributes/:corpusId/conf", liveattrsActions.PatchConfig)
+	engine.GET(
+		"/liveAttributes/:corpusId/qsDefaults", liveattrsActions.QSDefaults)
+	engine.DELETE(
+		"/liveAttributes/:corpusId/confCache", liveattrsActions.FlushCache)
+	engine.POST(
+		"/liveAttributes/:corpusId/query", liveattrsActions.Query)
+	engine.POST(
+		"/liveAttributes/:corpusId/fillAttrs", liveattrsActions.FillAttrs)
+	engine.POST(
+		"/liveAttributes/:corpusId/selectionSubcSize",
+		liveattrsActions.GetAdhocSubcSize)
+	engine.POST(
+		"/liveAttributes/:corpusId/attrValAutocomplete",
+		liveattrsActions.AttrValAutocomplete)
+	engine.POST(
+		"/liveAttributes/:corpusId/getBibliography",
+		liveattrsActions.GetBibliography)
+	engine.POST(
+		"/liveAttributes/:corpusId/findBibTitles",
+		liveattrsActions.FindBibTitles)
+	engine.GET(
+		"/liveAttributes/:corpusId/stats", liveattrsActions.Stats)
+	engine.POST(
+		"/liveAttributes/:corpusId/updateIndexes",
+		liveattrsActions.UpdateIndexes)
+	engine.POST(
+		"/liveAttributes/:corpusId/mixSubcorpus",
+		liveattrsActions.MixSubcorpus)
+	engine.GET(
+		"/liveAttributes/:corpusId/inferredAtomStructure",
+		liveattrsActions.InferredAtomStructure)
+	engine.POST(
+		"/liveAttributes/:corpusId/documentList",
+		liveattrsActions.DocumentList)
+	engine.POST(
+		"/liveAttributes/:corpusId/numMatchingDocuments",
+		liveattrsActions.NumMatchingDocuments)
+
+	dictActionsHandler := dictActions.NewActions(
+		ctx,
+		conf.CorporaSetup,
+		jobStopChannel,
+		jobActions,
+		cncDB,
+		laDB,
+		laConfRegistry,
+		version,
+	)
+
+	engine.POST(
+		"/dictionary/:corpusId/ngrams",
+		dictActionsHandler.GenerateNgrams)
+	engine.POST(
+		"/dictionary/:corpusId/querySuggestions",
+		dictActionsHandler.CreateQuerySuggestions)
+	engine.GET(
+		"/dictionary/:corpusId/querySuggestions/:term",
+		dictActionsHandler.GetQuerySuggestions)
+
+	engine.GET(
+		"/jobs", jobActions.JobList)
+	engine.GET(
+		"/jobs/utilization", jobActions.Utilization)
+	engine.GET(
+		"/jobs/:jobId", jobActions.JobInfo)
+	engine.DELETE(
+		"/jobs/:jobId", jobActions.Delete)
+	engine.GET(
+		"/jobs/:jobId/clearIfFinished", jobActions.ClearIfFinished)
+	engine.GET(
+		"/jobs/:jobId/emailNotification", jobActions.GetNotifications)
+	engine.GET(
+		"/jobs/:jobId/emailNotification/:address",
+		jobActions.CheckNotification)
+	engine.PUT(
+		"/jobs/:jobId/emailNotification/:address",
+		jobActions.AddNotification)
+	engine.DELETE(
+		"/jobs/:jobId/emailNotification/:address",
+		jobActions.RemoveNotification)
+
+	engine.GET(
+		"/registry/defaults/attribute/dynamic-functions",
+		registryActions.DynamicFunctions)
+	engine.GET(
+		"/registry/defaults/wposlist", registryActions.PosSets)
+	engine.GET(
+		"/registry/defaults/wposlist/:posId", registryActions.GetPosSetInfo)
+	engine.GET(
+		"/registry/defaults/attribute/multivalue",
+		registryActions.GetAttrMultivalueDefaults)
+	engine.GET(
+		"/registry/defaults/attribute/multisep",
+		registryActions.GetAttrMultisepDefaults)
+	engine.GET(
+		"/registry/defaults/attribute/dynlib",
+		registryActions.GetAttrDynlibDefaults)
+	engine.GET(
+		"/registry/defaults/attribute/transquery",
+		registryActions.GetAttrTransqueryDefaults)
+	engine.GET(
+		"/registry/defaults/structure/multivalue",
+		registryActions.GetStructMultivalueDefaults)
+	engine.GET(
+		"/registry/defaults/structure/multisep",
+		registryActions.GetStructMultisepDefaults)
+
+	cncdbActions := cncdb.NewActions(conf.CNCDB, conf.CorporaSetup, cncDB)
+	engine.PUT(
+		"/corpora-database/:corpusId/kontextDefaults",
+		cncdbActions.InferKontextDefaults)
+
+	if conf.Logging.Level.IsDebugMode() {
+		debugActions := debug.NewActions(jobActions)
+		engine.POST("/debug/createJob", debugActions.CreateDummyJob)
+		engine.POST("/debug/finishJob/:jobId", debugActions.FinishDummyJob)
+	}
+
+	log.Info().Msgf("starting to listen at %s:%d", conf.ListenAddress, conf.ListenPort)
+	srv := &http.Server{
+		Handler:      engine,
+		Addr:         fmt.Sprintf("%s:%d", conf.ListenAddress, conf.ListenPort),
+		WriteTimeout: time.Duration(conf.ServerWriteTimeoutSecs) * time.Second,
+		ReadTimeout:  time.Duration(conf.ServerReadTimeoutSecs) * time.Second,
+	}
+
+	go func() {
+		err := srv.ListenAndServe()
+		if err != nil {
+			log.Error().Err(err).Send()
+		}
+	}()
+
+	<-ctx.Done()
+	log.Info().Err(err).Msg("Shutdown request error")
+
+	ctxShutDown, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctxShutDown); err != nil {
+		log.Fatal().Err(err).Msg("Server forced to shutdown")
+	}
+}

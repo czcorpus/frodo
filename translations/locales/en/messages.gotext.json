@@ -1,0 +1,91 @@
+{
+    "language": "en",
+    "messages": [
+        {
+            "id": "Job of type \"{Jdesc}\" finished",
+            "message": "Job of type \"{Jdesc}\" finished",
+            "translation": "Job of type \"{Jdesc}\" finished",
+            "translatorComment": "Copied from source.",
+            "placeholders": [
+                {
+                    "id": "Jdesc",
+                    "string": "%[1]s",
+                    "type": "string",
+                    "underlyingType": "string",
+                    "argNum": 1,
+                    "expr": "jdesc"
+                }
+            ],
+            "fuzzy": true
+        },
+        {
+            "id": "Job ID: {ItemID}",
+            "message": "Job ID: {ItemID}",
+            "translation": "Job ID: {ItemID}",
+            "translatorComment": "Copied from source.",
+            "placeholders": [
+                {
+                    "id": "ItemID",
+                    "string": "%[1]s",
+                    "type": "string",
+                    "underlyingType": "string",
+                    "argNum": 1,
+                    "expr": "upd.itemID"
+                }
+            ],
+            "fuzzy": true
+        },
+        {
+            "id": "N-grams and query suggestion data generation",
+            "message": "N-grams and query suggestion data generation",
+            "translation": "N-grams and query suggestion data generation",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Live attributes data extraction and generation",
+            "message": "Live attributes data extraction and generation",
+            "translation": "Live attributes data extraction and generation",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Testing and debugging empty job",
+            "message": "Testing and debugging empty job",
+            "translation": "Testing and debugging empty job",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Unknown job",
+            "message": "Unknown job",
+            "translation": "Unknown job",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Job finished without errors",
+            "message": "Job finished without errors",
+            "translation": "Job finished without errors",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Job finished with error: {Error}",
+            "message": "Job finished with error: {Error}",
+            "translation": "Job finished with error: {Error}",
+            "translatorComment": "Copied from source.",
+            "placeholders": [
+                {
+                    "id": "Error",
+                    "string": "%[1]s",
+                    "type": "error",
+                    "underlyingType": "interface{Error() string}",
+                    "argNum": 1,
+                    "expr": "info.GetError()"
+                }
+            ],
+            "fuzzy": true
+        }
+    ]
+}
