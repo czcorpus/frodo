@@ -44,6 +44,8 @@ func (a *Actions) GetQuerySuggestions(ctx *gin.Context) {
 		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 		return
 	}
-
-	uniresp.WriteJSONResponse(ctx.Writer, items)
+	ans := map[string]any{
+		"matches": items,
+	}
+	uniresp.WriteJSONResponse(ctx.Writer, ans)
 }

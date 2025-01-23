@@ -119,7 +119,7 @@ func processRowsSync(rows *sql.Rows, enableMultivalues bool) ([]Lemma, error) {
 	sublemmas := make(map[string]int)
 
 	for rows.Next() {
-		var lemmaValue, sublemmaValue, wordValue, lemmaPos, wordPos string
+		var lemmaValue, sublemmaValue, wordValue, wordPos string
 		var lemmaCount, wordCount int
 		var lemmaArf, wordArf float64
 		var isPname bool
@@ -131,7 +131,7 @@ func processRowsSync(rows *sql.Rows, enableMultivalues bool) ([]Lemma, error) {
 		}
 		if isValidWord(lemmaValue, enableMultivalues) {
 			newLemma := lemmaValue
-			newPos := lemmaPos
+			newPos := wordPos
 			if currLemma == nil || newLemma != currLemma.Lemma || newPos != currLemma.PoS {
 				if currLemma != nil {
 					for sValue, sCount := range sublemmas {
@@ -139,6 +139,9 @@ func processRowsSync(rows *sql.Rows, enableMultivalues bool) ([]Lemma, error) {
 							currLemma.Sublemmas,
 							Sublemma{Value: sValue, Count: sCount},
 						)
+					}
+					for _, v := range currLemma.Forms {
+						currLemma.Count += v.Count
 					}
 					matchingLemmas = append(matchingLemmas, *currLemma)
 				}
@@ -169,19 +172,18 @@ func processRowsSync(rows *sql.Rows, enableMultivalues bool) ([]Lemma, error) {
 		}
 		procRecords++
 	}
-	if len(currLemma.Forms) > 0 {
-
-	}
 	if procRecords == 0 {
 		return []Lemma{}, fmt.Errorf("there were no dictionary rcords to process")
 	}
 	if currLemma != nil {
-		fmt.Println("ADDING ONE MORE ITEM")
 		for sValue, sCount := range sublemmas {
 			currLemma.Sublemmas = append(
 				currLemma.Sublemmas,
 				Sublemma{Value: sValue, Count: sCount},
 			)
+		}
+		for _, v := range currLemma.Forms {
+			currLemma.Count += v.Count
 		}
 		matchingLemmas = append(matchingLemmas, *currLemma)
 	}
