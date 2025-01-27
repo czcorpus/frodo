@@ -4,13 +4,14 @@
 
 
 FRODO is a frequency database of corpora metadata and word forms. It is mostly used
-along with CNC's other applications KonText and WaG for fast overview data retrieval.
+along with CNC's other applications for fast overview data retrieval. In KonText, it's mainly
+the "liveattrs" function, in WaG, it works as a core word/ngram dictionary.
 
 For more information, see the [API.md](./API.md).
 
 ## API
 
-see [API.md](./API.md)
+see [API.md](./API.md) 🚧
 
 ## How to build the project
 
