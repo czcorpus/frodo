@@ -55,7 +55,7 @@ func (a *Actions) GetBibliography(ctx *gin.Context) {
 		uniresp.WriteJSONErrorResponse(ctx.Writer, uniresp.NewActionError(baseErrTpl, corpusID, err), http.StatusInternalServerError)
 		return
 	}
-	ans, err := db.GetBibliography(a.laDB, corpInfo, laConf, qry)
+	ans, err := db.GetBibliography(a.laDB.DB(), corpInfo, laConf, qry)
 	if err == db.ErrorEmptyResult {
 		uniresp.WriteJSONErrorResponse(ctx.Writer, uniresp.NewActionError(baseErrTpl, corpusID, err), http.StatusNotFound)
 		return
@@ -87,7 +87,7 @@ func (a *Actions) FindBibTitles(ctx *gin.Context) {
 		uniresp.WriteJSONErrorResponse(ctx.Writer, uniresp.NewActionError(baseErrTpl, corpusID, err), http.StatusInternalServerError)
 		return
 	}
-	ans, err := db.FindBibTitles(a.laDB, corpInfo, laConf, qry)
+	ans, err := db.FindBibTitles(a.laDB.DB(), corpInfo, laConf, qry)
 	if err == db.ErrorEmptyResult {
 		uniresp.WriteJSONErrorResponse(ctx.Writer, uniresp.NewActionError(baseErrTpl, corpusID, err), http.StatusNotFound)
 		return
@@ -186,7 +186,7 @@ func (a *Actions) DocumentList(ctx *gin.Context) {
 
 	var ans []*db.DocumentRow
 	ans, err = db.GetDocuments(
-		a.laDB,
+		a.laDB.DB(),
 		corpInfo,
 		ctx.Request.URL.Query()["attr"],
 		qry.Aligned,
@@ -233,7 +233,7 @@ func (a *Actions) NumMatchingDocuments(ctx *gin.Context) {
 	}
 
 	ans, err := db.GetNumOfDocuments(
-		a.laDB,
+		a.laDB.DB(),
 		corpInfo,
 		qry.Aligned,
 		qry.Attrs,

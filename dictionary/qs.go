@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"frodo/common"
+	"frodo/db/mysql"
 	"frodo/jobs"
 	"frodo/liveattrs/db/freqdb"
 	"regexp"
@@ -232,7 +233,7 @@ type SearchOption func(c *SearchOptions)
 
 func Search(
 	ctx context.Context,
-	db *sql.DB,
+	db *mysql.Adapter,
 	groupedName string,
 	opts ...SearchOption,
 ) ([]Lemma, error) {
@@ -263,7 +264,7 @@ func Search(
 		whereSQL = append(whereSQL, "s.value = ?")
 		whereArgs = append(whereArgs, srchOpts.AnyValue)
 	}
-	rows, err := db.QueryContext(
+	rows, err := db.DB().QueryContext(
 		ctx,
 		fmt.Sprintf(
 			"SELECT w.value, w.lemma, w.sublemma, w.count, "+

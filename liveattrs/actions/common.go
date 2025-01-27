@@ -100,7 +100,7 @@ func (a *Actions) getAttrValues(
 		EmptyValPlaceholder: emptyValuePlaceholder,
 	}
 	dataIterator := laquery.DataIterator{
-		DB:      a.laDB,
+		DB:      a.laDB.DB(),
 		Builder: qBuilder,
 	}
 

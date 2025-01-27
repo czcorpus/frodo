@@ -137,7 +137,7 @@ func (a *Actions) Delete(ctx *gin.Context) {
 			ctx.Writer, uniresp.NewActionError(baseErrTpl, corpusID, err), http.StatusInternalServerError)
 		return
 	}
-	tx0, err := a.laDB.Begin()
+	tx0, err := a.laDB.DB().Begin()
 	err = db.DeleteTable(
 		tx0,
 		corpusDBInfo.GroupedName(),

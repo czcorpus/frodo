@@ -7,7 +7,7 @@ require (
 	github.com/czcorpus/cnc-gokit v0.11.2
 	github.com/czcorpus/manabuild v0.1.3
 	github.com/czcorpus/rexplorer v0.0.6
-	github.com/czcorpus/vert-tagextract/v3 v3.0.7
+	github.com/czcorpus/vert-tagextract/v3 v3.1.0
 	github.com/davecgh/go-spew v1.1.1
 	github.com/gin-gonic/gin v1.10.0
 	github.com/go-sql-driver/mysql v1.8.1
