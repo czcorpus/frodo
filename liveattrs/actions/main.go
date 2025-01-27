@@ -18,12 +18,12 @@ package actions
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"frodo/cncdb"
 	"frodo/corpus"
+	"frodo/db/mysql"
 	"frodo/general"
 	"frodo/jobs"
 	"frodo/kontext"
@@ -110,7 +110,7 @@ type Actions struct {
 	laConfCache *laconf.LiveAttrsBuildConfProvider
 
 	// laDB is a live-attributes-specific database where Frodo needs full privileges
-	laDB *sql.DB
+	laDB *mysql.Adapter
 
 	// cncDB is CNC's main database
 	cncDB *cncdb.CNCMySQLHandler
@@ -377,7 +377,7 @@ func (a *Actions) FillAttrs(ctx *gin.Context) {
 		uniresp.WriteJSONErrorResponse(ctx.Writer, uniresp.NewActionError(baseErrTpl, corpusID, err), http.StatusInternalServerError)
 		return
 	}
-	ans, err := db.FillAttrs(a.laDB, corpusDBInfo, qry)
+	ans, err := db.FillAttrs(a.laDB.DB(), corpusDBInfo, qry)
 	if err == db.ErrorEmptyResult {
 		uniresp.WriteJSONErrorResponse(ctx.Writer, uniresp.NewActionError(baseErrTpl, corpusID, err), http.StatusNotFound)
 		return
@@ -405,7 +405,7 @@ func (a *Actions) GetAdhocSubcSize(ctx *gin.Context) {
 		uniresp.WriteJSONErrorResponse(ctx.Writer, uniresp.NewActionError(baseErrTpl, corpusID, err), http.StatusInternalServerError)
 		return
 	}
-	size, err := db.GetSubcSize(a.laDB, corpusDBInfo, corpora, qry.Attrs)
+	size, err := db.GetSubcSize(a.laDB.DB(), corpusDBInfo, corpora, qry.Attrs)
 	if err != nil {
 		uniresp.WriteJSONErrorResponse(ctx.Writer, uniresp.NewActionError(baseErrTpl, corpusID, err), http.StatusInternalServerError)
 		return
@@ -438,7 +438,7 @@ func (a *Actions) AttrValAutocomplete(ctx *gin.Context) {
 
 func (a *Actions) Stats(ctx *gin.Context) {
 	corpusID := ctx.Param("corpusId")
-	ans, err := db.LoadUsage(a.laDB, corpusID)
+	ans, err := db.LoadUsage(a.laDB.DB(), corpusID)
 	if err != nil {
 		uniresp.WriteJSONErrorResponse(
 			ctx.Writer, uniresp.NewActionError("failed to get stats for corpus %s: %w", corpusID, err), http.StatusInternalServerError)
@@ -455,7 +455,7 @@ func (a *Actions) updateIndexesFromJobStatus(status *liveattrs.IdxUpdateJobInfo)
 		if err != nil {
 			finalStatus.Error = err
 		}
-		ans := db.UpdateIndexes(a.laDB, corpusDBInfo, status.Args.MaxColumns)
+		ans := db.UpdateIndexes(a.laDB.DB(), corpusDBInfo, status.Args.MaxColumns)
 		if ans.Error != nil {
 			finalStatus.Error = ans.Error
 		}
@@ -547,7 +547,7 @@ func NewActions(
 	jobStopChannel <-chan string,
 	jobActions *jobs.Actions,
 	cncDB *cncdb.CNCMySQLHandler,
-	laDB *sql.DB,
+	laDB *mysql.Adapter,
 	laConfRegistry *laconf.LiveAttrsBuildConfProvider,
 	version general.VersionInfo,
 ) *Actions {
@@ -561,7 +561,7 @@ func NewActions(
 		cncDB:           cncDB,
 		laDB:            laDB,
 		eqCache:         cache.NewEmptyQueryCache(),
-		structAttrStats: db.NewStructAttrUsage(laDB, usageChan),
+		structAttrStats: db.NewStructAttrUsage(laDB.DB(), usageChan),
 		usageData:       usageChan,
 		vteJobCancel:    make(map[string]context.CancelFunc),
 	}

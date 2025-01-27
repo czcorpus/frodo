@@ -129,7 +129,7 @@ func (a *Actions) MixSubcorpus(ctx *gin.Context) {
 	laTableName := fmt.Sprintf("%s_liveattrs_entry", args.Corpora[0])
 	catTree, err := subcmixer.NewCategoryTree(
 		conditions,
-		a.laDB,
+		a.laDB.DB(),
 		args.Corpora[0],
 		args.Corpora[1:],
 		laTableName,
@@ -147,7 +147,7 @@ func (a *Actions) MixSubcorpus(ctx *gin.Context) {
 		return
 	}
 	mm, err := subcmixer.NewMetadataModel(
-		a.laDB,
+		a.laDB.DB(),
 		laTableName,
 		catTree,
 		corpusDBInfo.BibIDAttr,

@@ -30,6 +30,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/czcorpus/cnc-gokit/strutil"
+	"github.com/czcorpus/cnc-gokit/unireq"
 	"github.com/czcorpus/cnc-gokit/uniresp"
 )
 
@@ -79,6 +80,11 @@ func (a *Actions) getNgramArgs(req *http.Request) (reqArgs, error) {
 func (a *Actions) GenerateNgrams(ctx *gin.Context) {
 	corpusID := ctx.Param("corpusId")
 	baseErrTpl := "failed to generate n-grams for %s: %w"
+	appendMode := ctx.Request.URL.Query().Get("append") == "1"
+	ngramSize, ok := unireq.GetURLIntArgOrFail(ctx, "ngramSize", 1)
+	if !ok {
+		return
+	}
 
 	args, err := a.getNgramArgs(ctx.Request)
 	if err != nil {
@@ -183,10 +189,12 @@ func (a *Actions) GenerateNgrams(ctx *gin.Context) {
 		a.jobActions,
 		corpusDBInfo.GroupedName(),
 		corpusDBInfo.Name,
+		appendMode,
+		ngramSize,
 		posFn,
 		*args.ColMapping,
 	)
-	jobInfo, err := generator.GenerateAfter(corpusID, ctx.Request.URL.Query().Get("parentJobId"))
+	jobInfo, err := generator.GenerateAfter(ctx.Request.URL.Query().Get("parentJobId"))
 	if err != nil {
 		uniresp.WriteJSONErrorResponse(
 			ctx.Writer, uniresp.NewActionError(baseErrTpl, corpusID, err), http.StatusInternalServerError)

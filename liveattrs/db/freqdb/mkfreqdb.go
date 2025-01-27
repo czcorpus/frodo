@@ -26,6 +26,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"frodo/db/mysql"
 	"frodo/jobs"
 	"frodo/liveattrs/db"
 	"math"
@@ -38,18 +39,21 @@ import (
 )
 
 const (
-	reportEachNthItem   = 50000
+	reportEachNthItem   = 10000
+	procChunkSize       = 50000
 	duplicateRowErrNo   = 1062
 	NonWordCSCNC2020Tag = "X@-------------"
 )
 
 type NgramFreqGenerator struct {
-	db          *sql.DB
-	groupedName string
-	corpusName  string
-	posFn       *modders.StringTransformerChain
-	jobActions  *jobs.Actions
-	qsaAttrs    QSAttributes
+	db             *mysql.Adapter
+	groupedName    string
+	corpusName     string
+	appendExisting bool
+	ngramSize      int
+	posFn          *modders.StringTransformerChain
+	jobActions     *jobs.Actions
+	qsaAttrs       QSAttributes
 }
 
 func (nfg *NgramFreqGenerator) createTables(tx *sql.Tx) error {
@@ -64,11 +68,12 @@ func (nfg *NgramFreqGenerator) createTables(tx *sql.Tx) error {
 	if _, err := tx.Exec(fmt.Sprintf(
 		`CREATE TABLE %s_word (
 		id varchar(40),
-		value VARCHAR(80),
-		lemma VARCHAR(80),
-		sublemma VARCHAR(80),
-		pos VARCHAR(80),
+		value TEXT,
+		lemma TEXT,
+		sublemma TEXT,
+		pos VARCHAR(20),
 		count INTEGER,
+		ngram TINYINT NOT NULL,
 		arf FLOAT,
 		initial_cap TINYINT NOT NULL DEFAULT 0,
 		PRIMARY KEY (id)
@@ -80,7 +85,7 @@ func (nfg *NgramFreqGenerator) createTables(tx *sql.Tx) error {
 		`CREATE TABLE %s_term_search (
 			id int auto_increment,
 			word_id varchar(40) NOT NULL,
-			value VARCHAR(80),
+			value TEXT,
 			PRIMARY KEY (id),
 			FOREIGN KEY (word_id) REFERENCES %s_word(id)
 		) COLLATE utf8mb4_bin`,
@@ -100,6 +105,12 @@ func (nfg *NgramFreqGenerator) createTables(tx *sql.Tx) error {
 	)); err != nil {
 		return fmt.Errorf(errMsgTpl, err)
 	}
+	if _, err := tx.Exec(fmt.Sprintf(
+		`create index %s_word_arf_idx on %s_word(arf)`,
+		nfg.groupedName, nfg.groupedName,
+	)); err != nil {
+		return fmt.Errorf(errMsgTpl, err)
+	}
 	return nil
 }
 
@@ -114,8 +125,8 @@ func (nfg *NgramFreqGenerator) procLine(
 ) error {
 
 	if _, err := tx.Exec(fmt.Sprintf(
-		`INSERT INTO %s_word (id, value, lemma, sublemma, pos, count, arf, initial_cap)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, nfg.groupedName),
+		`INSERT INTO %s_word (id, value, lemma, sublemma, pos, count, arf, initial_cap, ngram)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, nfg.groupedName),
 		word.hashId,
 		word.word,
 		word.lemma,
@@ -124,6 +135,7 @@ func (nfg *NgramFreqGenerator) procLine(
 		word.abs,
 		word.arf,
 		word.initialCap,
+		word.ngramSize,
 	); err != nil {
 		return fmt.Errorf("failed to process word line: %w", err)
 	}
@@ -144,11 +156,14 @@ func (nfg *NgramFreqGenerator) procLine(
 
 func (nfg *NgramFreqGenerator) findTotalNumLines() (int, error) {
 	// TODO the following query is not general enough
-	row := nfg.db.QueryRow(
+	row := nfg.db.DB().QueryRow(
 		fmt.Sprintf(
 			"SELECT COUNT(*) "+
 				"FROM %s_colcounts "+
-				"WHERE %s <> ? ", nfg.groupedName, nfg.qsaAttrs.ExportCols("tag")[0]),
+				"WHERE %s <> ? ",
+			nfg.groupedName,
+			nfg.qsaAttrs.ExportCols("tag")[0],
+		),
 		NonWordCSCNC2020Tag,
 	)
 	if row.Err() != nil {
@@ -162,58 +177,56 @@ func (nfg *NgramFreqGenerator) findTotalNumLines() (int, error) {
 	return ans, nil
 }
 
-// run generates n-grams (structured into 'word', 'lemma', 'sublemma') into intermediate database
-// An existing database transaction must be provided along with current calculation status (which is
-// progressively updated) and a status channel where the status is sent each time some significant
-// update is encountered (typically - a chunk of items is finished or an error occurs)
-func (nfg *NgramFreqGenerator) run(
+func (nfg *NgramFreqGenerator) procChunk(
 	ctx context.Context,
-	tx *sql.Tx,
-	currStatus *genNgramsStatus,
-	statusChan chan<- genNgramsStatus,
-) error {
-
-	total, err := nfg.findTotalNumLines()
-	log.Debug().Int("numProcess", total).Msg("starting to process colcounts table for ngrams")
+	baseStatus genNgramsStatus,
+	t0 time.Time,
+	statusCh chan<- genNgramsStatus,
+) bool {
+	baseStatus.CurrAction = fmt.Sprintf("starting to process chunkID %d", baseStatus.ChunkID)
+	statusCh <- baseStatus
+	tx, err := nfg.db.DB().Begin()
 	if err != nil {
-		return fmt.Errorf("failed to run n-gram generator: %w", err)
+		tx.Rollback()
+		baseStatus.Error = fmt.Errorf("failed to process chunk: %w", err)
+		statusCh <- baseStatus
+		return false
 	}
-	estim, err := db.EstimateProcTimeSecs(nfg.db, "ngrams", total)
-	if err == db.ErrorEstimationNotAvail {
-		log.Warn().Msgf("processing estimation not (yet) available for %s", nfg.corpusName)
-		estim = -1
-	} else if err != nil {
-		return fmt.Errorf("failed to run n-gram generator: %w", err)
-	}
-	if estim > 0 {
-		currStatus.TimeEstimationSecs = estim
-		statusChan <- *currStatus
-	}
-	log.Info().Msgf(
-		"About to process %d lines of raw n-grams for corpus %s. Time estimation (seconds): %d",
-		total, nfg.corpusName, estim)
-	var numStop int
-	t0 := time.Now()
 
-	rows, err := nfg.db.QueryContext(
+	baseStatus.CurrAction = fmt.Sprintf(
+		"selecting data for the chunk (offset: %d)", baseStatus.ChunkID*procChunkSize)
+	statusCh <- baseStatus
+	rows, err := nfg.db.DB().QueryContext(
 		ctx,
 		fmt.Sprintf(
 			"SELECT hash_id, %s, `count` AS abs, arf, initial_cap "+
 				"FROM %s_colcounts "+
-				"WHERE col%d <> ? ",
+				"WHERE col%d <> ? AND ngram_size = ? "+
+				"LIMIT ? OFFSET ?",
 			strings.Join(nfg.qsaAttrs.ExportCols("word", "sublemma", "lemma", "tag"), ", "),
 			nfg.groupedName,
 			nfg.qsaAttrs.Tag,
 		),
 		NonWordCSCNC2020Tag,
+		nfg.ngramSize,
+		procChunkSize,
+		baseStatus.ChunkID*procChunkSize,
 	)
-	log.Debug().Msg("table selection done, moving to import")
 	if err != nil {
-		return fmt.Errorf("failed to run n-gram generator: %w", err)
+		tx.Rollback()
+		baseStatus.Error = fmt.Errorf("failed to select data for the chunk: %w", err)
+		statusCh <- baseStatus
+		return false
 	}
-	var numProcessed int
-	for rows.Next() {
-		rec := new(ngRecord)
+
+	baseStatus.CurrAction = fmt.Sprintf("processing selected rows for the chunk")
+	statusCh <- baseStatus
+
+	var numStopWords int
+
+	for rowNum := 1; rows.Next(); rowNum++ {
+		baseStatus.NumProcLines = baseStatus.ChunkID*procChunkSize + rowNum
+		rec := &ngRecord{ngramSize: nfg.ngramSize}
 		err := rows.Scan(
 			&rec.hashId,
 			&rec.word,
@@ -225,72 +238,165 @@ func (nfg *NgramFreqGenerator) run(
 			&rec.initialCap,
 		)
 		if err != nil {
-			return fmt.Errorf("failed to run n-gram generator: %w", err)
+			tx.Rollback()
+			baseStatus.Error = fmt.Errorf("failed to process db row %d for the chunk: %w", rowNum, err)
+			statusCh <- baseStatus
+			return false
 		}
 		if isStopNgram(rec.lemma) {
-			numStop++
+			numStopWords++
 			continue
 		}
 		if err := nfg.procLine(tx, rec); err != nil {
-			return fmt.Errorf("failed to run n-gram generator: %w", err)
+			tx.Rollback()
+			baseStatus.Error = fmt.Errorf(
+				"failed to process db row %d for chunkID %d: %w", rowNum, baseStatus.ChunkID, err)
+			statusCh <- baseStatus
+			return false
 		}
-		numProcessed++
-		if numProcessed%reportEachNthItem == 0 {
-			procTime := time.Since(t0).Seconds()
-			currStatus.NumProcLines = numProcessed
-			currStatus.AvgSpeedItemsPerSec = int(math.RoundToEven(float64(numProcessed) / procTime))
-			statusChan <- *currStatus
+		procTime := time.Since(t0).Seconds()
+		if (baseStatus.ChunkID*procChunkSize+rowNum)%reportEachNthItem == 0 {
+			baseStatus.AvgSpeedItemsPerSec = int(math.RoundToEven(float64(baseStatus.ChunkID*procChunkSize+rowNum) / procTime))
+			statusCh <- baseStatus
+
+			if err := db.AddProcTimeEntry(
+				nfg.db.DB(),
+				"ngrams",
+				baseStatus.TotalLines,
+				baseStatus.ChunkID*procChunkSize+rowNum,
+				procTime,
+			); err != nil {
+				log.Err(err).Msg("failed to write proc_time statistics (ignoring the error)")
+			}
+
 		}
 		select {
 		case <-ctx.Done():
-			if currStatus.Error != nil {
-				currStatus.Error = fmt.Errorf("ngram generator cancelled")
-				statusChan <- *currStatus
-				return nil
-			}
+			baseStatus.Error = fmt.Errorf("action cancelled")
+			statusCh <- baseStatus
+			return false
 		default:
 		}
 	}
-	currStatus.NumProcLines = numProcessed
-	procTime := time.Since(t0).Seconds()
-	currStatus.AvgSpeedItemsPerSec = int(math.RoundToEven(float64(numProcessed) / procTime))
-	if err := db.AddProcTimeEntry(
-		nfg.db,
-		"ngrams",
-		total,
-		numProcessed,
-		procTime,
-	); err != nil {
-		log.Err(err).Msg("failed to write proc_time statistics")
-		currStatus.Error = err
+
+	if err := tx.Commit(); err != nil {
+		baseStatus.Error = fmt.Errorf("failed to commit transaction: %w", err)
+		statusCh <- baseStatus
+		return false
 	}
-	statusChan <- *currStatus
-	log.Info().Msgf("num stop words: %d", numStop)
-	return nil
+
+	return true
+}
+
+// run generates n-grams (structured into 'word', 'lemma', 'sublemma') into intermediate database
+// An existing database transaction must be provided along with current calculation status (which is
+// progressively updated) and a status channel where the status is sent each time some significant
+// update is encountered (typically - a chunk of items is finished or an error occurs)
+func (nfg *NgramFreqGenerator) run(
+	ctx context.Context,
+	statusChan chan<- genNgramsStatus,
+) bool {
+	baseStatus := genNgramsStatus{
+		CorpusID:    nfg.corpusName,
+		TablesReady: true,
+		CurrAction:  "starting to process colcounts table for ngrams",
+	}
+	total, err := nfg.findTotalNumLines()
+	if err != nil {
+		baseStatus.Error = fmt.Errorf("failed to run n-gram generator: %w", err)
+		statusChan <- baseStatus
+		return false
+	}
+	baseStatus.TotalLines = total
+	estim, err := db.EstimateProcTimeSecs(nfg.db.DB(), "ngrams", total)
+	if err == db.ErrorEstimationNotAvail {
+		baseStatus.ClientWarn = fmt.Sprintf("processing estimation not (yet) available for %s", nfg.corpusName)
+		statusChan <- baseStatus
+		estim = -1
+
+	} else if err != nil {
+		baseStatus.Error = fmt.Errorf("failed to run n-gram generator: %w", err)
+		statusChan <- baseStatus
+		return false
+	}
+	if estim > 0 {
+		baseStatus.TimeEstimationSecs = estim
+		baseStatus.CurrAction = "prepared for processing, calculated time estimation"
+		statusChan <- baseStatus
+	}
+	log.Info().Msgf(
+		"About to process %d lines of raw n-grams for corpus %s. Time estimation (seconds): %d",
+		total, nfg.corpusName, estim)
+	t0 := time.Now()
+
+	numChunks := int(math.Ceil(float64(total) / float64(procChunkSize)))
+	for i := 0; i < numChunks; i++ {
+		baseStatus := genNgramsStatus{
+			CorpusID:           nfg.corpusName,
+			ChunkID:            i,
+			TotalLines:         total,
+			TablesReady:        true,
+			TimeEstimationSecs: estim,
+			NumProcLines:       i * procChunkSize,
+		}
+		if ok := nfg.procChunk(
+			ctx,
+			baseStatus,
+			t0,
+			statusChan,
+		); !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func (nfg *NgramFreqGenerator) tablesExist() (bool, error) {
+	row := nfg.db.DB().QueryRow(
+		`SELECT COUNT(*) > 0 FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?`,
+		nfg.db.DBName(), nfg.groupedName+"_word",
+	)
+	var ans bool
+	err := row.Scan(&ans)
+	if err != nil {
+		return false, err
+	}
+	return ans, nil
 }
 
 // generateSync (synchronously) generates n-grams from raw liveattrs data
 // provided statusChan is closed by the method once
 // the operation finishes
-func (nfg *NgramFreqGenerator) generateSync(ctx context.Context, statusChan chan<- genNgramsStatus) {
+func (nfg *NgramFreqGenerator) generateSync(
+	ctx context.Context,
+	statusChan chan<- genNgramsStatus,
+) {
 	var status genNgramsStatus
-	tx, err := nfg.db.Begin()
+	tx, err := nfg.db.DB().Begin()
 	if err != nil {
 		tx.Rollback()
 		status.Error = err
 		statusChan <- status
 		return
 	}
-	err = nfg.createTables(tx)
+
+	tblEx, err := nfg.tablesExist()
+	if err != nil {
+		status.Error = fmt.Errorf("failed to generate ngrams: %w", err)
+		statusChan <- status
+		return
+	}
+	if nfg.appendExisting && !tblEx {
+		status.Error = fmt.Errorf("failed to generate ngrams: using append mode but tables are missing")
+		statusChan <- status
+		return
+	}
+	if !nfg.appendExisting {
+		err = nfg.createTables(tx)
+	}
+
 	status.TablesReady = true
 	statusChan <- status
-	if err != nil {
-		tx.Rollback()
-		status.Error = err
-		statusChan <- status
-		return
-	}
-	err = nfg.run(ctx, tx, &status, statusChan)
 	if err != nil {
 		tx.Rollback()
 		status.Error = err
@@ -302,22 +408,24 @@ func (nfg *NgramFreqGenerator) generateSync(ctx context.Context, statusChan chan
 		tx.Rollback()
 		status.Error = err
 		statusChan <- status
+		return
 	}
+	nfg.run(ctx, statusChan)
 }
 
-func (nfg *NgramFreqGenerator) Generate(corpusID string) (NgramJobInfo, error) {
-	return nfg.GenerateAfter(corpusID, "")
+func (nfg *NgramFreqGenerator) Generate() (NgramJobInfo, error) {
+	return nfg.GenerateAfter("")
 }
 
-func (nfg *NgramFreqGenerator) GenerateAfter(corpusID, parentJobID string) (NgramJobInfo, error) {
+func (nfg *NgramFreqGenerator) GenerateAfter(parentJobID string) (NgramJobInfo, error) {
 	jobID, err := uuid.NewUUID()
 	if err != nil {
 		return NgramJobInfo{}, err
 	}
-	status := NgramJobInfo{
+	jobStatus := NgramJobInfo{
 		ID:       jobID.String(),
 		Type:     "ngram-generating",
-		CorpusID: corpusID,
+		CorpusID: nfg.corpusName,
 		Start:    jobs.CurrentDatetime(),
 		Update:   jobs.CurrentDatetime(),
 		Finished: false,
@@ -330,6 +438,42 @@ func (nfg *NgramFreqGenerator) GenerateAfter(corpusID, parentJobID string) (Ngra
 		go func(runStatus NgramJobInfo) {
 			defer close(updateJobChan)
 			for statUpd := range statusChan {
+				if statUpd.ClientWarn != "" {
+					log.Warn().
+						Str("corpusId", statUpd.CorpusID).
+						Int("totalLines", statUpd.TotalLines).
+						Int("numProcLines", statUpd.NumProcLines).
+						Int("chunkId", statUpd.ChunkID).
+						Int("avgSpeedItemsPerSec", statUpd.AvgSpeedItemsPerSec).
+						Int("timeEstimationSecs", statUpd.TimeEstimationSecs).
+						Str("currAction", statUpd.CurrAction).
+						Msg(statUpd.ClientWarn)
+
+				} else if statUpd.Error != nil {
+					log.Error().
+						Str("corpusId", statUpd.CorpusID).
+						Int("totalLines", statUpd.TotalLines).
+						Int("numProcLines", statUpd.NumProcLines).
+						Int("chunkId", statUpd.ChunkID).
+						Int("avgSpeedItemsPerSec", statUpd.AvgSpeedItemsPerSec).
+						Int("timeEstimationSecs", statUpd.TimeEstimationSecs).
+						Str("currAction", statUpd.CurrAction).
+						Err(statUpd.Error).
+						Msg("failed to process ngram job")
+
+				} else {
+					log.Info().
+						Str("corpusId", statUpd.CorpusID).
+						Int("totalLines", statUpd.TotalLines).
+						Int("numProcLines", statUpd.NumProcLines).
+						Int("chunkId", statUpd.ChunkID).
+						Int("avgSpeedItemsPerSec", statUpd.AvgSpeedItemsPerSec).
+						Int("timeEstimationSecs", statUpd.TimeEstimationSecs).
+						Str("currAction", statUpd.CurrAction).
+						Err(statUpd.Error).
+						Msg("reporting job status")
+				}
+
 				runStatus.Result = statUpd
 				runStatus.Error = statUpd.Error
 				runStatus.Update = jobs.CurrentDatetime()
@@ -342,33 +486,37 @@ func (nfg *NgramFreqGenerator) GenerateAfter(corpusID, parentJobID string) (Ngra
 			runStatus.Update = jobs.CurrentDatetime()
 			runStatus.Finished = true
 			updateJobChan <- runStatus
-		}(status)
+		}(jobStatus)
 		nfg.generateSync(ctx, statusChan)
 		close(statusChan)
 	}
 	if parentJobID != "" {
-		nfg.jobActions.EqueueJobAfter(&fn, &status, parentJobID)
+		nfg.jobActions.EqueueJobAfter(&fn, &jobStatus, parentJobID)
 
 	} else {
-		nfg.jobActions.EnqueueJob(&fn, &status)
+		nfg.jobActions.EnqueueJob(&fn, &jobStatus)
 	}
-	return status, nil
+	return jobStatus, nil
 }
 
 func NewNgramFreqGenerator(
-	db *sql.DB,
+	db *mysql.Adapter,
 	jobActions *jobs.Actions,
 	groupedName string,
 	corpusName string,
+	appendExisting bool,
+	ngramSize int,
 	posFn *modders.StringTransformerChain,
 	qsaAttrs QSAttributes,
 ) *NgramFreqGenerator {
 	return &NgramFreqGenerator{
-		db:          db,
-		jobActions:  jobActions,
-		groupedName: groupedName,
-		corpusName:  corpusName,
-		posFn:       posFn,
-		qsaAttrs:    qsaAttrs,
+		db:             db,
+		jobActions:     jobActions,
+		groupedName:    groupedName,
+		corpusName:     corpusName,
+		ngramSize:      ngramSize,
+		posFn:          posFn,
+		qsaAttrs:       qsaAttrs,
+		appendExisting: appendExisting,
 	}
 }

@@ -18,9 +18,9 @@ package actions
 
 import (
 	"context"
-	"database/sql"
 	"frodo/cncdb"
 	"frodo/corpus"
+	"frodo/db/mysql"
 	"frodo/general"
 	"frodo/jobs"
 	"frodo/liveattrs/laconf"
@@ -41,7 +41,7 @@ type Actions struct {
 	jobActions *jobs.Actions
 
 	// laDB is a live-attributes-specific database where Frodo needs full privileges
-	laDB *sql.DB
+	laDB *mysql.Adapter
 
 	// cncDB is CNC's main database
 	cncDB *cncdb.CNCMySQLHandler
@@ -54,7 +54,7 @@ func NewActions(
 	jobStopChannel <-chan string,
 	jobActions *jobs.Actions,
 	cncDB *cncdb.CNCMySQLHandler,
-	laDB *sql.DB,
+	laDB *mysql.Adapter,
 	laConfRegistry *laconf.LiveAttrsBuildConfProvider,
 	version general.VersionInfo,
 ) *Actions {

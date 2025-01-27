@@ -21,6 +21,8 @@ import (
 	"frodo/jobs"
 	"regexp"
 	"strings"
+
+	"github.com/czcorpus/cnc-gokit/maths"
 )
 
 const (
@@ -33,27 +35,47 @@ var (
 )
 
 type genNgramsStatus struct {
+	CorpusID            string
 	TablesReady         bool
+	TotalLines          int
 	NumProcLines        int
+	NumStopWords        int
+	ChunkID             int
 	AvgSpeedItemsPerSec int
 	TimeEstimationSecs  int
+	CurrAction          string
 	Error               error
+	ClientWarn          string
 }
 
 func (gns genNgramsStatus) MarshalJSON() ([]byte, error) {
 	return json.Marshal(
 		struct {
-			TablesReady         bool   `json:"tablesReady"`
-			NumProcLines        int    `json:"numProcLines"`
-			AvgSpeedItemsPerSec int    `json:"avgSpeedItemsPerSec"`
-			TimeEstimationSecs  int    `json:"timeEstimationSecs,omitempty"`
-			Error               string `json:"error,omitempty"`
+			CorpusID            string  `json:"corpusId"`
+			TablesReady         bool    `json:"tablesReady"`
+			NumProcLines        int     `json:"numProcLines"`
+			NumStopWords        int     `json:"numStopWords"`
+			Progress            float64 `json:"progress"`
+			ChunkID             int     `json:"chunkId"`
+			TotalLines          int     `json:"totalLines"`
+			AvgSpeedItemsPerSec int     `json:"avgSpeedItemsPerSec"`
+			TimeEstimationSecs  int     `json:"timeEstimationSecs,omitempty"`
+			CurrAction          string  `json:"currAction,omitempty"`
+			Error               string  `json:"error,omitempty"`
+			ClientWarn          string  `json:"clientWarning,omitempty"`
 		}{
+			CorpusID:            gns.CorpusID,
 			TablesReady:         gns.TablesReady,
 			NumProcLines:        gns.NumProcLines,
+			NumStopWords:        gns.NumStopWords,
+			Progress:            maths.RoundToN(float64(gns.NumProcLines)/float64(gns.TotalLines), 1),
+			ChunkID:             gns.ChunkID,
+			TotalLines:          gns.TotalLines,
 			AvgSpeedItemsPerSec: gns.AvgSpeedItemsPerSec,
 			TimeEstimationSecs:  gns.TimeEstimationSecs,
+			CurrAction:          gns.CurrAction,
 			Error:               jobs.ErrorToString(gns.Error),
+			ClientWarn:          gns.ClientWarn,
 		},
 	)
 }
@@ -66,6 +88,7 @@ type ngRecord struct {
 	tag        string
 	abs        int
 	arf        float32
+	ngramSize  int
 	initialCap int
 }
 

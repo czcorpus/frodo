@@ -24,7 +24,20 @@ import (
 	"github.com/go-sql-driver/mysql"
 )
 
-func OpenDB(conf *db.Conf) (*sql.DB, error) {
+type Adapter struct {
+	db     *sql.DB
+	dbName string
+}
+
+func (a *Adapter) DB() *sql.DB {
+	return a.db
+}
+
+func (a *Adapter) DBName() string {
+	return a.dbName
+}
+
+func OpenDB(conf *db.Conf) (*Adapter, error) {
 	mconf := mysql.NewConfig()
 	mconf.Net = "tcp"
 	mconf.Addr = conf.Host
@@ -38,5 +51,5 @@ func OpenDB(conf *db.Conf) (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	return db, nil
+	return &Adapter{db: db, dbName: mconf.DBName}, nil
 }
