@@ -121,7 +121,7 @@ func main() {
 	}
 	log.Info().Msgf("CNC SQL database: %s@%s", conf.CNCDB.Name, conf.CNCDB.Host)
 
-	laDB, err := mysql.OpenDB(conf.LiveAttrs.DB)
+	laDB, err := mysql.OpenDB(*conf.LiveAttrs.DB)
 	if err != nil {
 		log.Fatal().Err(err)
 	}
@@ -274,6 +274,9 @@ func main() {
 	engine.GET(
 		"/dictionary/:corpusId/querySuggestions/:term",
 		dictActionsHandler.GetQuerySuggestions)
+	engine.GET(
+		"/dictionary/:corpusId/similarARFWords/:term",
+		dictActionsHandler.SimilarARFWords)
 
 	engine.GET(
 		"/jobs", jobActions.JobList)

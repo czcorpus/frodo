@@ -25,8 +25,10 @@ import (
 )
 
 type Adapter struct {
-	db     *sql.DB
-	dbName string
+	db      *sql.DB
+	conf    db.Conf
+	dbName  string
+	isAdHoc bool
 }
 
 func (a *Adapter) DB() *sql.DB {
@@ -37,7 +39,30 @@ func (a *Adapter) DBName() string {
 	return a.dbName
 }
 
-func OpenDB(conf *db.Conf) (*Adapter, error) {
+func (a *Adapter) Conf() db.Conf {
+	return a.conf
+}
+
+func (a *Adapter) IsAdhoc() bool {
+	return a.isAdHoc
+}
+
+// Close closes the wrapped database connection.
+// Only connections which are not "ad-hoc" can
+// be closed this way. This applies e.g. for
+// the "import-tuned" connection which is meant
+// to live just for the time of import and then
+// closed.
+// In case the adapter is closed for a non-adhoc
+// connection, the method panics.
+func (a *Adapter) Close() error {
+	if !a.isAdHoc {
+		panic("trying to close non-adhoc database Adapter")
+	}
+	return a.db.Close()
+}
+
+func OpenDB(conf db.Conf) (*Adapter, error) {
 	mconf := mysql.NewConfig()
 	mconf.Net = "tcp"
 	mconf.Addr = conf.Host
@@ -51,5 +76,22 @@ func OpenDB(conf *db.Conf) (*Adapter, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Adapter{db: db, dbName: mconf.DBName}, nil
+	return &Adapter{db: db, dbName: mconf.DBName, conf: conf}, nil
+}
+
+func OpenImportTunedDB(conf db.Conf) (*Adapter, error) {
+	a, err := OpenDB(conf)
+	if err != nil {
+		return nil, err
+	}
+	a.isAdHoc = true
+	for _, q := range []string{
+		"SET SESSION unique_checks = 0",
+		"SET SESSION foreign_key_checks = 0",
+	} {
+		if _, err = a.db.Exec(q); err != nil {
+			return nil, err
+		}
+	}
+	return a, nil
 }

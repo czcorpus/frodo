@@ -17,6 +17,7 @@
 package actions
 
 import (
+	"fmt"
 	"frodo/dictionary"
 	"net/http"
 
@@ -48,4 +49,39 @@ func (a *Actions) GetQuerySuggestions(ctx *gin.Context) {
 		"matches": items,
 	}
 	uniresp.WriteJSONResponse(ctx.Writer, ans)
+}
+
+func (a *Actions) SimilarARFWords(ctx *gin.Context) {
+	corpusID := ctx.Param("corpusId")
+	word := ctx.Param("term")
+	pos := ctx.Query("pos")
+
+	termSrch, err := dictionary.Search(
+		ctx,
+		a.laDB,
+		corpusID,
+		dictionary.SearchWithLemma(word),
+		dictionary.SearchWithPoS(pos),
+		dictionary.SearchWithLimit(1),
+	)
+	if err != nil {
+		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
+		return
+	}
+	if len(termSrch) > 0 {
+		items, err := dictionary.SimilarARFWords(ctx, a.laDB, corpusID, termSrch[0])
+		if err != nil {
+			uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
+			return
+		}
+		ans := map[string]any{
+			"matches": items,
+		}
+		uniresp.WriteJSONResponse(ctx.Writer, ans)
+
+	} else {
+		uniresp.RespondWithErrorJSON(ctx, fmt.Errorf("no values found"), http.StatusNotFound)
+		return
+	}
+
 }

@@ -114,42 +114,66 @@ func (nfg *NgramFreqGenerator) createTables(tx *sql.Tx) error {
 	return nil
 }
 
-// procLine processes current ngRecord item (= vertical file line containing a token data)
-// with respect to currently processed currLemma and collected sublemmas.
+// procLineGroup processes provided list of ngRecord items (= vertical file line containing
+// a token data) with respect to currently processed currLemma and collected sublemmas.
+//
 // Please note that should the method to work as expected, it is critical to process
 // the token data ordered by word, sublemma, lemma. Otherwise, the procLine method
 // won't be able to detect end of the current lemma forms (and sublemmas).
-func (nfg *NgramFreqGenerator) procLine(
+func (nfg *NgramFreqGenerator) procLineGroup(
 	tx *sql.Tx,
-	word *ngRecord,
+	words []*ngRecord,
 ) error {
+	valPlaceholders := make([]string, len(words))
+	queryArgs := make([]any, 0, len(words)*9)
 
-	if _, err := tx.Exec(fmt.Sprintf(
-		`INSERT INTO %s_word (id, value, lemma, sublemma, pos, count, arf, initial_cap, ngram)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, nfg.groupedName),
-		word.hashId,
-		word.word,
-		word.lemma,
-		word.sublemma,
-		nfg.posFn.Transform(word.tag),
-		word.abs,
-		word.arf,
-		word.initialCap,
-		word.ngramSize,
+	for i := 0; i < len(words); i++ {
+		valPlaceholders[i] = "(?, ?, ?, ?, ?, ?, ?, ?, ?)"
+		queryArgs = append(
+			queryArgs,
+			words[i].hashId,
+			words[i].word,
+			words[i].lemma,
+			words[i].sublemma,
+			nfg.posFn.Transform(words[i].tag),
+			words[i].abs,
+			words[i].arf,
+			words[i].initialCap,
+			words[i].ngramSize,
+		)
+	}
+
+	if _, err := tx.Exec(
+		fmt.Sprintf(
+			`INSERT INTO %s_word (id, value, lemma, sublemma, pos, count, arf, initial_cap, ngram)
+			VALUES %s`,
+			nfg.groupedName,
+			strings.Join(valPlaceholders, ", "),
+		),
+		queryArgs...,
 	); err != nil {
 		return fmt.Errorf("failed to process word line: %w", err)
 	}
-	for trm, _ := range map[string]bool{word.word: true, word.lemma: true, word.sublemma: true} {
-		if _, err := tx.Exec(
-			fmt.Sprintf(
-				`INSERT INTO %s_term_search (value, word_id) VALUES (?, ?)`,
-				nfg.groupedName,
-			),
-			trm,
-			word.hashId,
-		); err != nil {
-			return fmt.Errorf("failed to process word line: %w", err)
+	// srch term insert
+	// word/lemma/sublemma can be the same so we cannot determine
+	// exact size of stPlaceholders and stArgs below
+	stPlaceholders := make([]string, 0, 3*len(words))
+	stArgs := make([]any, 0, 3*len(words))
+	for _, word := range words {
+		for trm, _ := range map[string]bool{word.word: true, word.lemma: true, word.sublemma: true} {
+			stPlaceholders = append(stPlaceholders, "(?, ?)")
+			stArgs = append(stArgs, trm, word.hashId)
 		}
+	}
+	if _, err := tx.Exec(
+		fmt.Sprintf(
+			`INSERT INTO %s_term_search (value, word_id) VALUES %s`,
+			nfg.groupedName,
+			strings.Join(stPlaceholders, ", "),
+		),
+		stArgs...,
+	); err != nil {
+		return fmt.Errorf("failed to process word line: %w", err)
 	}
 	return nil
 }
@@ -160,11 +184,12 @@ func (nfg *NgramFreqGenerator) findTotalNumLines() (int, error) {
 		fmt.Sprintf(
 			"SELECT COUNT(*) "+
 				"FROM %s_colcounts "+
-				"WHERE %s <> ? ",
+				"WHERE %s <> ? AND ngram_size = ? ",
 			nfg.groupedName,
 			nfg.qsaAttrs.ExportCols("tag")[0],
 		),
 		NonWordCSCNC2020Tag,
+		nfg.ngramSize,
 	)
 	if row.Err() != nil {
 		return -1, row.Err()
@@ -175,6 +200,10 @@ func (nfg *NgramFreqGenerator) findTotalNumLines() (int, error) {
 		return -1, err
 	}
 	return ans, nil
+}
+
+func (nfg *NgramFreqGenerator) procRowBatch() {
+
 }
 
 func (nfg *NgramFreqGenerator) procChunk(
@@ -223,8 +252,36 @@ func (nfg *NgramFreqGenerator) procChunk(
 	statusCh <- baseStatus
 
 	var numStopWords int
+	rowBatch := make([]*ngRecord, 0, 100)
 
-	for rowNum := 1; rows.Next(); rowNum++ {
+	procRowBatch := func(rowNum int) bool {
+		if err := nfg.procLineGroup(tx, rowBatch); err != nil {
+			tx.Rollback()
+			baseStatus.Error = fmt.Errorf(
+				"failed to process db row %d for chunkID %d: %w", rowNum, baseStatus.ChunkID, err)
+			statusCh <- baseStatus
+			return false
+		}
+		procTime := time.Since(t0).Seconds()
+		if (baseStatus.ChunkID*procChunkSize+rowNum)%reportEachNthItem == 0 {
+			baseStatus.AvgSpeedItemsPerSec = int(math.RoundToEven(float64(baseStatus.ChunkID*procChunkSize+rowNum) / procTime))
+			statusCh <- baseStatus
+
+			if err := db.AddProcTimeEntry(
+				nfg.db.DB(),
+				"ngrams",
+				baseStatus.TotalLines,
+				baseStatus.ChunkID*procChunkSize+rowNum,
+				procTime,
+			); err != nil {
+				log.Err(err).Msg("failed to write proc_time statistics (ignoring the error)")
+			}
+		}
+		return true
+	}
+
+	var rowNum int
+	for rowNum = 1; rows.Next(); rowNum++ {
 		baseStatus.NumProcLines = baseStatus.ChunkID*procChunkSize + rowNum
 		rec := &ngRecord{ngramSize: nfg.ngramSize}
 		err := rows.Scan(
@@ -247,28 +304,13 @@ func (nfg *NgramFreqGenerator) procChunk(
 			numStopWords++
 			continue
 		}
-		if err := nfg.procLine(tx, rec); err != nil {
-			tx.Rollback()
-			baseStatus.Error = fmt.Errorf(
-				"failed to process db row %d for chunkID %d: %w", rowNum, baseStatus.ChunkID, err)
-			statusCh <- baseStatus
-			return false
-		}
-		procTime := time.Since(t0).Seconds()
-		if (baseStatus.ChunkID*procChunkSize+rowNum)%reportEachNthItem == 0 {
-			baseStatus.AvgSpeedItemsPerSec = int(math.RoundToEven(float64(baseStatus.ChunkID*procChunkSize+rowNum) / procTime))
-			statusCh <- baseStatus
+		rowBatch = append(rowBatch, rec)
 
-			if err := db.AddProcTimeEntry(
-				nfg.db.DB(),
-				"ngrams",
-				baseStatus.TotalLines,
-				baseStatus.ChunkID*procChunkSize+rowNum,
-				procTime,
-			); err != nil {
-				log.Err(err).Msg("failed to write proc_time statistics (ignoring the error)")
+		if len(rowBatch) == 100 {
+			if ok := procRowBatch(rowNum); !ok {
+				return false
 			}
-
+			rowBatch = make([]*ngRecord, 0, 100)
 		}
 		select {
 		case <-ctx.Done():
@@ -276,6 +318,11 @@ func (nfg *NgramFreqGenerator) procChunk(
 			statusCh <- baseStatus
 			return false
 		default:
+		}
+	}
+	if len(rowBatch) > 0 {
+		if ok := procRowBatch(rowNum); !ok {
+			return false
 		}
 	}
 
@@ -489,6 +536,9 @@ func (nfg *NgramFreqGenerator) GenerateAfter(parentJobID string) (NgramJobInfo, 
 		}(jobStatus)
 		nfg.generateSync(ctx, statusChan)
 		close(statusChan)
+		if err := nfg.db.Close(); err != nil {
+			log.Error().Err(err).Msg("failed to close import-tuned connection")
+		}
 	}
 	if parentJobID != "" {
 		nfg.jobActions.EqueueJobAfter(&fn, &jobStatus, parentJobID)
