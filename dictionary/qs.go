@@ -91,6 +91,15 @@ type Lemma struct {
 	ARF       float64    `json:"arf"`
 	IsPname   bool       `json:"is_pname"`
 	Count     int        `json:"count"`
+	NgramSize int        `json:"ngramSize"`
+}
+
+func (lemma *Lemma) AvgARF() float64 {
+	var tmp float64
+	for _, f := range lemma.Forms {
+		tmp += f.ARF
+	}
+	return tmp / float64(len(lemma.Forms))
 }
 
 func (lemma *Lemma) ToJSON() ([]byte, error) {
@@ -124,9 +133,10 @@ func processRowsSync(rows *sql.Rows, enableMultivalues bool) ([]Lemma, error) {
 		var lemmaCount, wordCount int
 		var lemmaArf, wordArf float64
 		var isPname bool
+		var ngramSize int
 		err := rows.Scan(
 			&wordValue, &lemmaValue, &sublemmaValue, &wordCount,
-			&wordPos, &wordArf)
+			&wordPos, &wordArf, &ngramSize)
 		if err != nil {
 			return []Lemma{}, fmt.Errorf("failed to process dictionary rows: %w", err)
 		}
@@ -156,6 +166,7 @@ func processRowsSync(rows *sql.Rows, enableMultivalues bool) ([]Lemma, error) {
 					ARF:       lemmaArf,
 					IsPname:   isPname,
 					Count:     lemmaCount,
+					NgramSize: ngramSize,
 				}
 				idBase++
 			}
@@ -195,13 +206,22 @@ type SearchOptions struct {
 	Lemma            string
 	Sublemma         string
 	Word             string
+	PoS              string
 	AnyValue         string
 	AllowMultivalues bool
+	Limit            int
+	NgramSize        int
 }
 
 func SearchWithSublemma(v string) SearchOption {
 	return func(c *SearchOptions) {
 		c.Sublemma = v
+	}
+}
+
+func SearchWithPoS(v string) SearchOption {
+	return func(c *SearchOptions) {
+		c.PoS = v
 	}
 }
 
@@ -229,6 +249,18 @@ func SearchWithMultivalues() SearchOption {
 	}
 }
 
+func SearchWithLimit(lim int) SearchOption {
+	return func(c *SearchOptions) {
+		c.Limit = lim
+	}
+}
+
+func SearchWithNgramSize(size int) SearchOption {
+	return func(c *SearchOptions) {
+		c.NgramSize = size
+	}
+}
+
 type SearchOption func(c *SearchOptions)
 
 func Search(
@@ -244,16 +276,17 @@ func Search(
 	whereArgs := make([]any, 0, 5)
 	whereSQL = append(whereSQL, "w.pos != ?")
 	whereArgs = append(whereArgs, freqdb.NonWordCSCNC2020Tag)
+	limitSQL := ""
 	var srchOpts SearchOptions
 	for _, opt := range opts {
 		opt(&srchOpts)
 	}
 	if srchOpts.Lemma != "" {
-		whereSQL = append(whereSQL, "m.value = ?")
+		whereSQL = append(whereSQL, "w.lemma = ?")
 		whereArgs = append(whereArgs, srchOpts.Lemma)
 	}
 	if srchOpts.Sublemma != "" {
-		whereSQL = append(whereSQL, "s.value = ?")
+		whereSQL = append(whereSQL, "w.sublemma = ?")
 		whereArgs = append(whereArgs, srchOpts.Sublemma)
 	}
 	if srchOpts.Word != "" {
@@ -264,33 +297,34 @@ func Search(
 		whereSQL = append(whereSQL, "s.value = ?")
 		whereArgs = append(whereArgs, srchOpts.AnyValue)
 	}
+	if srchOpts.PoS != "" {
+		whereSQL = append(whereSQL, "w.pos = ?")
+		whereArgs = append(whereArgs, srchOpts.PoS)
+	}
+	if srchOpts.NgramSize > 0 {
+		whereSQL = append(whereSQL, "w.ngram = ?")
+		whereArgs = append(whereArgs, srchOpts.NgramSize)
+	}
+	if srchOpts.Limit > 0 {
+		limitSQL = fmt.Sprintf("LIMIT %d", srchOpts.Limit)
+	}
 	rows, err := db.DB().QueryContext(
 		ctx,
 		fmt.Sprintf(
 			"SELECT w.value, w.lemma, w.sublemma, w.count, "+
-				"w.pos, w.arf "+
+				"w.pos, w.arf, w.ngram "+
 				"FROM %s_word AS w "+
 				"JOIN %s_term_search AS s ON s.word_id = w.id "+
 				"WHERE %s "+
-				"ORDER BY w.lemma, w.pos, w.sublemma, w.value",
+				"ORDER BY w.lemma, w.pos, w.sublemma, w.value "+
+				"%s",
 			groupedName,
 			groupedName,
 			strings.Join(whereSQL, " AND "),
+			limitSQL,
 		),
 		whereArgs...,
 	)
-	fmt.Println(fmt.Sprintf(
-		"SELECT w.value, w.lemma, w.sublemma, w.count, "+
-			"w.pos, w.arf "+
-			"FROM %s_word AS w "+
-			"JOIN %s_term_search AS s ON s.word_id = w.id "+
-			"WHERE %s "+
-			"ORDER BY w.lemma, w.pos, w.sublemma, w.value",
-		groupedName,
-		groupedName,
-		strings.Join(whereSQL, " AND "),
-	))
-	fmt.Println("ARGS: ", whereArgs)
 	if err != nil {
 		return []Lemma{}, fmt.Errorf("failed to search dict. values: %w", err)
 	}

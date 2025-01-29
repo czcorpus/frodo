@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"frodo/common"
+	"frodo/db/mysql"
 	"frodo/liveattrs/db/freqdb"
 	"frodo/liveattrs/laconf"
 	"io"
@@ -79,7 +80,6 @@ func (a *Actions) getNgramArgs(req *http.Request) (reqArgs, error) {
 
 func (a *Actions) GenerateNgrams(ctx *gin.Context) {
 	corpusID := ctx.Param("corpusId")
-	baseErrTpl := "failed to generate n-grams for %s: %w"
 	appendMode := ctx.Request.URL.Query().Get("append") == "1"
 	ngramSize, ok := unireq.GetURLIntArgOrFail(ctx, "ngramSize", 1)
 	if !ok {
@@ -144,31 +144,26 @@ func (a *Actions) GenerateNgrams(ctx *gin.Context) {
 
 	laConf, err := a.laConfCache.Get(corpusID)
 	if err == laconf.ErrorNoSuchConfig {
-		uniresp.WriteJSONErrorResponse(
-			ctx.Writer,
-			uniresp.NewActionError(baseErrTpl, corpusID, err),
+		uniresp.RespondWithErrorJSON(
+			ctx,
+			err,
 			http.StatusNotFound,
 		)
 		return
 
 	} else if err != nil {
-		uniresp.WriteJSONErrorResponse(
-			ctx.Writer, uniresp.NewActionError(baseErrTpl, corpusID, err), http.StatusInternalServerError)
+		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 		return
 	}
 	posFn, err := common.ApplyPosProperties(&laConf.Ngrams, args.PosColIdx, tagset)
 	if err == common.ErrorPosNotDefined {
-		uniresp.WriteJSONErrorResponse(
-			ctx.Writer,
-			uniresp.NewActionError(baseErrTpl, corpusID, err),
-			http.StatusUnprocessableEntity,
-		)
+		uniresp.RespondWithErrorJSON(ctx, err, http.StatusUnprocessableEntity)
 		return
 
 	} else if err != nil {
-		uniresp.WriteJSONErrorResponse(
-			ctx.Writer,
-			uniresp.NewActionError(baseErrTpl, corpusID, err),
+		uniresp.RespondWithErrorJSON(
+			ctx,
+			err,
 			http.StatusInternalServerError,
 		)
 		return
@@ -176,16 +171,25 @@ func (a *Actions) GenerateNgrams(ctx *gin.Context) {
 
 	corpusDBInfo, err := a.cncDB.LoadInfo(corpusID)
 	if err != nil {
-		uniresp.WriteJSONErrorResponse(
-			ctx.Writer,
-			uniresp.NewActionError(baseErrTpl, corpusID, err),
+		uniresp.RespondWithErrorJSON(
+			ctx,
+			err,
 			http.StatusInternalServerError,
 		)
 		return
 	}
 
+	tunedDb, err := mysql.OpenImportTunedDB(a.laDB.Conf())
+	if err != nil {
+		uniresp.RespondWithErrorJSON(
+			ctx,
+			err,
+			http.StatusInternalServerError,
+		)
+		return
+	}
 	generator := freqdb.NewNgramFreqGenerator(
-		a.laDB,
+		tunedDb,
 		a.jobActions,
 		corpusDBInfo.GroupedName(),
 		corpusDBInfo.Name,
@@ -196,8 +200,7 @@ func (a *Actions) GenerateNgrams(ctx *gin.Context) {
 	)
 	jobInfo, err := generator.GenerateAfter(ctx.Request.URL.Query().Get("parentJobId"))
 	if err != nil {
-		uniresp.WriteJSONErrorResponse(
-			ctx.Writer, uniresp.NewActionError(baseErrTpl, corpusID, err), http.StatusInternalServerError)
+		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 		return
 	}
 	uniresp.WriteJSONResponse(ctx.Writer, jobInfo.FullInfo())

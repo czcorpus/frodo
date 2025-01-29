@@ -49,6 +49,10 @@ type genNgramsStatus struct {
 }
 
 func (gns genNgramsStatus) MarshalJSON() ([]byte, error) {
+	progress := -1.0
+	if gns.TotalLines > 0 {
+		progress = maths.RoundToN(float64(gns.NumProcLines)/float64(gns.TotalLines), 1)
+	}
 	return json.Marshal(
 		struct {
 			CorpusID            string  `json:"corpusId"`
@@ -68,7 +72,7 @@ func (gns genNgramsStatus) MarshalJSON() ([]byte, error) {
 			TablesReady:         gns.TablesReady,
 			NumProcLines:        gns.NumProcLines,
 			NumStopWords:        gns.NumStopWords,
-			Progress:            maths.RoundToN(float64(gns.NumProcLines)/float64(gns.TotalLines), 1),
+			Progress:            progress,
 			ChunkID:             gns.ChunkID,
 			TotalLines:          gns.TotalLines,
 			AvgSpeedItemsPerSec: gns.AvgSpeedItemsPerSec,
