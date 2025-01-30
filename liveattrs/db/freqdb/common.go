@@ -85,29 +85,22 @@ func (gns genNgramsStatus) MarshalJSON() ([]byte, error) {
 }
 
 type ngRecord struct {
-	hashId     string
-	word       string
-	lemma      string
-	sublemma   string
-	tag        string
-	abs        int
-	arf        float32
-	ngramSize  int
-	initialCap int
+	hashId        string
+	word          string
+	lemma         string
+	sublemma      string
+	tag           string
+	abs           int
+	arf           float64
+	ngramSize     int
+	initialCap    int
+	simFreqsScore float64
 }
 
 func getLemmaTotal(rows []*ngRecord) int {
 	ans := 0
 	for _, v := range rows {
 		ans += v.abs
-	}
-	return ans
-}
-
-func getLemmaArf(rows []*ngRecord) float32 {
-	var ans float32
-	for _, v := range rows {
-		ans += v.arf
 	}
 	return ans
 }
