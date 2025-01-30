@@ -75,6 +75,7 @@ func (nfg *NgramFreqGenerator) createTables(tx *sql.Tx) error {
 		count INTEGER,
 		ngram TINYINT NOT NULL,
 		arf FLOAT,
+		sim_freqs_score FLOAT NOT NULL DEFAULT 0,
 		initial_cap TINYINT NOT NULL DEFAULT 0,
 		PRIMARY KEY (id)
 		) COLLATE utf8mb4_bin`,
@@ -106,7 +107,7 @@ func (nfg *NgramFreqGenerator) createTables(tx *sql.Tx) error {
 		return fmt.Errorf(errMsgTpl, err)
 	}
 	if _, err := tx.Exec(fmt.Sprintf(
-		`create index %s_word_arf_idx on %s_word(arf)`,
+		`create index %s_word_sim_freqs_score_idx on %s_word(sim_freqs_score)`,
 		nfg.groupedName, nfg.groupedName,
 	)); err != nil {
 		return fmt.Errorf(errMsgTpl, err)
@@ -128,7 +129,7 @@ func (nfg *NgramFreqGenerator) procLineGroup(
 	queryArgs := make([]any, 0, len(words)*9)
 
 	for i := 0; i < len(words); i++ {
-		valPlaceholders[i] = "(?, ?, ?, ?, ?, ?, ?, ?, ?)"
+		valPlaceholders[i] = "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 		queryArgs = append(
 			queryArgs,
 			words[i].hashId,
@@ -140,12 +141,13 @@ func (nfg *NgramFreqGenerator) procLineGroup(
 			words[i].arf,
 			words[i].initialCap,
 			words[i].ngramSize,
+			words[i].simFreqsScore,
 		)
 	}
 
 	if _, err := tx.Exec(
 		fmt.Sprintf(
-			`INSERT INTO %s_word (id, value, lemma, sublemma, pos, count, arf, initial_cap, ngram)
+			`INSERT INTO %s_word (id, value, lemma, sublemma, pos, count, arf, initial_cap, ngram, sim_freqs_score)
 			VALUES %s`,
 			nfg.groupedName,
 			strings.Join(valPlaceholders, ", "),
@@ -293,6 +295,7 @@ func (nfg *NgramFreqGenerator) procChunk(
 			&rec.abs,
 			&rec.arf,
 			&rec.initialCap,
+			&rec.simFreqsScore,
 		)
 		if err != nil {
 			tx.Rollback()

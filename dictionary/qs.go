@@ -83,23 +83,15 @@ type Sublemma struct {
 }
 
 type Lemma struct {
-	ID        string     `json:"_id"`
-	Lemma     string     `json:"lemma"`
-	Forms     []Form     `json:"forms"`
-	Sublemmas []Sublemma `json:"sublemmas"`
-	PoS       string     `json:"pos"`
-	ARF       float64    `json:"arf"`
-	IsPname   bool       `json:"is_pname"`
-	Count     int        `json:"count"`
-	NgramSize int        `json:"ngramSize"`
-}
-
-func (lemma *Lemma) AvgARF() float64 {
-	var tmp float64
-	for _, f := range lemma.Forms {
-		tmp += f.ARF
-	}
-	return tmp / float64(len(lemma.Forms))
+	ID           string     `json:"_id"`
+	Lemma        string     `json:"lemma"`
+	Forms        []Form     `json:"forms"`
+	Sublemmas    []Sublemma `json:"sublemmas"`
+	PoS          string     `json:"pos"`
+	IsPname      bool       `json:"is_pname"`
+	Count        int        `json:"count"`
+	NgramSize    int        `json:"ngramSize"`
+	SimFreqScore float64    `json:"simFreqScore"`
 }
 
 func (lemma *Lemma) ToJSON() ([]byte, error) {
@@ -130,13 +122,13 @@ func processRowsSync(rows *sql.Rows, enableMultivalues bool) ([]Lemma, error) {
 
 	for rows.Next() {
 		var lemmaValue, sublemmaValue, wordValue, wordPos string
-		var lemmaCount, wordCount int
-		var lemmaArf, wordArf float64
+		var wordCount int
+		var wordArf, simFreqScore float64
 		var isPname bool
 		var ngramSize int
 		err := rows.Scan(
 			&wordValue, &lemmaValue, &sublemmaValue, &wordCount,
-			&wordPos, &wordArf, &ngramSize)
+			&wordPos, &wordArf, &ngramSize, &simFreqScore)
 		if err != nil {
 			return []Lemma{}, fmt.Errorf("failed to process dictionary rows: %w", err)
 		}
@@ -158,15 +150,16 @@ func processRowsSync(rows *sql.Rows, enableMultivalues bool) ([]Lemma, error) {
 				}
 				sublemmas = make(map[string]int)
 				currLemma = &Lemma{
-					ID:        mkID(idBase),
-					Lemma:     newLemma,
-					Forms:     []Form{},
-					Sublemmas: []Sublemma{},
-					PoS:       newPos,
-					ARF:       lemmaArf,
-					IsPname:   isPname,
-					Count:     lemmaCount,
-					NgramSize: ngramSize,
+					ID:           mkID(idBase),
+					Lemma:        newLemma,
+					Forms:        []Form{},
+					Sublemmas:    []Sublemma{},
+					PoS:          newPos,
+					IsPname:      isPname,
+					NgramSize:    ngramSize,
+					SimFreqScore: simFreqScore,
+					// simFreqScore should be the same for all the forms
+					// so we just grab the last form value
 				}
 				idBase++
 			}
@@ -178,14 +171,13 @@ func processRowsSync(rows *sql.Rows, enableMultivalues bool) ([]Lemma, error) {
 					ARF:   wordArf,
 				},
 			)
-			fmt.Println("adding sublemma ", sublemmas)
 			sublemmas[sublemmaValue]++
 
 		}
 		procRecords++
 	}
 	if procRecords == 0 {
-		return []Lemma{}, fmt.Errorf("there were no dictionary rcords to process")
+		return []Lemma{}, nil
 	}
 	if currLemma != nil {
 		for sValue, sCount := range sublemmas {
@@ -312,7 +304,7 @@ func Search(
 		ctx,
 		fmt.Sprintf(
 			"SELECT w.value, w.lemma, w.sublemma, w.count, "+
-				"w.pos, w.arf, w.ngram "+
+				"w.pos, w.arf, w.ngram, w.sim_freqs_score "+
 				"FROM %s_word AS w "+
 				"JOIN %s_term_search AS s ON s.word_id = w.id "+
 				"WHERE %s "+
