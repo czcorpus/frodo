@@ -47,7 +47,7 @@ func SimilarARFWords(
 		ctx,
 		fmt.Sprintf(
 			"SELECT w.value, w.lemma, w.sublemma, w.count, "+
-				"w.pos, w.arf, w. ngram "+
+				"w.pos, w.arf, w. ngram, w.sim_freqs_score "+
 				"FROM %s_word AS w "+
 				"WHERE %s "+
 				"ORDER BY w.arf DESC, w.lemma, w.pos, w.sublemma, w.value "+
