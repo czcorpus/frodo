@@ -36,12 +36,10 @@ func SimilarARFWords(
 	whereArgs := make([]any, 0, 5)
 	rngLeft := lemma.SimFreqScore - lemma.SimFreqScore*0.05
 	rngRight := lemma.SimFreqScore + lemma.SimFreqScore*0.05
-	fmt.Println("RNG LEFT: ", rngLeft)
-	fmt.Println("RNG RIGHT: ", rngRight)
 
-	whereSQL = append(whereSQL, "w.arf <= ?")
+	whereSQL = append(whereSQL, "w.sim_freqs_score <= ?")
 	whereArgs = append(whereArgs, rngRight)
-	whereSQL = append(whereSQL, "w.arf >= ?")
+	whereSQL = append(whereSQL, "w.sim_freqs_score >= ?")
 	whereArgs = append(whereArgs, rngLeft)
 	whereSQL = append(whereSQL, "w.ngram = 1")
 

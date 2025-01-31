@@ -36,6 +36,7 @@ import (
 	"github.com/czcorpus/vert-tagextract/v3/ptcount/modders"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
+	"golang.org/x/exp/slices"
 )
 
 const (
@@ -113,6 +114,27 @@ func (nfg *NgramFreqGenerator) createTables(tx *sql.Tx) error {
 		return fmt.Errorf(errMsgTpl, err)
 	}
 	return nil
+}
+
+func (nfg *NgramFreqGenerator) determineSimFreqsScore(words []*ngRecord) {
+	var currLemma, currPos string
+	var prevLemmaStart int
+	var score float64
+	for i, word := range words {
+		if word.lemma != currLemma || word.tag[:1] != currPos {
+			for j := prevLemmaStart; j < i; j++ {
+				words[j].simFreqsScore = score
+			}
+			prevLemmaStart = i
+			score = 0
+		}
+		currLemma = word.lemma
+		currPos = word.tag[:1]
+		score += word.arf
+	}
+	for j := prevLemmaStart; j < len(words); j++ {
+		words[j].simFreqsScore = score
+	}
 }
 
 // procLineGroup processes provided list of ngRecord items (= vertical file line containing
@@ -204,17 +226,77 @@ func (nfg *NgramFreqGenerator) findTotalNumLines() (int, error) {
 	return ans, nil
 }
 
-func (nfg *NgramFreqGenerator) procRowBatch() {
+func (nfg *NgramFreqGenerator) preloadCols(
+	ctx context.Context,
+	totalItems int64,
+	baseStatus genNgramsStatus,
+	statusCh chan<- genNgramsStatus,
+) []*ngRecord {
+	baseStatus.CurrAction = "preloading cols"
+	rows, err := nfg.db.DB().QueryContext(
+		ctx,
+		fmt.Sprintf(
+			"SELECT hash_id, %s, `count` AS abs, arf, initial_cap "+
+				"FROM %s_colcounts "+
+				"WHERE col%d <> ? AND ngram_size = ? ",
+			strings.Join(nfg.qsaAttrs.ExportCols("word", "sublemma", "lemma", "tag"), ", "),
+			nfg.groupedName,
+			nfg.qsaAttrs.Tag,
+		),
+		NonWordCSCNC2020Tag,
+		nfg.ngramSize,
+	)
+	if err != nil {
+		baseStatus.Error = fmt.Errorf("failed to select data for the chunk: %w", err)
+		statusCh <- baseStatus
+		return []*ngRecord{}
+	}
+	ngrams := make([]*ngRecord, 0, totalItems)
+	for rowNum := 1; rows.Next(); rowNum++ {
+		baseStatus.NumProcLines = rowNum
+		rec := &ngRecord{ngramSize: nfg.ngramSize}
+		err := rows.Scan(
+			&rec.hashId,
+			&rec.word,
+			&rec.lemma,
+			&rec.sublemma,
+			&rec.tag,
+			&rec.abs,
+			&rec.arf,
+			&rec.initialCap,
+		)
+		if err != nil {
+			baseStatus.Error = fmt.Errorf("failed to process db row %d for the chunk: %w", rowNum, err)
+			statusCh <- baseStatus
+			return []*ngRecord{}
+		}
+		if isStopNgram(rec.lemma) {
+			continue
+		}
+		ngrams = append(ngrams, rec)
+	}
 
+	slices.SortFunc(
+		ngrams,
+		func(a, b *ngRecord) int { return strings.Compare(a.lemma+a.tag, b.lemma+b.tag) },
+	)
+	baseStatus.CurrAction = fmt.Sprintf("sorting ngram list of size %d", len(ngrams))
+	statusCh <- baseStatus
+	nfg.determineSimFreqsScore(ngrams)
+	return ngrams
 }
 
 func (nfg *NgramFreqGenerator) procChunk(
 	ctx context.Context,
+	ngrams []*ngRecord,
 	baseStatus genNgramsStatus,
 	t0 time.Time,
 	statusCh chan<- genNgramsStatus,
 ) bool {
-	baseStatus.CurrAction = fmt.Sprintf("starting to process chunkID %d", baseStatus.ChunkID)
+	if len(ngrams) == 0 {
+		return true
+	}
+	baseStatus.CurrAction = fmt.Sprintf("starting to process chunkID %d of size %d", baseStatus.ChunkID, len(ngrams))
 	statusCh <- baseStatus
 	tx, err := nfg.db.DB().Begin()
 	if err != nil {
@@ -224,40 +306,13 @@ func (nfg *NgramFreqGenerator) procChunk(
 		return false
 	}
 
-	baseStatus.CurrAction = fmt.Sprintf(
-		"selecting data for the chunk (offset: %d)", baseStatus.ChunkID*procChunkSize)
-	statusCh <- baseStatus
-	rows, err := nfg.db.DB().QueryContext(
-		ctx,
-		fmt.Sprintf(
-			"SELECT hash_id, %s, `count` AS abs, arf, initial_cap "+
-				"FROM %s_colcounts "+
-				"WHERE col%d <> ? AND ngram_size = ? "+
-				"LIMIT ? OFFSET ?",
-			strings.Join(nfg.qsaAttrs.ExportCols("word", "sublemma", "lemma", "tag"), ", "),
-			nfg.groupedName,
-			nfg.qsaAttrs.Tag,
-		),
-		NonWordCSCNC2020Tag,
-		nfg.ngramSize,
-		procChunkSize,
-		baseStatus.ChunkID*procChunkSize,
-	)
-	if err != nil {
-		tx.Rollback()
-		baseStatus.Error = fmt.Errorf("failed to select data for the chunk: %w", err)
-		statusCh <- baseStatus
-		return false
-	}
-
 	baseStatus.CurrAction = fmt.Sprintf("processing selected rows for the chunk")
 	statusCh <- baseStatus
 
-	var numStopWords int
 	rowBatch := make([]*ngRecord, 0, 100)
 
-	procRowBatch := func(rowNum int) bool {
-		if err := nfg.procLineGroup(tx, rowBatch); err != nil {
+	procRowBatch := func(rowNum int, batch []*ngRecord) bool {
+		if err := nfg.procLineGroup(tx, batch); err != nil {
 			tx.Rollback()
 			baseStatus.Error = fmt.Errorf(
 				"failed to process db row %d for chunkID %d: %w", rowNum, baseStatus.ChunkID, err)
@@ -283,34 +338,12 @@ func (nfg *NgramFreqGenerator) procChunk(
 	}
 
 	var rowNum int
-	for rowNum = 1; rows.Next(); rowNum++ {
-		baseStatus.NumProcLines = baseStatus.ChunkID*procChunkSize + rowNum
-		rec := &ngRecord{ngramSize: nfg.ngramSize}
-		err := rows.Scan(
-			&rec.hashId,
-			&rec.word,
-			&rec.lemma,
-			&rec.sublemma,
-			&rec.tag,
-			&rec.abs,
-			&rec.arf,
-			&rec.initialCap,
-			&rec.simFreqsScore,
-		)
-		if err != nil {
-			tx.Rollback()
-			baseStatus.Error = fmt.Errorf("failed to process db row %d for the chunk: %w", rowNum, err)
-			statusCh <- baseStatus
-			return false
-		}
-		if isStopNgram(rec.lemma) {
-			numStopWords++
-			continue
-		}
+	for i, rec := range ngrams {
+		rowNum = i + 1
 		rowBatch = append(rowBatch, rec)
 
 		if len(rowBatch) == 100 {
-			if ok := procRowBatch(rowNum); !ok {
+			if ok := procRowBatch(rowNum, rowBatch); !ok {
 				return false
 			}
 			rowBatch = make([]*ngRecord, 0, 100)
@@ -324,7 +357,7 @@ func (nfg *NgramFreqGenerator) procChunk(
 		}
 	}
 	if len(rowBatch) > 0 {
-		if ok := procRowBatch(rowNum); !ok {
+		if ok := procRowBatch(rowNum, rowBatch); !ok {
 			return false
 		}
 	}
@@ -379,7 +412,12 @@ func (nfg *NgramFreqGenerator) run(
 		total, nfg.corpusName, estim)
 	t0 := time.Now()
 
-	numChunks := int(math.Ceil(float64(total) / float64(procChunkSize)))
+	ngrams := nfg.preloadCols(ctx, int64(total), baseStatus, statusChan)
+	if len(ngrams) == 0 {
+		return false
+	}
+
+	numChunks := int(math.Ceil(float64(len(ngrams)) / float64(procChunkSize)))
 	for i := 0; i < numChunks; i++ {
 		baseStatus := genNgramsStatus{
 			CorpusID:           nfg.corpusName,
@@ -391,6 +429,7 @@ func (nfg *NgramFreqGenerator) run(
 		}
 		if ok := nfg.procChunk(
 			ctx,
+			ngrams[i*procChunkSize:min((i+1)*procChunkSize, len(ngrams))],
 			baseStatus,
 			t0,
 			statusChan,
