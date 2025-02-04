@@ -146,13 +146,7 @@ func Create(
 		}
 
 	} else {
-		newConf.DB = vtedb.Conf{
-			Type: "sqlite",
-			Name: path.Join(
-				conf.TextTypesDbDirPath,
-				fmt.Sprintf("%s.db", corpusInfo.ID),
-			),
-		}
+		return nil, fmt.Errorf("Frodo service does not provide support for SQLite backend")
 	}
 	return &newConf, nil
 }

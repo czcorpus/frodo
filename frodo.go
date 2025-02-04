@@ -123,14 +123,14 @@ func main() {
 
 	laDB, err := mysql.OpenDB(*conf.LiveAttrs.DB)
 	if err != nil {
-		log.Fatal().Err(err)
+		log.Fatal().Err(err).Send()
 	}
 	var dbInfo string
 	if conf.LiveAttrs.DB.Type == "mysql" {
 		dbInfo = fmt.Sprintf("%s@%s", conf.LiveAttrs.DB.Name, conf.LiveAttrs.DB.Host)
 
 	} else {
-		dbInfo = fmt.Sprintf("file://%s/*.db", conf.LiveAttrs.TextTypesDbDirPath)
+		log.Fatal().Msg("only mysql liveattrs backend is supported")
 	}
 	log.Info().Msgf("LiveAttrs SQL database(s): %s", dbInfo)
 

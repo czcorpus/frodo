@@ -21,12 +21,8 @@ import (
 )
 
 type Conf struct {
-	DB *vtedb.Conf `json:"db"`
-
-	// TextTypesDbDirPath is an alternative to DB attribute
-	// when dealing with SQLite3-based setup
-	TextTypesDbDirPath   string `json:"textTypesDbDirPath"`
-	ConfDirPath          string `json:"confDirPath"`
-	VertMaxNumErrors     int    `json:"vertMaxNumErrors"`
-	VerticalFilesDirPath string `json:"verticalFilesDirPath"`
+	DB                   *vtedb.Conf `json:"db"`
+	ConfDirPath          string      `json:"confDirPath"`
+	VertMaxNumErrors     int         `json:"vertMaxNumErrors"`
+	VerticalFilesDirPath string      `json:"verticalFilesDirPath"`
 }
