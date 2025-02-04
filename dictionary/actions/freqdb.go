@@ -21,8 +21,14 @@ import (
 	"frodo/dictionary"
 	"net/http"
 
+	"github.com/czcorpus/cnc-gokit/unireq"
 	"github.com/czcorpus/cnc-gokit/uniresp"
 	"github.com/gin-gonic/gin"
+)
+
+const (
+	defaultSimFreqRangeCoeff  = 0.2
+	defaultSimFreqMaxNumItems = 20
 )
 
 func (a *Actions) CreateQuerySuggestions(ctx *gin.Context) {
@@ -55,6 +61,19 @@ func (a *Actions) SimilarARFWords(ctx *gin.Context) {
 	corpusID := ctx.Param("corpusId")
 	word := ctx.Param("term")
 	pos := ctx.Query("pos")
+	rangeCoeff, ok := unireq.GetURLFloatArgOrFail(ctx, "rangeCoeff", defaultSimFreqRangeCoeff)
+	if !ok {
+		return
+	}
+	if rangeCoeff <= 0 || rangeCoeff >= 1 {
+		uniresp.RespondWithErrorJSON(
+			ctx, fmt.Errorf("rangeCoeff must be from interval (0, 1)"), http.StatusBadRequest)
+		return
+	}
+	maxNumItems, ok := unireq.GetURLIntArgOrFail(ctx, "maxItems", defaultSimFreqMaxNumItems)
+	if !ok {
+		return
+	}
 
 	termSrch, err := dictionary.Search(
 		ctx,
@@ -69,7 +88,14 @@ func (a *Actions) SimilarARFWords(ctx *gin.Context) {
 		return
 	}
 	if len(termSrch) > 0 {
-		items, err := dictionary.SimilarARFWords(ctx, a.laDB, corpusID, termSrch[0])
+		items, err := dictionary.SimilarARFWords(
+			ctx,
+			a.laDB,
+			corpusID,
+			termSrch[0],
+			rangeCoeff,
+			maxNumItems,
+		)
 		if err != nil {
 			uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 			return

@@ -45,8 +45,9 @@ func posExtractorFactory(
 	return modders.NewStringTransformerChain(modderSpecif), modderSpecif
 }
 
-// ApplyPosProperties takes posIdx and posTagset and adds a column modder
-// to Ngrams.columnMods column matching the "PoS" one (preserving string modders
+// ApplyPosProperties takes posIdx and posTagset and adds a column modification
+// function to conf.VertColumns[i] specified as holding data for "PoS".
+// It still respects user-defined  one (preserving string modders
 // already configured there!).
 // In case posIdx argument points to a non-existing vertical column,
 // the function returns errorPosNotDefined.
