@@ -113,6 +113,12 @@ func (nfg *NgramFreqGenerator) createTables(tx *sql.Tx) error {
 	)); err != nil {
 		return fmt.Errorf(errMsgTpl, err)
 	}
+	if _, err := tx.Exec(fmt.Sprintf(
+		`create index %s_word_lemma_idx on %s_word(lemma)`,
+		nfg.groupedName, nfg.groupedName,
+	)); err != nil {
+		return fmt.Errorf(errMsgTpl, err)
+	}
 	return nil
 }
 
