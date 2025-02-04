@@ -275,6 +275,9 @@ func main() {
 		"/dictionary/:corpusId/querySuggestions/:term",
 		dictActionsHandler.GetQuerySuggestions)
 	engine.GET(
+		"/dictionary/:corpusId/search/:term",
+		dictActionsHandler.GetQuerySuggestions)
+	engine.GET(
 		"/dictionary/:corpusId/similarARFWords/:term",
 		dictActionsHandler.SimilarARFWords)
 
