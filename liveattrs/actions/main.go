@@ -291,11 +291,6 @@ func (a *Actions) generateData(initialStatus *liveattrs.LiveAttrsJobInfo) {
 						updateJobChan <- jobStatus.WithError(err)
 					}
 				}
-			case "sqlite":
-				err = kontext.SendSoftReset(a.conf.KonText)
-				if err != nil {
-					updateJobChan <- initialStatus.WithError(err)
-				}
 			}
 			updateJobChan <- jobStatus.AsFinished()
 		}()

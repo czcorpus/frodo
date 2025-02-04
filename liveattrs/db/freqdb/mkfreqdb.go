@@ -122,6 +122,10 @@ func (nfg *NgramFreqGenerator) createTables(tx *sql.Tx) error {
 	return nil
 }
 
+// determineSimFreqsScore calculates simFreqScore for all the provided words
+// The words must be in proper order (ordered by lemma, pos) so the method
+// is able to sum everything properly and fill in the final value to all the
+// words within the group.
 func (nfg *NgramFreqGenerator) determineSimFreqsScore(words []*ngRecord) {
 	var currLemma, currPos string
 	var prevLemmaStart int
@@ -190,7 +194,7 @@ func (nfg *NgramFreqGenerator) procLineGroup(
 	stPlaceholders := make([]string, 0, 3*len(words))
 	stArgs := make([]any, 0, 3*len(words))
 	for _, word := range words {
-		for trm, _ := range map[string]bool{word.word: true, word.lemma: true, word.sublemma: true} {
+		for trm := range map[string]bool{word.word: true, word.lemma: true, word.sublemma: true} {
 			stPlaceholders = append(stPlaceholders, "(?, ?)")
 			stArgs = append(stArgs, trm, word.hashId)
 		}
