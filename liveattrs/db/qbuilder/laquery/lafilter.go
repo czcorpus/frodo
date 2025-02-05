@@ -20,10 +20,11 @@ import (
 	"database/sql"
 	"fmt"
 	"frodo/corpus"
-	"frodo/general/collections"
 	"frodo/liveattrs/request/query"
 	"frodo/liveattrs/utils"
 	"strings"
+
+	"github.com/czcorpus/cnc-gokit/collections"
 )
 
 type LAFilter struct {

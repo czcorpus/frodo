@@ -43,10 +43,6 @@ func (a *Adapter) Conf() db.Conf {
 	return a.conf
 }
 
-func (a *Adapter) IsAdhoc() bool {
-	return a.isAdHoc
-}
-
 // Close closes the wrapped database connection.
 // Only connections which are not "ad-hoc" can
 // be closed this way. This applies e.g. for

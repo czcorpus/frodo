@@ -125,15 +125,6 @@ func ApplyDefaults(conf *Conf) {
 // ------- live attributes and stuff
 
 type LAConf struct {
-	LA      *liveattrs.Conf
-	KonText *kontext.Conf
-	Corp    *corpus.CorporaSetup
-}
-
-func (lconf *LAConf) LAConf() *liveattrs.Conf {
-	return lconf.LA
-}
-
-func (lconf *LAConf) KonTextConf() *kontext.Conf {
-	return lconf.KonText
+	LA   *liveattrs.Conf
+	Corp *corpus.CorporaSetup
 }

@@ -70,7 +70,7 @@ func (a *Actions) SimilarARFWords(ctx *gin.Context) {
 			ctx, fmt.Errorf("rangeCoeff must be from interval (0, 1)"), http.StatusBadRequest)
 		return
 	}
-	maxNumItems, ok := unireq.GetURLIntArgOrFail(ctx, "maxItems", defaultSimFreqMaxNumItems)
+	maxNumItems, ok := unireq.GetURLIntArgOrFail(ctx, "maxkItems", defaultSimFreqMaxNumItems)
 	if !ok {
 		return
 	}

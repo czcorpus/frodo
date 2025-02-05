@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"frodo/cncdb"
+	"frodo/common"
 	"frodo/corpus"
 	"frodo/db/mysql"
 	"frodo/general"
@@ -36,9 +37,7 @@ import (
 	"frodo/liveattrs/request/query"
 	"frodo/liveattrs/request/response"
 	"net/http"
-	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -65,23 +64,6 @@ var (
 
 type CreateLiveAttrsReqBody struct {
 	Files []string `json:"files"`
-}
-
-func loadConf(basePath, corpname string) (*vteCnf.VTEConf, error) {
-	return vteCnf.LoadConf(filepath.Join(basePath, fmt.Sprintf("%s.json", corpname)))
-}
-
-func arrayShowShortened(data []string) string {
-	if len(data) <= 5 {
-		return strings.Join(data, ", ")
-	}
-	ans := make([]string, 5)
-	ans[0] = data[0]
-	ans[1] = data[1]
-	ans[2] = "..."
-	ans[3] = data[2]
-	ans[4] = data[3]
-	return strings.Join(ans, ", ")
 }
 
 // --------------
@@ -123,10 +105,6 @@ type Actions struct {
 	usageData chan<- db.RequestData
 
 	vteJobCancel map[string]context.CancelFunc
-}
-
-func (a *Actions) OnExit() {
-	close(a.usageData)
 }
 
 // applyPatchArgs based on configuration stored in `jsonArgs`
@@ -264,32 +242,41 @@ func (a *Actions) generateData(initialStatus *liveattrs.LiveAttrsJobInfo) {
 			}
 
 			a.eqCache.Del(jobStatus.CorpusID)
-			switch jobStatus.Args.VteConf.DB.Type {
-			case "mysql":
-				if !jobStatus.Args.NoCorpusUpdate {
-					transact, err := a.cncDB.StartTx()
-					if err != nil {
-						updateJobChan <- jobStatus.WithError(err)
-						return
-					}
-					var bibIDStruct, bibIDAttr string
-					if jobStatus.Args.VteConf.BibView.IDAttr != "" {
-						bibIDStruct, bibIDAttr = jobStatus.Args.VteConf.BibView.IDAttrElements()
-					}
-					err = a.cncDB.SetLiveAttrs(
-						transact, jobStatus.CorpusID, bibIDStruct, bibIDAttr)
-					if err != nil {
-						updateJobChan <- jobStatus.WithError(err)
-						transact.Rollback()
-					}
-					err = kontext.SendSoftReset(a.conf.KonText)
-					if err != nil {
-						updateJobChan <- jobStatus.WithError(err)
-					}
-					err = transact.Commit()
-					if err != nil {
-						updateJobChan <- jobStatus.WithError(err)
-					}
+			if jobStatus.Args.VteConf.DB.Type != "mysql" {
+				updateJobChan <- jobStatus.WithError(fmt.Errorf("only mysql liveattrs backend is supported in Frodo"))
+				return
+			}
+			if !jobStatus.Args.NoCorpusUpdate {
+				transact, err := a.cncDB.StartTx()
+				if err != nil {
+					updateJobChan <- jobStatus.WithError(err)
+					return
+				}
+				var bibIDStruct, bibIDAttr string
+				if jobStatus.Args.VteConf.BibView.IDAttr != "" {
+					bibIDStruct, bibIDAttr = jobStatus.Args.VteConf.BibView.IDAttrElements()
+				}
+				err = a.cncDB.SetLiveAttrs(
+					transact,
+					jobStatus.CorpusID,
+					bibIDStruct,
+					bibIDAttr,
+					"tag",                  // TODO !!! hardcoded 'tag' (even if it should work in 99.9% of cases)
+					common.TagsetCSCNC2020, // TODO !!! hardcoded tagset
+				)
+				if err != nil {
+					updateJobChan <- jobStatus.WithError(err)
+					transact.Rollback()
+					return
+				}
+				err = kontext.SendSoftReset(a.conf.KonText)
+				if err != nil {
+					updateJobChan <- jobStatus.WithError(err)
+					return
+				}
+				err = transact.Commit()
+				if err != nil {
+					updateJobChan <- jobStatus.WithError(err)
 				}
 			}
 			updateJobChan <- jobStatus.AsFinished()

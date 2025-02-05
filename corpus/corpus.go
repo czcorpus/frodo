@@ -38,10 +38,6 @@ type FileMappedValue struct {
 	Size         int64   `json:"size"`
 }
 
-func (fmv FileMappedValue) TruePath() string {
-	return fmv.Path
-}
-
 func (fmv FileMappedValue) VisiblePath() string {
 	return fmv.Value
 }

@@ -153,17 +153,6 @@ func (pinfo PageInfo) Offset() int {
 	return (pinfo.Page - 1) * pinfo.PageSize
 }
 
-func (pinfo PageInfo) ToSQL() string {
-	if pinfo.PageSize == 0 {
-		return ""
-	}
-	return fmt.Sprintf(
-		"LIMIT %d OFFSET %d",
-		pinfo.PageSize,
-		pinfo.Offset(),
-	)
-}
-
 func attrsWithPrefix(attrs []string) []string {
 	sql := make([]string, len(attrs))
 	for i, attr := range attrs {

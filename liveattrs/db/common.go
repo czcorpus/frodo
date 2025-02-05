@@ -18,8 +18,6 @@ package db
 
 import (
 	"errors"
-	"fmt"
-	"strings"
 )
 
 // ErrorEmptyResult is a general representation
@@ -31,19 +29,4 @@ var ErrorEmptyResult = errors.New("no result")
 type StructAttr struct {
 	Struct string
 	Attr   string
-}
-
-func (sattr StructAttr) Values() [2]string {
-	return [2]string{sattr.Struct, sattr.Attr}
-}
-
-func (sattr StructAttr) Key() string {
-	return fmt.Sprintf("%s.%s", sattr.Struct, sattr.Attr)
-}
-
-// --
-
-func ImportStructAttr(v string) StructAttr {
-	tmp := strings.Split(v, ".")
-	return StructAttr{Struct: tmp[0], Attr: tmp[1]}
 }

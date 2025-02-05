@@ -33,8 +33,6 @@ type Actions struct {
 	Conf    *cnf.Conf
 }
 
-func (a *Actions) OnExit() {}
-
 // RootAction is just an information action about the service
 func (a *Actions) RootAction(ctx *gin.Context) {
 	host, err := os.Hostname()

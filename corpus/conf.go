@@ -52,15 +52,8 @@ type CorporaDataPaths struct {
 // CorporaSetup defines Frodo application configuration related
 // to a corpus
 type CorporaSetup struct {
-	RegistryDirPaths     []string          `json:"registryDirPaths"`
-	RegistryTmpDir       string            `json:"registryTmpDir"`
-	CorpusDataPath       CorporaDataPaths  `json:"corpusDataPath"`
-	ConcCacheDirPath     string            `json:"concCacheDirPath"`
-	AligndefDirPath      string            `json:"aligndefDirPath"`
-	AltAccessMapping     map[string]string `json:"altAccessMapping"` // registry => data mapping
-	WordSketchDefDirPath string            `json:"wordSketchDefDirPath"`
-	SyncAllowedCorpora   []string          `json:"syncAllowedCorpora"`
-	ManateeDynlibPath    string            `json:"manateeDynlibPath"`
+	RegistryDirPaths []string `json:"registryDirPaths"`
+	RegistryTmpDir   string   `json:"registryTmpDir"`
 }
 
 func (cs *CorporaSetup) GetFirstValidRegistry(corpusID, subDir string) string {
@@ -73,24 +66,6 @@ func (cs *CorporaSetup) GetFirstValidRegistry(corpusID, subDir string) string {
 		}
 	}
 	return ""
-}
-
-func (cs *CorporaSetup) GetCorpusCNCDataPath() string {
-	return cs.CorpusDataPath.CNC
-}
-
-func (cs *CorporaSetup) AllowsSyncForCorpus(name string) bool {
-	for _, v := range cs.SyncAllowedCorpora {
-		if v == name {
-			return true
-		}
-	}
-	return false
-}
-
-func (cs *CorporaSetup) SubdirIsInAltAccessMapping(subdir string) bool {
-	_, ok := cs.AltAccessMapping[subdir]
-	return ok
 }
 
 type DatabaseSetup struct {

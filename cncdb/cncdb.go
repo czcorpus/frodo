@@ -19,13 +19,13 @@ package cncdb
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"frodo/common"
 	"frodo/corpus"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
+	"github.com/rs/zerolog/log"
 )
 
 type DefaultViewOpts struct {
@@ -38,35 +38,136 @@ type CNCMySQLHandler struct {
 	pcTableName      string
 }
 
-func (c *CNCMySQLHandler) UpdateSize(transact *sql.Tx, corpus string, size int64) error {
-	_, err := transact.Exec(
-		fmt.Sprintf("UPDATE %s SET size = ? WHERE name = ?", c.corporaTableName),
-		size,
-		corpus,
+func (c *CNCMySQLHandler) ifMissingAddBibStructattr(
+	transact *sql.Tx,
+	corpus, bibIDStruct, bibIDAttr string,
+) error {
+	row := transact.QueryRow(
+		"SELECT COUNT(*) FROM corpus_structattr WHERE corpus_name = ? AND structure_name = ? AND name = ?",
+		corpus, bibIDStruct, bibIDAttr,
 	)
-	return err
+	var ans int
+	if err := row.Scan(&ans); err != nil {
+		return fmt.Errorf("failed to determine bibIdAttr existence: %w", err)
+	}
+	if ans > 0 {
+		return nil
+	}
+	if _, err := transact.Exec(
+		"INSERT INTO corpus_structattr (corpus_name, structure_name, name) VALUES (?, ?, ?)",
+		corpus, bibIDStruct, bibIDAttr,
+	); err != nil {
+		return fmt.Errorf("failed to insert corpus_structattr: %w", err)
+	}
+	return nil
 }
 
-func (c *CNCMySQLHandler) UpdateDefaultViewOpts(transact *sql.Tx, corpus string, defaultViewOpts DefaultViewOpts) error {
-	data, err := json.Marshal(defaultViewOpts)
-	if err != nil {
+func (c *CNCMySQLHandler) ifMissingAddCorpusTagset(
+	transact *sql.Tx,
+	corpus, tagAttr string,
+	tagsetName common.SupportedTagset,
+) error {
+	if err := c.ifMissingAddTagPosattr(transact, corpus, tagAttr); err != nil {
 		return err
 	}
-	_, err = transact.Exec(
-		fmt.Sprintf("UPDATE %s SET default_view_opts = ? WHERE name = ?", c.corporaTableName),
-		string(data),
-		corpus,
+	row := transact.QueryRow(
+		"SELECT COUNT(*) FROM corpus_tagset WHERE corpus_name = ? AND tagset_name = ?",
+		corpus, tagsetName,
 	)
-	return err
+	var ans int
+	if err := row.Scan(&ans); err != nil {
+		return fmt.Errorf("failed to determine corpus_tagset existence: %w", err)
+	}
+	if ans > 0 {
+		return nil
+	}
+	if _, err := transact.Exec(
+		"INSERT INTO corpus_tagset (corpus_name, tagset_name, feat_attr) VALUES (?, ?, ?)",
+		corpus, tagsetName, tagAttr,
+	); err != nil {
+		log.Debug().
+			Str("sql",
+				fmt.Sprintf(
+					"INSERT INTO corpus_tagset (corpus_name, tagset_name, feat_attr) VALUES ('%s', '%s', '%s')",
+					corpus, tagsetName, tagAttr),
+			).
+			Err(err).
+			Msg("failed query")
+		return fmt.Errorf("failed to insert corpus_tagset entry: %w", err)
+	}
+	return nil
+}
+
+func (c *CNCMySQLHandler) ifMissingAddTagPosattr(
+	transact *sql.Tx,
+	corpus, tagAttr string,
+) error {
+	row := transact.QueryRow(
+		"SELECT COUNT(*) FROM corpus_posattr WHERE corpus_name = ? AND name = ?",
+		corpus, tagAttr,
+	)
+	var ans int
+	if err := row.Scan(&ans); err != nil {
+		return fmt.Errorf("failed to determine tag attribute existence: %w", err)
+	}
+	if ans > 0 {
+		return nil
+	}
+	if _, err := transact.Exec(
+		"INSERT INTO corpus_posattr (corpus_name, name, position) VALUES (?, ?, 0)",
+		corpus, tagAttr,
+	); err != nil {
+		return fmt.Errorf("failed to insert tagAttr: %w", err)
+	}
+	return nil
+}
+
+func (c *CNCMySQLHandler) IfMissingAddCorpusMetadata(
+	transact *sql.Tx,
+	corpus, bibIDStruct, bibIDAttr, tagAttr string,
+	tagsetName common.SupportedTagset,
+) error {
+	row := transact.QueryRow(
+		"SELECT COUNT(*) FROM corpus_structure WHERE corpus_name = ? AND name = ?",
+		corpus, bibIDStruct,
+	)
+	var ans int
+	if err := row.Scan(&ans); err != nil {
+		return fmt.Errorf("failed to determine bibIdStruct existence: %w", err)
+	}
+	if ans > 0 {
+		if err := c.ifMissingAddBibStructattr(transact, corpus, bibIDStruct, bibIDAttr); err != nil {
+			return err
+		}
+		return nil
+	}
+	_, err := transact.Exec(
+		"INSERT INTO corpus_structure (corpus_name, name) VALUES (?, ?)", corpus, bibIDStruct)
+	if err != nil {
+		return fmt.Errorf("failed to insert corpus_structure: %w", err)
+	}
+	if err := c.ifMissingAddBibStructattr(transact, corpus, bibIDStruct, bibIDAttr); err != nil {
+		return err
+	}
+	if err := c.ifMissingAddCorpusTagset(transact, corpus, tagAttr, tagsetName); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (c *CNCMySQLHandler) SetLiveAttrs(
 	transact *sql.Tx,
-	corpus, bibIDStruct, bibIDAttr string,
+	corpus, bibIDStruct, bibIDAttr, tagAttr string,
+	tagsetName common.SupportedTagset,
 ) error {
 	if bibIDAttr != "" && bibIDStruct == "" || bibIDAttr == "" && bibIDStruct != "" {
 		return fmt.Errorf("SetLiveAttrs requires either both bibIDStruct, bibIDAttr empty or defined")
 	}
+	if err := c.IfMissingAddCorpusMetadata(
+		transact, corpus, bibIDStruct, bibIDAttr, tagAttr, tagsetName); err != nil {
+		return err
+	}
+
 	var err error
 	if bibIDAttr != "" {
 		_, err = transact.Exec(
@@ -97,28 +198,6 @@ func (c *CNCMySQLHandler) UnsetLiveAttrs(transact *sql.Tx, corpus string) error 
 			 WHERE name = ?`, c.corporaTableName),
 		corpus,
 	)
-	return err
-}
-
-func (c *CNCMySQLHandler) UpdateDescription(transact *sql.Tx, corpus, descCs, descEn string) error {
-	var err error
-	if descCs != "" {
-		_, err = transact.Exec(
-			fmt.Sprintf("UPDATE %s SET description_cs = ? WHERE name = ?", c.corporaTableName),
-			descCs,
-			corpus,
-		)
-	}
-	if err != nil {
-		return err
-	}
-	if descEn != "" {
-		_, err = transact.Exec(
-			fmt.Sprintf("UPDATE %s SET description_en = ? WHERE name = ?", c.corporaTableName),
-			descEn,
-			corpus,
-		)
-	}
 	return err
 }
 
@@ -171,27 +250,6 @@ func (c *CNCMySQLHandler) LoadInfo(corpusID string) (*corpus.DBInfo, error) {
 
 }
 
-func (c *CNCMySQLHandler) GetSimpleQueryDefaultAttrs(corpusID string) ([]string, error) {
-	rows, err := c.conn.Query(
-		"SELECT pos_attr FROM kontext_simple_query_default_attrs WHERE corpus_name = ?",
-		corpusID,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	var attr string
-	attrs := make([]string, 0)
-	for rows.Next() {
-		err := rows.Scan(&attr)
-		if err != nil {
-			return nil, err
-		}
-		attrs = append(attrs, attr)
-	}
-	return attrs, nil
-}
-
 func (c *CNCMySQLHandler) GetCorpusTagsets(corpusID string) ([]common.SupportedTagset, error) {
 	rows, err := c.conn.Query(
 		"SELECT tagset_name FROM corpus_tagset WHERE corpus_name = ?",
@@ -210,27 +268,6 @@ func (c *CNCMySQLHandler) GetCorpusTagsets(corpusID string) ([]common.SupportedT
 		ans = append(ans, common.SupportedTagset(val))
 	}
 	return ans, nil
-}
-
-func (c *CNCMySQLHandler) GetCorpusTagsetAttrs(corpusID string) ([]string, error) {
-	rows, err := c.conn.Query(
-		"SELECT pos_attr FROM corpus_tagset WHERE corpus_name = ? and pos_attr IS NOT NULL",
-		corpusID,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get corpus tagset attrs: %w", err)
-	}
-
-	var attr string
-	attrs := make([]string, 0)
-	for rows.Next() {
-		err := rows.Scan(&attr)
-		if err != nil {
-			return nil, err
-		}
-		attrs = append(attrs, attr)
-	}
-	return attrs, nil
 }
 
 func (c *CNCMySQLHandler) StartTx() (*sql.Tx, error) {

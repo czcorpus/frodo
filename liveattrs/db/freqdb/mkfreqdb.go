@@ -512,10 +512,9 @@ func (nfg *NgramFreqGenerator) generateSync(
 	nfg.run(ctx, statusChan)
 }
 
-func (nfg *NgramFreqGenerator) Generate() (NgramJobInfo, error) {
-	return nfg.GenerateAfter("")
-}
-
+// GenerateAfter creates a new job to generate ngrams. In case
+// parentJobID is not empty, the new job will start after the parent
+// finishes.
 func (nfg *NgramFreqGenerator) GenerateAfter(parentJobID string) (NgramJobInfo, error) {
 	jobID, err := uuid.NewUUID()
 	if err != nil {
