@@ -21,7 +21,6 @@ import (
 	"errors"
 	"fmt"
 	"frodo/corpus"
-	"frodo/general/collections"
 	"frodo/liveattrs"
 	"frodo/liveattrs/utils"
 	"os"
@@ -30,6 +29,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 
+	"github.com/czcorpus/cnc-gokit/collections"
 	"github.com/czcorpus/cnc-gokit/fs"
 	vteconf "github.com/czcorpus/vert-tagextract/v3/cnf"
 	vtedb "github.com/czcorpus/vert-tagextract/v3/db"

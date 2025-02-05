@@ -19,7 +19,6 @@ package actions
 import (
 	"fmt"
 	"frodo/corpus"
-	"frodo/general/collections"
 	"frodo/liveattrs/db/qbuilder/laquery"
 	"frodo/liveattrs/laconf"
 	"frodo/liveattrs/request/query"
@@ -27,6 +26,7 @@ import (
 	"frodo/liveattrs/utils"
 	"reflect"
 
+	"github.com/czcorpus/cnc-gokit/collections"
 	"github.com/rs/zerolog/log"
 )
 

@@ -19,9 +19,10 @@ package response
 import (
 	"encoding/json"
 	"fmt"
-	"frodo/general/collections"
 	"sort"
 	"strings"
+
+	"github.com/czcorpus/cnc-gokit/collections"
 )
 
 type ListedValue struct {
@@ -108,13 +109,6 @@ func (qa *QueryAns) CutoffValues(cutoff int) {
 	if cutoffApplied {
 		qa.AppliedCutoff += cutoff
 	}
-}
-
-func exportKey(k string) string {
-	if k == "corpus_id" {
-		return k
-	}
-	return strings.Replace(k, "_", ".", 1)
 }
 
 func ExportAttrValues(

@@ -37,9 +37,7 @@ import (
 	"frodo/liveattrs/request/query"
 	"frodo/liveattrs/request/response"
 	"net/http"
-	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -66,23 +64,6 @@ var (
 
 type CreateLiveAttrsReqBody struct {
 	Files []string `json:"files"`
-}
-
-func loadConf(basePath, corpname string) (*vteCnf.VTEConf, error) {
-	return vteCnf.LoadConf(filepath.Join(basePath, fmt.Sprintf("%s.json", corpname)))
-}
-
-func arrayShowShortened(data []string) string {
-	if len(data) <= 5 {
-		return strings.Join(data, ", ")
-	}
-	ans := make([]string, 5)
-	ans[0] = data[0]
-	ans[1] = data[1]
-	ans[2] = "..."
-	ans[3] = data[2]
-	ans[4] = data[3]
-	return strings.Join(ans, ", ")
 }
 
 // --------------
@@ -124,10 +105,6 @@ type Actions struct {
 	usageData chan<- db.RequestData
 
 	vteJobCancel map[string]context.CancelFunc
-}
-
-func (a *Actions) OnExit() {
-	close(a.usageData)
 }
 
 // applyPatchArgs based on configuration stored in `jsonArgs`

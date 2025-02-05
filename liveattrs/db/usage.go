@@ -41,28 +41,6 @@ type RequestData struct {
 	ProcTime time.Duration
 }
 
-func (rd RequestData) toLogJSON() []byte {
-	ans, err := json.Marshal(struct {
-		Created        string   `json:"time"`
-		Corpus         string   `json:"corpus"`
-		AlignedCorpora []string `json:"alignedCorpora,omitempty"`
-		IsAutocomplete bool     `json:"isAutocomplete"`
-		IsCached       bool     `json:"isCached"`
-		ProcTimeSecs   float64  `json:"procTimeSecs"`
-	}{
-		Created:        rd.Created.Format(time.RFC3339),
-		Corpus:         rd.CorpusID,
-		AlignedCorpora: rd.Payload.Aligned,
-		IsAutocomplete: rd.Payload.AutocompleteAttr != "",
-		IsCached:       rd.IsCached,
-		ProcTimeSecs:   rd.ProcTime.Seconds(),
-	})
-	if err != nil {
-		log.Error().Err(err).Msg("failed to marshal query log")
-	}
-	return ans
-}
-
 func (rd RequestData) toZeroLog(evt *zerolog.Event) {
 	evt.
 		Bool("isQuery", true).

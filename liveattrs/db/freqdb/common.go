@@ -97,14 +97,6 @@ type ngRecord struct {
 	simFreqsScore float64
 }
 
-func getLemmaTotal(rows []*ngRecord) int {
-	ans := 0
-	for _, v := range rows {
-		ans += v.abs
-	}
-	return ans
-}
-
 func isStopWord(w string) bool {
 	if w == "" {
 		return true
@@ -120,15 +112,4 @@ func isStopNgram(w string) bool {
 		}
 	}
 	return false
-}
-
-func startsWithUpcase(w string) int {
-	if upcaseRegex.MatchString(w) {
-		return 1
-	}
-	return 0
-}
-
-func streamAvg(currAvg float64, currCount int, newValue float64) float64 {
-	return (float64(currCount)*currAvg + newValue) / (float64(currCount) + 1)
 }

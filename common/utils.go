@@ -61,11 +61,6 @@ func NewEmptyMaybe[T int | string | bool]() Maybe[T] {
 
 // ----
 
-func MapContains[K int | string, V any](m map[K]V, key K) bool {
-	_, ok := m[key]
-	return ok
-}
-
 func SumOfMapped[T any](v []T, mapFn func(item T) float64) float64 {
 	var ans float64
 	for _, item := range v {
@@ -88,14 +83,6 @@ func MapSlice[T any, U any](items []T, mapFn func(T, int) U) []U {
 	ans := make([]U, len(items))
 	for i, v := range items {
 		ans[i] = mapFn(v, i)
-	}
-	return ans
-}
-
-func MapSliceToAny[T any](items []T) []any {
-	ans := make([]any, len(items))
-	for i, v := range items {
-		ans[i] = v
 	}
 	return ans
 }

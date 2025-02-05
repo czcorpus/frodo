@@ -23,7 +23,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"frodo/common"
-	"frodo/general/collections"
 	"frodo/liveattrs/utils"
 	"io"
 	"math"
@@ -34,6 +33,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/czcorpus/cnc-gokit/collections"
 	"github.com/rs/zerolog/log"
 )
 
