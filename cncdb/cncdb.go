@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/go-sql-driver/mysql"
+	"github.com/rs/zerolog/log"
 )
 
 type DefaultViewOpts struct {
@@ -60,13 +61,136 @@ func (c *CNCMySQLHandler) UpdateDefaultViewOpts(transact *sql.Tx, corpus string,
 	return err
 }
 
-func (c *CNCMySQLHandler) SetLiveAttrs(
+func (c *CNCMySQLHandler) ifMissingAddBibStructattr(
 	transact *sql.Tx,
 	corpus, bibIDStruct, bibIDAttr string,
+) error {
+	row := transact.QueryRow(
+		"SELECT COUNT(*) FROM corpus_structattr WHERE corpus_name = ? AND structure_name = ? AND name = ?",
+		corpus, bibIDStruct, bibIDAttr,
+	)
+	var ans int
+	if err := row.Scan(&ans); err != nil {
+		return fmt.Errorf("failed to determine bibIdAttr existence: %w", err)
+	}
+	if ans > 0 {
+		return nil
+	}
+	if _, err := transact.Exec(
+		"INSERT INTO corpus_structattr (corpus_name, structure_name, name) VALUES (?, ?, ?)",
+		corpus, bibIDStruct, bibIDAttr,
+	); err != nil {
+		return fmt.Errorf("failed to insert corpus_structattr: %w", err)
+	}
+	return nil
+}
+
+func (c *CNCMySQLHandler) ifMissingAddCorpusTagset(
+	transact *sql.Tx,
+	corpus, tagAttr string,
+	tagsetName common.SupportedTagset,
+) error {
+	if err := c.ifMissingAddTagPosattr(transact, corpus, tagAttr); err != nil {
+		return err
+	}
+	row := transact.QueryRow(
+		"SELECT COUNT(*) FROM corpus_tagset WHERE corpus_name = ? AND tagset_name = ?",
+		corpus, tagsetName,
+	)
+	var ans int
+	if err := row.Scan(&ans); err != nil {
+		return fmt.Errorf("failed to determine corpus_tagset existence: %w", err)
+	}
+	if ans > 0 {
+		return nil
+	}
+	if _, err := transact.Exec(
+		"INSERT INTO corpus_tagset (corpus_name, tagset_name, feat_attr) VALUES (?, ?, ?)",
+		corpus, tagsetName, tagAttr,
+	); err != nil {
+		log.Debug().
+			Str("sql",
+				fmt.Sprintf(
+					"INSERT INTO corpus_tagset (corpus_name, tagset_name, feat_attr) VALUES ('%s', '%s', '%s')",
+					corpus, tagsetName, tagAttr),
+			).
+			Err(err).
+			Msg("failed query")
+		return fmt.Errorf("failed to insert corpus_tagset entry: %w", err)
+	}
+	return nil
+}
+
+func (c *CNCMySQLHandler) ifMissingAddTagPosattr(
+	transact *sql.Tx,
+	corpus, tagAttr string,
+) error {
+	row := transact.QueryRow(
+		"SELECT COUNT(*) FROM corpus_posattr WHERE corpus_name = ? AND name = ?",
+		corpus, tagAttr,
+	)
+	var ans int
+	if err := row.Scan(&ans); err != nil {
+		return fmt.Errorf("failed to determine tag attribute existence: %w", err)
+	}
+	if ans > 0 {
+		return nil
+	}
+	if _, err := transact.Exec(
+		"INSERT INTO corpus_posattr (corpus_name, name, position) VALUES (?, ?, 0)",
+		corpus, tagAttr,
+	); err != nil {
+		return fmt.Errorf("failed to insert tagAttr: %w", err)
+	}
+	return nil
+}
+
+func (c *CNCMySQLHandler) IfMissingAddCorpusMetadata(
+	transact *sql.Tx,
+	corpus, bibIDStruct, bibIDAttr, tagAttr string,
+	tagsetName common.SupportedTagset,
+) error {
+	row := transact.QueryRow(
+		"SELECT COUNT(*) FROM corpus_structure WHERE corpus_name = ? AND name = ?",
+		corpus, bibIDStruct,
+	)
+	var ans int
+	if err := row.Scan(&ans); err != nil {
+		return fmt.Errorf("failed to determine bibIdStruct existence: %w", err)
+	}
+	if ans > 0 {
+		if err := c.ifMissingAddBibStructattr(transact, corpus, bibIDStruct, bibIDAttr); err != nil {
+			return err
+		}
+		return nil
+	}
+	_, err := transact.Exec(
+		"INSERT INTO corpus_structure (corpus_name, name) VALUES (?, ?)", corpus, bibIDStruct)
+	if err != nil {
+		return fmt.Errorf("failed to insert corpus_structure: %w", err)
+	}
+	if err := c.ifMissingAddBibStructattr(transact, corpus, bibIDStruct, bibIDAttr); err != nil {
+		return err
+	}
+	if err := c.ifMissingAddCorpusTagset(transact, corpus, tagAttr, tagsetName); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *CNCMySQLHandler) SetLiveAttrs(
+	transact *sql.Tx,
+	corpus, bibIDStruct, bibIDAttr, tagAttr string,
+	tagsetName common.SupportedTagset,
 ) error {
 	if bibIDAttr != "" && bibIDStruct == "" || bibIDAttr == "" && bibIDStruct != "" {
 		return fmt.Errorf("SetLiveAttrs requires either both bibIDStruct, bibIDAttr empty or defined")
 	}
+	if err := c.IfMissingAddCorpusMetadata(
+		transact, corpus, bibIDStruct, bibIDAttr, tagAttr, tagsetName); err != nil {
+		return err
+	}
+
 	var err error
 	if bibIDAttr != "" {
 		_, err = transact.Exec(

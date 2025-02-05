@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"frodo/cncdb"
+	"frodo/common"
 	"frodo/corpus"
 	"frodo/db/mysql"
 	"frodo/general"
@@ -264,32 +265,41 @@ func (a *Actions) generateData(initialStatus *liveattrs.LiveAttrsJobInfo) {
 			}
 
 			a.eqCache.Del(jobStatus.CorpusID)
-			switch jobStatus.Args.VteConf.DB.Type {
-			case "mysql":
-				if !jobStatus.Args.NoCorpusUpdate {
-					transact, err := a.cncDB.StartTx()
-					if err != nil {
-						updateJobChan <- jobStatus.WithError(err)
-						return
-					}
-					var bibIDStruct, bibIDAttr string
-					if jobStatus.Args.VteConf.BibView.IDAttr != "" {
-						bibIDStruct, bibIDAttr = jobStatus.Args.VteConf.BibView.IDAttrElements()
-					}
-					err = a.cncDB.SetLiveAttrs(
-						transact, jobStatus.CorpusID, bibIDStruct, bibIDAttr)
-					if err != nil {
-						updateJobChan <- jobStatus.WithError(err)
-						transact.Rollback()
-					}
-					err = kontext.SendSoftReset(a.conf.KonText)
-					if err != nil {
-						updateJobChan <- jobStatus.WithError(err)
-					}
-					err = transact.Commit()
-					if err != nil {
-						updateJobChan <- jobStatus.WithError(err)
-					}
+			if jobStatus.Args.VteConf.DB.Type != "mysql" {
+				updateJobChan <- jobStatus.WithError(fmt.Errorf("only mysql liveattrs backend is supported in Frodo"))
+				return
+			}
+			if !jobStatus.Args.NoCorpusUpdate {
+				transact, err := a.cncDB.StartTx()
+				if err != nil {
+					updateJobChan <- jobStatus.WithError(err)
+					return
+				}
+				var bibIDStruct, bibIDAttr string
+				if jobStatus.Args.VteConf.BibView.IDAttr != "" {
+					bibIDStruct, bibIDAttr = jobStatus.Args.VteConf.BibView.IDAttrElements()
+				}
+				err = a.cncDB.SetLiveAttrs(
+					transact,
+					jobStatus.CorpusID,
+					bibIDStruct,
+					bibIDAttr,
+					"tag",                  // TODO !!! hardcoded 'tag' (even if it should work in 99.9% of cases)
+					common.TagsetCSCNC2020, // TODO !!! hardcoded tagset
+				)
+				if err != nil {
+					updateJobChan <- jobStatus.WithError(err)
+					transact.Rollback()
+					return
+				}
+				err = kontext.SendSoftReset(a.conf.KonText)
+				if err != nil {
+					updateJobChan <- jobStatus.WithError(err)
+					return
+				}
+				err = transact.Commit()
+				if err != nil {
+					updateJobChan <- jobStatus.WithError(err)
 				}
 			}
 			updateJobChan <- jobStatus.AsFinished()

@@ -36,20 +36,11 @@ import (
 )
 
 type reqArgs struct {
-	ColMapping *freqdb.QSAttributes `json:"colMapping,omitempty"`
-
-	// PosColIdx defines a vertical column number (starting from zero)
-	// where PoS can be extracted. In case no direct "pos" tag exists,
-	// a "tag" can be used along with a proper "transformFn" defined
-	// in the data extraction configuration ("vertColumns" section).
-	PosColIdx int                    `json:"posColIdx"` // TODO do we need this?
-	PosTagset common.SupportedTagset `json:"posTagset"`
+	ColMapping *freqdb.QSAttributes   `json:"colMapping,omitempty"`
+	PosTagset  common.SupportedTagset `json:"posTagset"`
 }
 
 func (args reqArgs) Validate() error {
-	if args.PosColIdx < 0 {
-		return errors.New("invalid value for posColIdx")
-	}
 	if err := args.PosTagset.Validate(); err != nil {
 		return fmt.Errorf("failed to validate tagset: %w", err)
 	}
@@ -155,7 +146,12 @@ func (a *Actions) GenerateNgrams(ctx *gin.Context) {
 		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 		return
 	}
-	posFn, err := common.ApplyPosProperties(&laConf.Ngrams, args.PosColIdx, tagset)
+	// the args.ColMapping.Tag arg below is likely OK,
+	// but in such case, do we need args.ColMapping.Tag?
+	// TODO !!! we probably do not need the ApplyPosProperties at all,
+	// because the transformation is performed earlier in the liveattrs part
+	// ([corpus]_colcounts table)
+	posFn, err := common.ApplyPosProperties(&laConf.Ngrams, args.ColMapping.Tag, tagset)
 	if err == common.ErrorPosNotDefined {
 		uniresp.RespondWithErrorJSON(ctx, err, http.StatusUnprocessableEntity)
 		return

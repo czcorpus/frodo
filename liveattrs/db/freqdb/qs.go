@@ -37,6 +37,10 @@ type QSAttributes struct {
 	Pos      int `json:"pos"`
 }
 
+func (qsa QSAttributes) String() string {
+	return fmt.Sprintf("%#v", qsa)
+}
+
 func colIdxToName(idx int) string {
 	return fmt.Sprintf("col%d", idx)
 }

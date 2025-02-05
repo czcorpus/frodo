@@ -37,8 +37,6 @@ import (
 
 	"frodo/cncdb"
 	"frodo/cnf"
-	"frodo/corpus"
-	"frodo/corpus/query"
 	"frodo/db/mysql"
 	"frodo/debug"
 	dictActions "frodo/dictionary/actions"
@@ -61,7 +59,6 @@ var (
 func init() {
 	gob.Register(&liveattrs.LiveAttrsJobInfo{})
 	gob.Register(&liveattrs.IdxUpdateJobInfo{})
-	gob.Register(&corpus.JobInfo{})
 }
 
 func main() {
@@ -150,11 +147,6 @@ func main() {
 	jobStopChannel := make(chan string)
 	jobActions := jobs.NewActions(conf.Jobs, conf.Language, ctx, jobStopChannel)
 
-	corpusActions := corpus.NewActions(conf.CorporaSetup, conf.Jobs, jobActions, cncDB)
-
-	concCache := query.NewCache(conf.CorporaSetup.ConcCacheDirPath, conf.GetLocation())
-	concCache.RestoreUnboundEntries()
-
 	laConfRegistry := laconf.NewLiveAttrsBuildConfProvider(
 		conf.LiveAttrs.ConfDirPath,
 		conf.LiveAttrs.DB,
@@ -188,12 +180,6 @@ func main() {
 			jobActions.ClearDetachedJob(tdj.ID)
 		case *liveattrs.IdxUpdateJobInfo:
 			err := liveattrsActions.RestartIdxUpdateJob(tdj)
-			if err != nil {
-				log.Error().Err(err).Msgf("Failed to restart job %s. The job will be removed.", tdj.ID)
-			}
-			jobActions.ClearDetachedJob(tdj.ID)
-		case *corpus.JobInfo:
-			err := corpusActions.RestartJob(tdj)
 			if err != nil {
 				log.Error().Err(err).Msgf("Failed to restart job %s. The job will be removed.", tdj.ID)
 			}
