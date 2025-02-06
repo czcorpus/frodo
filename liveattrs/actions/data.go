@@ -42,6 +42,18 @@ import (
 // request body:
 //
 //	The method expects laconf.PatchArgs JSON
+
+// Create godoc
+// @Summary      Generate liveattrs data for a specified corpus
+// @Accept  	 json
+// @Produce      json
+// @Param        corpusId path string true "An ID of a corpus for which to create the data"
+// @Param 		 patchArgs body laconf.PatchArgs true "The input todo struct"
+// @Param 		 reconfigure query int false "Ignore the stored liveattrs config (if any) and generate a new one based on corpus properties and provided PatchArgs. The resulting new config will be stored replacing the previous one." default(1)
+// @Param 		 append query int false "???"
+// @Param 		 noCorpusUpdate query int false "???"
+// @Success      200 {object} any
+// @Router       /liveAttributes/{corpusId}/data [post]
 func (a *Actions) Create(ctx *gin.Context) {
 	corpusID := ctx.Param("corpusId")
 	baseErrTpl := "failed to generate liveattrs for %s: %w"
@@ -127,7 +139,12 @@ func (a *Actions) Create(ctx *gin.Context) {
 	uniresp.WriteJSONResponseWithStatus(ctx.Writer, http.StatusCreated, status.FullInfo())
 }
 
-// Delete removes all the live attributes data for a corpus
+// Delete godoc
+// @Summary      Delete removes all the live attributes data for a corpus
+// @Produce      json
+// @Param        corpusId path string true "An ID of a corpus for which to delete the data"
+// @Success      200 {object} any
+// @Router       /liveAttributes/{corpusId}/data [delete]
 func (a *Actions) Delete(ctx *gin.Context) {
 	corpusID := ctx.Param("corpusId")
 	baseErrTpl := "failed to delete configuration for %s"
