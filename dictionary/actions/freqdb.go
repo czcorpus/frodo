@@ -48,7 +48,7 @@ func (a *Actions) CreateQuerySuggestions(ctx *gin.Context) {
 // @Produce      json
 // @Param        corpusId path string true "Used corpus"
 // @Param        term path string true "Search term"
-// @Success      200 {string} map[string]any
+// @Success      200 {object} map[string]any
 // @Router       /dictionary/{corpusId}/querySuggestions/{term} [get]
 // @Router       /dictionary/{corpusId}/search/{term} [get]
 func (a *Actions) GetQuerySuggestions(ctx *gin.Context) {
@@ -79,7 +79,7 @@ func (a *Actions) GetQuerySuggestions(ctx *gin.Context) {
 // @Param        pos query string false "Search part of speach"
 // @Param        rangeCoeff query float64 false "Search range coefficient" default(0.2) minimum(0) maximum(1)
 // @Param        maxkItems query int false "Maximum number of items" default(20)
-// @Success      200 {string} map[string]any
+// @Success      200 {object} map[string]any
 // @Router       /dictionary/{corpusId}/similarARFWords/{term} [get]
 func (a *Actions) SimilarARFWords(ctx *gin.Context) {
 	corpusID := ctx.Param("corpusId")
