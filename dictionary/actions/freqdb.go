@@ -34,7 +34,7 @@ const (
 // CreateQuerySuggestions godoc
 // @Summary      Create query suggestions for a specified corpus
 // @Produce      json
-// @Param        corpusId path string true "An ID of a corpus for which to create query suggestions"
+// @Param        corpusId path string true "Used corpus"
 // @Success      200 {string} string
 // @Router       /dictionary/{corpusId}/querySuggestions [post]
 func (a *Actions) CreateQuerySuggestions(ctx *gin.Context) {

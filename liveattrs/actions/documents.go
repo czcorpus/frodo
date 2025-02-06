@@ -39,7 +39,7 @@ var (
 // @Summary      Get bibliography for specified corpus
 // @Accept  	 json
 // @Produce      json
-// @Param        corpusId path string true "An ID of a corpus for which to make query"
+// @Param        corpusId path string true "Used corpus"
 // @Param 		 queryArgs body biblio.Payload true "Query arguments"
 // @Success      200 {object} map[string]string
 // @Router       /liveAttributes/{corpusId}/getBibliography [post]
@@ -79,7 +79,7 @@ func (a *Actions) GetBibliography(ctx *gin.Context) {
 // @Summary      Find bibliography titles in specified corpus
 // @Accept  	 json
 // @Produce      json
-// @Param        corpusId path string true "An ID of a corpus for which to make query"
+// @Param        corpusId path string true "Used corpus"
 // @Param 		 queryArgs body biblio.PayloadList true "Query arguments"
 // @Success      200 {object} map[string]string
 // @Router       /liveAttributes/{corpusId}/findBibTitles [post]
@@ -123,11 +123,11 @@ func isValidAttr(a string) bool {
 // @Summary      Download document list for specified corpus
 // @Accept       json
 // @Produce      json
-// @Param        corpusId path string true "An ID of a corpus for which download document list"
+// @Param        corpusId path string true "Used corpus"
 // @Param 		 queryArgs body query.Payload true "Query arguments"
 // @Param        attr query []string true "???"
-// @Param        page query int false "???" default(1)
-// @Param        pageSize query int false "???" default(0)
+// @Param        page query int false "Page" default(1)
+// @Param        pageSize query int false "Page size" default(0)
 // @Success      200 {object} []db.DocumentRow
 // @Router       /liveAttributes/{corpusId}/documentList [post]
 func (a *Actions) DocumentList(ctx *gin.Context) {
@@ -233,7 +233,7 @@ func (a *Actions) DocumentList(ctx *gin.Context) {
 // @Summary      Count number of matching documents for specified corpus
 // @Accept       json
 // @Produce      json
-// @Param        corpusId path string true "An ID of a corpus for which count documents"
+// @Param        corpusId path string true "Used corpus"
 // @Param 		 queryArgs body query.Payload true "Query arguments"
 // @Success      200 {int} int
 // @Router       /liveAttributes/{corpusId}/numMatchingDocuments [post]
