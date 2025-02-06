@@ -72,7 +72,7 @@ func (a *Actions) getNgramArgs(req *http.Request) (reqArgs, error) {
 // GenerateNgrams godoc
 // @Summary      Generate n-grams for a specified corpus
 // @Produce      json
-// @Param        corpusId path string true "An ID of a corpus for which download document list"
+// @Param        corpusId path string true "Used corpus"
 // @Param        append query int false "Append mode" default(0)
 // @Param        ngramSize query int false "N-gram size" default(1)
 // @Success      200 {object} any

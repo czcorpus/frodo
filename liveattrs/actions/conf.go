@@ -84,7 +84,7 @@ func (a *Actions) createConf(
 // @Summary      ViewConf shows actual liveattrs processing configuration
 // @Description  ViewConf shows actual liveattrs processing configuration. Note: passwords are replaced with multiple asterisk characters.
 // @Produce      json
-// @Param        corpusId path string true "An ID of a corpus for which to view the config"
+// @Param        corpusId path string true "Used corpus"
 // @Param 		 noCache query int false "Get uncached data" default(0)
 // @Success      200 {object} vteCnf.VTEConf
 // @Router       /liveAttributes/{corpusId}/conf [get]
@@ -114,7 +114,7 @@ func (a *Actions) ViewConf(ctx *gin.Context) {
 // @Description  In case user does not fill in the information regarding n-gram processing, no defaults are used. To attach n-gram information automatically, PatchConfig is used (with URL arg. auto-kontext-setup=1).
 // @Accept  	 json
 // @Produce      json
-// @Param        corpusId path string true "An ID of a corpus for which to create the config"
+// @Param        corpusId path string true "Used corpus"
 // @Param 		 patchArgs body laconf.PatchArgs true "Config data"
 // @Success      200 {object} vteCnf.VTEConf
 // @Router       /liveAttributes/{corpusId}/conf [put]
@@ -156,7 +156,7 @@ func (a *Actions) CreateConf(ctx *gin.Context) {
 // @Summary      FlushCache removes an actual cached liveattrs configuration for a specified corpus
 // @Description  FlushCache removes an actual cached liveattrs configuration for a specified corpus. This is mostly useful in cases where a manual editation of liveattrs config was done and we need Frodo to use the actual file version.
 // @Produce      json
-// @Param        corpusId path string true "An ID of a corpus for which to delete cached config"
+// @Param        corpusId path string true "Used corpus"
 // @Success      200 {object} any
 // @Router       /liveAttributes/{corpusId}/confCache [delete]
 func (a *Actions) FlushCache(ctx *gin.Context) {
@@ -173,7 +173,7 @@ func (a *Actions) FlushCache(ctx *gin.Context) {
 // @Description  It also allows a semi-automatic mode (using url query argument auto-kontext-setup=1) where the columns to be fetched from a corresponding vertical and other parameters with respect to a typical CNC setup used for its corpora.
 // @Accept  	 json
 // @Produce      json
-// @Param        corpusId path string true "An ID of a corpus for which to patch the config"
+// @Param        corpusId path string true "Used corpus"
 // @Param 		 patchArgs body laconf.PatchArgs true "Config data"
 // @Param 		 auto-kontext-setup query int false "Use semi-automatic mode" default(0)
 // @Success      200 {object} vteCnf.VTEConf
@@ -263,7 +263,7 @@ func (a *Actions) PatchConfig(ctx *gin.Context) {
 // @Summary      QSDefaults shows the default configuration for extracting n-grams
 // @Description  QSDefaults shows the default configuration for extracting n-grams for KonText query suggestion engine and KonText tag builder widget. This is mostly for overview purposes.
 // @Produce      json
-// @Param        corpusId path string true "An ID of a corpus for which to view the config"
+// @Param        corpusId path string true "Used corpus"
 // @Success      200 {object} vteCnf.NgramConf
 // @Router       /liveAttributes/{corpusId}/qsDefaults [get]
 func (a *Actions) QSDefaults(ctx *gin.Context) {

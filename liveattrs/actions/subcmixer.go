@@ -111,7 +111,7 @@ func importTaskArgs(args subcmixerArgs) ([]subcmixer.TaskArgs, error) {
 // @Summary      Mix subcorpus for specified corpus
 // @Accept  	 json
 // @Produce      json
-// @Param        corpusId path string true "An ID of a corpus for which to mix subcorpus"
+// @Param        corpusId path string true "Used corpus"
 // @Param 		 queryArgs body subcmixerArgs true "Query arguments"
 // @Success      200 {object} subcmixer.CorpusComposition
 // @Router       /liveAttributes/{corpusId}/mixSubcorpus [post]
