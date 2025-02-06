@@ -107,6 +107,14 @@ func importTaskArgs(args subcmixerArgs) ([]subcmixer.TaskArgs, error) {
 	return ret, nil
 }
 
+// MixSubcorpus godoc
+// @Summary      Mix subcorpus for specified corpus
+// @Accept  	 json
+// @Produce      json
+// @Param        corpusId path string true "An ID of a corpus for which to mix subcorpus"
+// @Param 		 queryArgs body subcmixerArgs true "Query arguments"
+// @Success      200 {object} subcmixer.CorpusComposition
+// @Router       /liveAttributes/{corpusId}/mixSubcorpus [post]
 func (a *Actions) MixSubcorpus(ctx *gin.Context) {
 	var args subcmixerArgs
 	err := json.NewDecoder(ctx.Request.Body).Decode(&args)

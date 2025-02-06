@@ -35,6 +35,14 @@ var (
 	attrValidRegex = regexp.MustCompile(`^[a-zA-Z0-9_\.]+$`)
 )
 
+// GetBibliography godoc
+// @Summary      Get bibliography for specified corpus
+// @Accept  	 json
+// @Produce      json
+// @Param        corpusId path string true "An ID of a corpus for which to make query"
+// @Param 		 queryArgs body biblio.Payload true "Query arguments"
+// @Success      200 {object} map[string]string
+// @Router       /liveAttributes/{corpusId}/getBibliography [post]
 func (a *Actions) GetBibliography(ctx *gin.Context) {
 	corpusID := ctx.Param("corpusId")
 	baseErrTpl := "failed to get bibliography from corpus %s: %w"
@@ -67,6 +75,14 @@ func (a *Actions) GetBibliography(ctx *gin.Context) {
 	uniresp.WriteJSONResponse(ctx.Writer, &ans)
 }
 
+// FindBibTitles godoc
+// @Summary      Find bibliography titles in specified corpus
+// @Accept  	 json
+// @Produce      json
+// @Param        corpusId path string true "An ID of a corpus for which to make query"
+// @Param 		 queryArgs body biblio.PayloadList true "Query arguments"
+// @Success      200 {object} map[string]string
+// @Router       /liveAttributes/{corpusId}/findBibTitles [post]
 func (a *Actions) FindBibTitles(ctx *gin.Context) {
 	corpusID := ctx.Param("corpusId")
 	baseErrTpl := "failed to find bibliography titles in corpus %s: %w"
@@ -103,6 +119,17 @@ func isValidAttr(a string) bool {
 	return attrValidRegex.MatchString(a)
 }
 
+// DocumentList godoc
+// @Summary      Download document list for specified corpus
+// @Accept       json
+// @Produce      json
+// @Param        corpusId path string true "An ID of a corpus for which download document list"
+// @Param 		 queryArgs body query.Payload true "Query arguments"
+// @Param        attr query []string true "???"
+// @Param        page query int false "???" default(1)
+// @Param        pageSize query int false "???" default(0)
+// @Success      200 {object} []db.DocumentRow
+// @Router       /liveAttributes/{corpusId}/documentList [post]
 func (a *Actions) DocumentList(ctx *gin.Context) {
 	corpusID := ctx.Param("corpusId")
 	baseErrTpl := "failed to download document list from %s: %w"
@@ -142,14 +169,12 @@ func (a *Actions) DocumentList(ctx *gin.Context) {
 	}
 	pageSize, err := strconv.Atoi(spageSize)
 	if err != nil {
-		if err != nil {
-			uniresp.WriteJSONErrorResponse(
-				ctx.Writer,
-				uniresp.NewActionError(baseErrTpl, corpusID, err),
-				http.StatusBadRequest,
-			)
-			return
-		}
+		uniresp.WriteJSONErrorResponse(
+			ctx.Writer,
+			uniresp.NewActionError(baseErrTpl, corpusID, err),
+			http.StatusBadRequest,
+		)
+		return
 	}
 	if pageSize == 0 && page != 1 || pageSize < 0 || page < 0 {
 		uniresp.WriteJSONErrorResponse(
@@ -204,6 +229,14 @@ func (a *Actions) DocumentList(ctx *gin.Context) {
 	uniresp.WriteJSONResponse(ctx.Writer, ans)
 }
 
+// NumMatchingDocuments godoc
+// @Summary      Count number of matching documents for specified corpus
+// @Accept       json
+// @Produce      json
+// @Param        corpusId path string true "An ID of a corpus for which count documents"
+// @Param 		 queryArgs body query.Payload true "Query arguments"
+// @Success      200 {int} int
+// @Router       /liveAttributes/{corpusId}/numMatchingDocuments [post]
 func (a *Actions) NumMatchingDocuments(ctx *gin.Context) {
 	corpusID := ctx.Param("corpusId")
 	baseErrTpl := "failed to count number of matching documents in %s: %w"
