@@ -356,7 +356,7 @@ func (a *Actions) Query(ctx *gin.Context) {
 // @Summary      Fill attributes for specified corpus
 // @Accept  	 json
 // @Produce      json
-// @Param        corpusId path string true "An ID of a corpus for which to make query"
+// @Param        corpusId path string true "Used corpus"
 // @Param 		 queryArgs body fillattrs.Payload true "Query arguments"
 // @Success      200 {object} map[string]map[string]string
 // @Router       /liveAttributes/{corpusId}/fillAttrs [post]
@@ -391,7 +391,7 @@ func (a *Actions) FillAttrs(ctx *gin.Context) {
 // @Summary      Get ad-hoc subcorpus size for specified corpus
 // @Accept  	 json
 // @Produce      json
-// @Param        corpusId path string true "An ID of a corpus for which to make query"
+// @Param        corpusId path string true "Used corpus"
 // @Param 		 queryArgs body equery.Payload true "Query arguments"
 // @Success      200 {object} response.GetSubcSize
 // @Router       /liveAttributes/{corpusId}/selectionSubcSize [post]
@@ -423,7 +423,7 @@ func (a *Actions) GetAdhocSubcSize(ctx *gin.Context) {
 // @Summary      Find autocomplete suggestions for specified corpus
 // @Accept  	 json
 // @Produce      json
-// @Param        corpusId path string true "An ID of a corpus for which to make query"
+// @Param        corpusId path string true "Used corpus"
 // @Param 		 queryArgs body query.Payload true "Query arguments"
 // @Success      200 {object} response.QueryAns
 // @Router       /liveAttributes/{corpusId}/attrValAutocomplete [post]
@@ -453,7 +453,7 @@ func (a *Actions) AttrValAutocomplete(ctx *gin.Context) {
 // Stats godoc
 // @Summary      Get stats for specified corpusS
 // @Produce      json
-// @Param        corpusId path string true "An ID of a corpus for which to get stats"
+// @Param        corpusId path string true "Used corpus"
 // @Success      200 {object} map[string]int
 // @Router       /liveAttributes/{corpusId}/stats [get]
 func (a *Actions) Stats(ctx *gin.Context) {
@@ -491,7 +491,7 @@ func (a *Actions) updateIndexesFromJobStatus(status *liveattrs.IdxUpdateJobInfo)
 // UpdateIndexes godoc
 // @Summary      Update indexes for specified corpus
 // @Produce      json
-// @Param        corpusId path string true "An ID of a corpus for which to update indexes"
+// @Param        corpusId path string true "Used corpus"
 // @Param        maxColumns query int true "???"
 // @Success      200 {object} liveattrs.IdxUpdateJobInfo
 // @Router       /liveAttributes/{corpusId}/updateIndexes [post]
@@ -548,7 +548,7 @@ func (a *Actions) RestartIdxUpdateJob(jinfo *liveattrs.IdxUpdateJobInfo) error {
 // InferredAtomStructure godoc
 // @Summary      Get inferred atom structure for specified corpus
 // @Produce      json
-// @Param        corpusId path string true "An ID of a corpus for which to get inferred atom structure"
+// @Param        corpusId path string true "Used corpus"
 // @Success      200 {object} map[string]any
 // @Router       /liveAttributes/{corpusId}/inferredAtomStructure [get]
 func (a *Actions) InferredAtomStructure(ctx *gin.Context) {
