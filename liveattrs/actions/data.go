@@ -45,6 +45,7 @@ import (
 
 // Create godoc
 // @Summary      Generate liveattrs data for a specified corpus
+// @Description  Generate liveattrs data for a specified corpus
 // @Accept  	 json
 // @Produce      json
 // @Param        corpusId path string true "An ID of a corpus for which to create the data"
@@ -141,6 +142,7 @@ func (a *Actions) Create(ctx *gin.Context) {
 
 // Delete godoc
 // @Summary      Delete removes all the live attributes data for a corpus
+// @Description  Delete removes all the live attributes data for a corpus
 // @Produce      json
 // @Param        corpusId path string true "An ID of a corpus for which to delete the data"
 // @Success      200 {object} any

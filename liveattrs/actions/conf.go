@@ -80,8 +80,14 @@ func (a *Actions) createConf(
 	return conf, err
 }
 
-// ViewConf shows actual liveattrs processing configuration.
-// Note: passwords are replaced with multiple asterisk characters.
+// ViewConf		 godoc
+// @Summary      ViewConf shows actual liveattrs processing configuration
+// @Description  ViewConf shows actual liveattrs processing configuration. Note: passwords are replaced with multiple asterisk characters.
+// @Produce      json
+// @Param        corpusId path string true "An ID of a corpus for which to view the config"
+// @Param 		 noCache query int false "Get uncached data" default(0)
+// @Success      200 {object} vteCnf.VTEConf
+// @Router       /liveAttributes/{corpusId}/conf [get]
 func (a *Actions) ViewConf(ctx *gin.Context) {
 	corpusID := ctx.Param("corpusId")
 	baseErrTpl := "failed to get liveattrs conf for %s: %w"
@@ -103,11 +109,15 @@ func (a *Actions) ViewConf(ctx *gin.Context) {
 	uniresp.WriteJSONResponse(ctx.Writer, conf)
 }
 
-// CreateConf creates a new liveattrs processing configuration
-// for a specified corpus. In case user does not fill in the information
-// regarding n-gram processing, no defaults are used. To attach
-// n-gram information automatically, PatchConfig is used (with URL
-// arg. auto-kontext-setup=1).
+// CreateConf godoc
+// @Summary      CreateConf creates a new liveattrs processing configuration for a specified corpus
+// @Description  In case user does not fill in the information regarding n-gram processing, no defaults are used. To attach n-gram information automatically, PatchConfig is used (with URL arg. auto-kontext-setup=1).
+// @Accept  	 json
+// @Produce      json
+// @Param        corpusId path string true "An ID of a corpus for which to create the config"
+// @Param 		 patchArgs body laconf.PatchArgs true "Config data"
+// @Success      200 {object} vteCnf.VTEConf
+// @Router       /liveAttributes/{corpusId}/conf [put]
 func (a *Actions) CreateConf(ctx *gin.Context) {
 	corpusID := ctx.Param("corpusId")
 	baseErrTpl := "failed to create liveattrs config for %s: %w"
@@ -142,10 +152,13 @@ func (a *Actions) CreateConf(ctx *gin.Context) {
 	uniresp.WriteJSONResponse(ctx.Writer, &expConf)
 }
 
-// FlushCache removes an actual cached liveattrs configuration
-// for a specified corpus. This is mostly useful in cases where
-// a manual editation of liveattrs config was done and we need
-// Frodo to use the actual file version.
+// FlushCache godoc
+// @Summary      FlushCache removes an actual cached liveattrs configuration for a specified corpus
+// @Description  FlushCache removes an actual cached liveattrs configuration for a specified corpus. This is mostly useful in cases where a manual editation of liveattrs config was done and we need Frodo to use the actual file version.
+// @Produce      json
+// @Param        corpusId path string true "An ID of a corpus for which to delete cached config"
+// @Success      200 {object} any
+// @Router       /liveAttributes/{corpusId}/confCache [delete]
 func (a *Actions) FlushCache(ctx *gin.Context) {
 	ok := a.laConfCache.Uncache(ctx.Param("corpusId"))
 	if !ok {
@@ -155,12 +168,16 @@ func (a *Actions) FlushCache(ctx *gin.Context) {
 	uniresp.WriteJSONResponse(ctx.Writer, map[string]bool{"ok": true})
 }
 
-// PatchConfig allows for updating liveattrs processing
-// configuration (see laconf.PatchArgs).
-// It also allows a semi-automatic mode (using url query
-// argument auto-kontext-setup=1) where the columns to be
-// fetched from a corresponding vertical and other parameters
-// with respect to a typical CNC setup used for its corpora.
+// PatchConfig godoc
+// @Summary      PatchConfig allows for updating liveattrs processing configuration
+// @Description  It also allows a semi-automatic mode (using url query argument auto-kontext-setup=1) where the columns to be fetched from a corresponding vertical and other parameters with respect to a typical CNC setup used for its corpora.
+// @Accept  	 json
+// @Produce      json
+// @Param        corpusId path string true "An ID of a corpus for which to patch the config"
+// @Param 		 patchArgs body laconf.PatchArgs true "Config data"
+// @Param 		 auto-kontext-setup query int false "Use semi-automatic mode" default(0)
+// @Success      200 {object} vteCnf.VTEConf
+// @Router       /liveAttributes/{corpusId}/conf [patch]
 func (a *Actions) PatchConfig(ctx *gin.Context) {
 	corpusID := ctx.Param("corpusId")
 	conf, err := a.laConfCache.Get(corpusID)
@@ -242,10 +259,13 @@ func (a *Actions) PatchConfig(ctx *gin.Context) {
 	uniresp.WriteJSONResponse(ctx.Writer, &out)
 }
 
-// QSDefaults shows the default configuration for
-// extracting n-grams for KonText query suggestion
-// engine and KonText tag builder widget
-// This is mostly for overview purposes
+// QSDefaults godoc
+// @Summary      QSDefaults shows the default configuration for extracting n-grams
+// @Description  QSDefaults shows the default configuration for extracting n-grams for KonText query suggestion engine and KonText tag builder widget. This is mostly for overview purposes.
+// @Produce      json
+// @Param        corpusId path string true "An ID of a corpus for which to view the config"
+// @Success      200 {object} vteCnf.NgramConf
+// @Router       /liveAttributes/{corpusId}/qsDefaults [get]
 func (a *Actions) QSDefaults(ctx *gin.Context) {
 	corpusID := ctx.Param("corpusId")
 	regPath := filepath.Join(a.conf.Corp.RegistryDirPaths[0], corpusID)
