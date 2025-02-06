@@ -31,12 +31,26 @@ const (
 	defaultSimFreqMaxNumItems = 20
 )
 
+// CreateQuerySuggestions godoc
+// @Summary      Create query suggestions for a specified corpus
+// @Produce      json
+// @Param        corpusId path string true "An ID of a corpus for which to create query suggestions"
+// @Success      200 {string} string
+// @Router       /dictionary/{corpusId}/querySuggestions [post]
 func (a *Actions) CreateQuerySuggestions(ctx *gin.Context) {
 	corpusID := ctx.Param("corpusId")
 	// TODO
 	uniresp.WriteJSONResponse(ctx.Writer, corpusID)
 }
 
+// CreateQuerySuggestions godoc
+// @Summary      Get query suggestions for a specified corpus
+// @Produce      json
+// @Param        corpusId path string true "Used corpus"
+// @Param        term path string true "Search term"
+// @Success      200 {string} map[string]any
+// @Router       /dictionary/{corpusId}/querySuggestions/{term} [get]
+// @Router       /dictionary/{corpusId}/search/{term} [get]
 func (a *Actions) GetQuerySuggestions(ctx *gin.Context) {
 	corpusID := ctx.Param("corpusId")
 	term := ctx.Param("term")
@@ -57,6 +71,16 @@ func (a *Actions) GetQuerySuggestions(ctx *gin.Context) {
 	uniresp.WriteJSONResponse(ctx.Writer, ans)
 }
 
+// SimilarARFWords godoc
+// @Summary      Get similar arf words
+// @Produce      json
+// @Param        corpusId path string true "Used corpus"
+// @Param        term path string true "Search term"
+// @Param        pos query string false "Search part of speach"
+// @Param        rangeCoeff query float64 false "Search range coefficient" default(0.2) minimum(0) maximum(1)
+// @Param        maxkItems query int false "Maximum number of items" default(20)
+// @Success      200 {string} map[string]any
+// @Router       /dictionary/{corpusId}/similarARFWords/{term} [get]
 func (a *Actions) SimilarARFWords(ctx *gin.Context) {
 	corpusID := ctx.Param("corpusId")
 	word := ctx.Param("term")
