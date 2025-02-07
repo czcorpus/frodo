@@ -13,9 +13,16 @@ build:
 
 test-and-build:
 	go test ./...
+	swag init --parseDependency -g frodo.go
 	go build ${LDFLAGS} -o frodo
 
+swagger:
+	@echo "generating swagger docs"
+	@go install github.com/swaggo/swag/cmd/swag@latest
+	@swag init --parseDependency -g frodo.go
+
 clean:
+	@rm -rf docs/*
 	@rm frodo
 
 test:

@@ -14,8 +14,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate pigeon -o ./registry/parser/parser.go ./registry/parser/grammar.peg
-
 package main
 
 import (
@@ -35,11 +33,15 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
+
 	"frodo/cncdb"
 	"frodo/cnf"
 	"frodo/db/mysql"
 	"frodo/debug"
 	dictActions "frodo/dictionary/actions"
+	"frodo/docs"
 	"frodo/general"
 	"frodo/jobs"
 	"frodo/liveattrs"
@@ -61,6 +63,17 @@ func init() {
 	gob.Register(&liveattrs.IdxUpdateJobInfo{})
 }
 
+// @title           FRODO - Frequency Registry Of Dictionary Objects
+// @description     Frequency database of corpora metadata and word forms. It is mostly used along with CNC's other applications for fast overview data retrieval. In KonText, it's mainly the "liveattrs" function, in WaG, it works as a core word/ngram dictionary.
+
+// @license.name  Apache 2.0
+// @license.url   http://www.apache.org/licenses/LICENSE-2.0.html
+
+// @host      localhost
+// @BasePath  /
+
+// @externalDocs.description  OpenAPI
+// @externalDocs.url          https://swagger.io/resources/open-api/
 func main() {
 	version := general.VersionInfo{
 		Version:   version,
@@ -86,6 +99,9 @@ func main() {
 	logging.SetupLogging(conf.Logging)
 	log.Info().Msg("Starting FRODO")
 	cnf.ApplyDefaults(conf)
+
+	docs.SwaggerInfo.Version = version.Version
+	docs.SwaggerInfo.Host = fmt.Sprintf("%s:%d", conf.ListenAddress, conf.ListenPort)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	go func() {
@@ -191,7 +207,8 @@ func main() {
 
 	engine.GET(
 		"/", rootActions.RootAction)
-
+	engine.GET(
+		"/docs/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	engine.POST(
 		"/liveAttributes/:corpusId/data", liveattrsActions.Create)
 	engine.DELETE(
