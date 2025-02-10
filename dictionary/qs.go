@@ -205,6 +205,8 @@ type SearchOptions struct {
 	NgramSize        int
 }
 
+type SearchOption func(c *SearchOptions)
+
 func SearchWithSublemma(v string) SearchOption {
 	return func(c *SearchOptions) {
 		c.Sublemma = v
@@ -252,8 +254,6 @@ func SearchWithNgramSize(size int) SearchOption {
 		c.NgramSize = size
 	}
 }
-
-type SearchOption func(c *SearchOptions)
 
 func Search(
 	ctx context.Context,
