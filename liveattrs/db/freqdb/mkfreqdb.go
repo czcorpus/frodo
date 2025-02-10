@@ -33,6 +33,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/czcorpus/cnc-gokit/collections"
 	"github.com/czcorpus/vert-tagextract/v3/ptcount/modders"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
@@ -168,7 +169,15 @@ func (nfg *NgramFreqGenerator) procLineGroup(
 			words[i].word,
 			words[i].lemma,
 			words[i].sublemma,
-			nfg.posFn.Transform(words[i].tag),
+			strings.Join(
+				collections.SliceMap(
+					strings.Split(words[i].tag, " "),
+					func(v string, i int) string {
+						return nfg.posFn.Transform(v)
+					},
+				),
+				" ",
+			),
 			words[i].abs,
 			words[i].arf,
 			words[i].initialCap,
