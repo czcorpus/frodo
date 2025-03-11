@@ -75,6 +75,28 @@ func (a *Actions) SimilarARFWords(ctx *gin.Context) {
 		return
 	}
 
+	corpusInfo, err := a.cncDB.LoadInfo(corpusID)
+	if err != nil {
+		uniresp.RespondWithErrorJSON(
+			ctx,
+			fmt.Errorf("failed to get info about corpus %s: %w", corpusID, err),
+			http.StatusBadRequest,
+		)
+		return
+	}
+
+	if corpusInfo.Size <= 0 {
+		uniresp.RespondWithErrorJSON(
+			ctx,
+			fmt.Errorf(
+				"cannot calculate list of words, reported corpus size for %s is zero (invalid record in db?)",
+				corpusID,
+			),
+			http.StatusBadRequest,
+		)
+		return
+	}
+
 	termSrch, err := dictionary.Search(
 		ctx,
 		a.laDB,
@@ -96,6 +118,9 @@ func (a *Actions) SimilarARFWords(ctx *gin.Context) {
 			rangeCoeff,
 			maxNumItems,
 		)
+		for i := range items {
+			items[i].IPM = float64(items[i].Count) / float64(corpusInfo.Size)
+		}
 		if err != nil {
 			uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 			return

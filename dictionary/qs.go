@@ -90,6 +90,7 @@ type Lemma struct {
 	PoS          string     `json:"pos"`
 	IsPname      bool       `json:"is_pname"`
 	Count        int        `json:"count"`
+	IPM          float64    `json:"ipm"`
 	NgramSize    int        `json:"ngramSize"`
 	SimFreqScore float64    `json:"simFreqScore"`
 }
