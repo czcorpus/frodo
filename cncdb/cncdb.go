@@ -36,6 +36,7 @@ type CNCMySQLHandler struct {
 	conn             *sql.DB
 	corporaTableName string
 	pcTableName      string
+	corpusInfoCache  map[string]*corpus.DBInfo
 }
 
 func (c *CNCMySQLHandler) ifMissingAddBibStructattr(
@@ -202,10 +203,14 @@ func (c *CNCMySQLHandler) UnsetLiveAttrs(transact *sql.Tx, corpus string) error 
 }
 
 func (c *CNCMySQLHandler) LoadInfo(corpusID string) (*corpus.DBInfo, error) {
+	srch, ok := c.corpusInfoCache[corpusID]
+	if ok {
+		return srch, nil
+	}
 	var bibLabelStruct, bibLabelAttr, bibIDStruct, bibIDAttr sql.NullString
 	row := c.conn.QueryRow(
 		fmt.Sprintf(
-			"SELECT c.name, c.active, c.bib_label_struct, c.bib_label_attr, "+
+			"SELECT c.name, c.size, c.active, c.bib_label_struct, c.bib_label_attr, "+
 				" c.bib_id_struct, c.bib_id_attr, c.bib_group_duplicates, c.locale, "+
 				" p.name, rv.variant "+
 				"FROM %s AS c "+
@@ -220,6 +225,7 @@ func (c *CNCMySQLHandler) LoadInfo(corpusID string) (*corpus.DBInfo, error) {
 	var variant sql.NullString
 	err := row.Scan(
 		&ans.Name,
+		&ans.Size,
 		&ans.Active,
 		&bibLabelStruct,
 		&bibLabelAttr,
@@ -246,6 +252,7 @@ func (c *CNCMySQLHandler) LoadInfo(corpusID string) (*corpus.DBInfo, error) {
 		ans.ParallelCorpus = pcName.String
 	}
 	ans.HasLimitedVariant = variant.Valid
+	c.corpusInfoCache[corpusID] = &ans
 	return &ans, nil
 
 }
@@ -306,6 +313,9 @@ func NewCNCMySQLHandler(
 		return nil, err
 	}
 	return &CNCMySQLHandler{
-		conn: db, corporaTableName: corporaTableName, pcTableName: pcTableName,
+		conn:             db,
+		corporaTableName: corporaTableName,
+		pcTableName:      pcTableName,
+		corpusInfoCache:  make(map[string]*corpus.DBInfo),
 	}, nil
 }

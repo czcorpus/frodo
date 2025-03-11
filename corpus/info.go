@@ -28,6 +28,7 @@ import (
 
 type DBInfo struct {
 	Name              string
+	Size              int64
 	Active            int
 	Locale            string
 	HasLimitedVariant bool
