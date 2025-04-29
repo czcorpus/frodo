@@ -54,9 +54,19 @@ func (c *CNCMySQLHandler) ifMissingAddBibStructattr(
 	if ans > 0 {
 		return nil
 	}
+
+	row2 := transact.QueryRow(
+		"SELECT MAX(position) FROM corpus_structattr WHERE corpus_name = ?",
+		corpus,
+	)
+	var maxPos int
+	if err := row2.Scan(&maxPos); err != nil {
+		return fmt.Errorf("failed to determine max. position: %w", err)
+	}
+
 	if _, err := transact.Exec(
-		"INSERT INTO corpus_structattr (corpus_name, structure_name, name) VALUES (?, ?, ?)",
-		corpus, bibIDStruct, bibIDAttr,
+		"INSERT INTO corpus_structattr (corpus_name, structure_name, name, position) VALUES (?, ?, ?, ?)",
+		corpus, bibIDStruct, bibIDAttr, maxPos+1,
 	); err != nil {
 		return fmt.Errorf("failed to insert corpus_structattr: %w", err)
 	}
@@ -152,8 +162,18 @@ func (c *CNCMySQLHandler) IfMissingAddCorpusMetadata(
 		}
 		return nil
 	}
+
+	row2 := transact.QueryRow(
+		"SELECT MAX(position) FROM corpus_structure WHERE corpus_name = ?",
+		corpus,
+	)
+	var maxPos int
+	if err := row2.Scan(&maxPos); err != nil {
+		return fmt.Errorf("failed to determine max. position: %w", err)
+	}
+
 	_, err := transact.Exec(
-		"INSERT INTO corpus_structure (corpus_name, name) VALUES (?, ?)", corpus, bibIDStruct)
+		"INSERT INTO corpus_structure (corpus_name, name, position) VALUES (?, ?, ?)", corpus, bibIDStruct, maxPos+1)
 	if err != nil {
 		return fmt.Errorf("failed to insert corpus_structure: %w", err)
 	}
