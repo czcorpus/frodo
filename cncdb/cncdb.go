@@ -114,9 +114,19 @@ func (c *CNCMySQLHandler) ifMissingAddTagPosattr(
 	if ans > 0 {
 		return nil
 	}
+
+	row2 := transact.QueryRow(
+		"SELECT MAX(position) FROM corpus_posattr WHERE corpus_name = ?",
+		corpus,
+	)
+	var maxPos int
+	if err := row2.Scan(&maxPos); err != nil {
+		return fmt.Errorf("failed to determine max posattr position: %w", err)
+	}
+
 	if _, err := transact.Exec(
-		"INSERT INTO corpus_posattr (corpus_name, name, position) VALUES (?, ?, 0)",
-		corpus, tagAttr,
+		"INSERT INTO corpus_posattr (corpus_name, name, position) VALUES (?, ?, ?)",
+		corpus, tagAttr, maxPos+1,
 	); err != nil {
 		return fmt.Errorf("failed to insert tagAttr: %w", err)
 	}
