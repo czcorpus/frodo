@@ -21,8 +21,9 @@ import (
 )
 
 type Conf struct {
-	DB                   *vtedb.Conf `json:"db"`
-	ConfDirPath          string      `json:"confDirPath"`
-	VertMaxNumErrors     int         `json:"vertMaxNumErrors"`
-	VerticalFilesDirPath string      `json:"verticalFilesDirPath"`
+	DB                       *vtedb.Conf `json:"db"`
+	CustomNgramTablesDataDir string      `json:"customNgramTablesDataDir"`
+	ConfDirPath              string      `json:"confDirPath"`
+	VertMaxNumErrors         int         `json:"vertMaxNumErrors"`
+	VerticalFilesDirPath     string      `json:"verticalFilesDirPath"`
 }

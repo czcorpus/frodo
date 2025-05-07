@@ -189,6 +189,7 @@ func (a *Actions) GenerateNgrams(ctx *gin.Context) {
 		a.jobActions,
 		corpusDBInfo.GroupedName(),
 		corpusDBInfo.Name,
+		a.laCustomNgramDataDirPath,
 		appendMode,
 		ngramSize,
 		posFn,

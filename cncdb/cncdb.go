@@ -24,6 +24,7 @@ import (
 	"frodo/corpus"
 	"time"
 
+	"github.com/czcorpus/cnc-gokit/util"
 	"github.com/go-sql-driver/mysql"
 	"github.com/rs/zerolog/log"
 )
@@ -59,14 +60,14 @@ func (c *CNCMySQLHandler) ifMissingAddBibStructattr(
 		"SELECT MAX(position) FROM corpus_structattr WHERE corpus_name = ?",
 		corpus,
 	)
-	var maxPos int
+	var maxPos sql.NullInt64
 	if err := row2.Scan(&maxPos); err != nil {
 		return fmt.Errorf("failed to determine max. position: %w", err)
 	}
 
 	if _, err := transact.Exec(
 		"INSERT INTO corpus_structattr (corpus_name, structure_name, name, position) VALUES (?, ?, ?, ?)",
-		corpus, bibIDStruct, bibIDAttr, maxPos+1,
+		corpus, bibIDStruct, bibIDAttr, util.Ternary(maxPos.Valid, 0, maxPos.Int64)+1,
 	); err != nil {
 		return fmt.Errorf("failed to insert corpus_structattr: %w", err)
 	}
@@ -129,14 +130,14 @@ func (c *CNCMySQLHandler) ifMissingAddTagPosattr(
 		"SELECT MAX(position) FROM corpus_posattr WHERE corpus_name = ?",
 		corpus,
 	)
-	var maxPos int
+	var maxPos sql.NullInt64
 	if err := row2.Scan(&maxPos); err != nil {
 		return fmt.Errorf("failed to determine max posattr position: %w", err)
 	}
 
 	if _, err := transact.Exec(
 		"INSERT INTO corpus_posattr (corpus_name, name, position) VALUES (?, ?, ?)",
-		corpus, tagAttr, maxPos+1,
+		corpus, tagAttr, util.Ternary(maxPos.Valid, maxPos.Int64, 0)+1,
 	); err != nil {
 		return fmt.Errorf("failed to insert tagAttr: %w", err)
 	}
@@ -167,13 +168,15 @@ func (c *CNCMySQLHandler) IfMissingAddCorpusMetadata(
 		"SELECT MAX(position) FROM corpus_structure WHERE corpus_name = ?",
 		corpus,
 	)
-	var maxPos int
+	var maxPos sql.NullInt64
 	if err := row2.Scan(&maxPos); err != nil {
 		return fmt.Errorf("failed to determine max. position: %w", err)
 	}
 
 	_, err := transact.Exec(
-		"INSERT INTO corpus_structure (corpus_name, name, position) VALUES (?, ?, ?)", corpus, bibIDStruct, maxPos+1)
+		"INSERT INTO corpus_structure (corpus_name, name, position) VALUES (?, ?, ?)",
+		corpus, bibIDStruct, util.Ternary(maxPos.Valid, maxPos.Int64, 0)+1,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to insert corpus_structure: %w", err)
 	}

@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"github.com/czcorpus/cnc-gokit/collections"
+	"github.com/czcorpus/cnc-gokit/util"
 	"github.com/czcorpus/vert-tagextract/v3/ptcount/modders"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
@@ -48,14 +49,15 @@ const (
 )
 
 type NgramFreqGenerator struct {
-	db             *mysql.Adapter
-	groupedName    string
-	corpusName     string
-	appendExisting bool
-	ngramSize      int
-	posFn          *modders.StringTransformerChain
-	jobActions     *jobs.Actions
-	qsaAttrs       QSAttributes
+	db              *mysql.Adapter
+	customDBDataDir string
+	groupedName     string
+	corpusName      string
+	appendExisting  bool
+	ngramSize       int
+	posFn           *modders.StringTransformerChain
+	jobActions      *jobs.Actions
+	qsaAttrs        QSAttributes
 }
 
 func (nfg *NgramFreqGenerator) createTables(tx *sql.Tx) error {
@@ -67,21 +69,30 @@ func (nfg *NgramFreqGenerator) createTables(tx *sql.Tx) error {
 	if _, err := tx.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s_word", nfg.groupedName)); err != nil {
 		return fmt.Errorf(errMsgTpl, err)
 	}
-	if _, err := tx.Exec(fmt.Sprintf(
-		`CREATE TABLE %s_word (
-		id varchar(40),
-		value TEXT,
-		lemma TEXT,
-		sublemma TEXT,
-		pos VARCHAR(20),
-		count INTEGER,
-		ngram TINYINT NOT NULL,
-		arf FLOAT,
-		sim_freqs_score FLOAT NOT NULL DEFAULT 0,
-		initial_cap TINYINT NOT NULL DEFAULT 0,
-		PRIMARY KEY (id)
-		) COLLATE utf8mb4_bin`,
-		nfg.groupedName)); err != nil {
+	dataDirSQL := util.Ternary(
+		nfg.customDBDataDir != "",
+		fmt.Sprintf(" DATA DIRECTORY '%s'", nfg.customDBDataDir),
+		"",
+	)
+	if _, err := tx.Exec(
+		fmt.Sprintf(
+			`CREATE TABLE %s_word (
+			id varchar(40),
+			value TEXT,
+			lemma TEXT,
+			sublemma TEXT,
+			pos VARCHAR(20),
+			count INTEGER,
+			ngram TINYINT NOT NULL,
+			arf FLOAT,
+			sim_freqs_score FLOAT NOT NULL DEFAULT 0,
+			initial_cap TINYINT NOT NULL DEFAULT 0,
+			PRIMARY KEY (id)
+			) COLLATE utf8mb4_bin %s`,
+			nfg.groupedName,
+			dataDirSQL,
+		),
+	); err != nil {
 		return fmt.Errorf(errMsgTpl, err)
 	}
 	if _, err := tx.Exec(fmt.Sprintf(
@@ -91,8 +102,8 @@ func (nfg *NgramFreqGenerator) createTables(tx *sql.Tx) error {
 			value TEXT,
 			PRIMARY KEY (id),
 			FOREIGN KEY (word_id) REFERENCES %s_word(id)
-		) COLLATE utf8mb4_bin`,
-		nfg.groupedName, nfg.groupedName)); err != nil {
+		) COLLATE utf8mb4_bin %s`,
+		nfg.groupedName, nfg.groupedName, dataDirSQL)); err != nil {
 		return fmt.Errorf(errMsgTpl, err)
 	}
 
@@ -614,19 +625,21 @@ func NewNgramFreqGenerator(
 	jobActions *jobs.Actions,
 	groupedName string,
 	corpusName string,
+	customDBDataDir string,
 	appendExisting bool,
 	ngramSize int,
 	posFn *modders.StringTransformerChain,
 	qsaAttrs QSAttributes,
 ) *NgramFreqGenerator {
 	return &NgramFreqGenerator{
-		db:             db,
-		jobActions:     jobActions,
-		groupedName:    groupedName,
-		corpusName:     corpusName,
-		ngramSize:      ngramSize,
-		posFn:          posFn,
-		qsaAttrs:       qsaAttrs,
-		appendExisting: appendExisting,
+		db:              db,
+		jobActions:      jobActions,
+		groupedName:     groupedName,
+		corpusName:      corpusName,
+		customDBDataDir: customDBDataDir,
+		ngramSize:       ngramSize,
+		posFn:           posFn,
+		qsaAttrs:        qsaAttrs,
+		appendExisting:  appendExisting,
 	}
 }

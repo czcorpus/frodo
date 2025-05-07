@@ -3,7 +3,7 @@ module frodo
 go 1.23.1
 
 require (
-	github.com/czcorpus/cnc-gokit v0.11.3
+	github.com/czcorpus/cnc-gokit v0.13.0
 	github.com/czcorpus/rexplorer v0.0.8
 	github.com/czcorpus/vert-tagextract/v3 v3.1.1
 	github.com/davecgh/go-spew v1.1.1
