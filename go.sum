@@ -12,8 +12,8 @@ github.com/cloudwego/base64x v0.1.5/go.mod h1:0zlkT4Wn5C6NdauXdJRhSKRlJvmclQ1hhJ
 github.com/cloudwego/iasm v0.2.0/go.mod h1:8rXZaNYT2n95jn+zTI1sDr+IgcD2GVs0nlbbQPiEFhY=
 github.com/coreos/go-systemd/v22 v22.5.0/go.mod h1:Y58oyj3AT4RCenI/lSvhwexgC+NSVTIJ3seZv2GcEnc=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
-github.com/czcorpus/cnc-gokit v0.11.3 h1:gV3OTUXtDqHEJ4v5rhhHNKeY3Wz5MFqs1/mT+UdvLY0=
-github.com/czcorpus/cnc-gokit v0.11.3/go.mod h1:BZSRrYUFIHXVIiuqnSoZbfXfL2X/gHWG3w35aIVW36U=
+github.com/czcorpus/cnc-gokit v0.13.0 h1:1WmKVDibQvSJciPJuMUjlZCcIBP279+sOMvw8bzBb/U=
+github.com/czcorpus/cnc-gokit v0.13.0/go.mod h1:BZSRrYUFIHXVIiuqnSoZbfXfL2X/gHWG3w35aIVW36U=
 github.com/czcorpus/rexplorer v0.0.8 h1:rxBivMmo10xGlCDaxzH9IeD23YzS8QM5cyTXiEFPllE=
 github.com/czcorpus/rexplorer v0.0.8/go.mod h1:9KwJWUp9tqn5gDjN3sS2jcsaaMWsfi3qPaqN5s9DY9Y=
 github.com/czcorpus/vert-tagextract/v3 v3.1.1 h1:kAFmLf35CsLYMCLvESlgVjGjf51X6TVTZRrRvS0CMqw=

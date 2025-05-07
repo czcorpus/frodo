@@ -247,6 +247,7 @@ func main() {
 		jobActions,
 		cncDB,
 		laDB,
+		conf.LiveAttrs.CustomNgramTablesDataDir,
 		laConfRegistry,
 		version,
 	)

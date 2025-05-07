@@ -43,6 +43,8 @@ type Actions struct {
 	// laDB is a live-attributes-specific database where Frodo needs full privileges
 	laDB *mysql.Adapter
 
+	laCustomNgramDataDirPath string
+
 	// cncDB is CNC's main database
 	cncDB *cncdb.CNCMySQLHandler
 }
@@ -55,17 +57,19 @@ func NewActions(
 	jobActions *jobs.Actions,
 	cncDB *cncdb.CNCMySQLHandler,
 	laDB *mysql.Adapter,
+	laCustomNgramDataDirPath string,
 	laConfRegistry *laconf.LiveAttrsBuildConfProvider,
 	version general.VersionInfo,
 ) *Actions {
 	actions := &Actions{
-		ctx:            ctx,
-		corpConf:       corpConf,
-		jobActions:     jobActions,
-		jobStopChannel: jobStopChannel,
-		laConfCache:    laConfRegistry,
-		cncDB:          cncDB,
-		laDB:           laDB,
+		ctx:                      ctx,
+		corpConf:                 corpConf,
+		jobActions:               jobActions,
+		jobStopChannel:           jobStopChannel,
+		laConfCache:              laConfRegistry,
+		cncDB:                    cncDB,
+		laDB:                     laDB,
+		laCustomNgramDataDirPath: laCustomNgramDataDirPath,
 	}
 	return actions
 }
