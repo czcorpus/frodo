@@ -120,7 +120,7 @@ func (nfg *NgramFreqGenerator) createTables(tx *sql.Tx) error {
 		return fmt.Errorf(errMsgTpl, err)
 	}
 	if _, err := tx.Exec(fmt.Sprintf(
-		`create index %s_word_sim_freqs_score_idx on %s_word(sim_freqs_score)`,
+		`create index %s_word_sim_freqs_score_idx on %s_word(sim_freqs_score, ngram)`,
 		nfg.groupedName, nfg.groupedName,
 	)); err != nil {
 		return fmt.Errorf(errMsgTpl, err)
