@@ -140,7 +140,7 @@ func (nfg *NgramFreqGenerator) createTables(tx *sql.Tx) error {
 	}
 	if nfg.useTablePartitioning { // in this case, foreign keys are off as is the default index
 		if _, err := tx.Exec(fmt.Sprintf(
-			`create index %s_term_search_word_id_idx %s_term_search_word(word_id)`,
+			`create index %s_term_search_word_id_idx ON %s_term_search(word_id)`,
 			nfg.groupedName, nfg.groupedName,
 		)); err != nil {
 			return fmt.Errorf(errMsgTpl, err)
