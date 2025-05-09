@@ -54,7 +54,6 @@ func SimilarARFWords(
 	// SQL note: even if it is not optimal in regards to getting the closest N values,
 	// we need to provide forced ranges (lower_bound...lemma_freq and lemma_freq...upper_bound)
 	// where to search as otherwise the query runs for too long
-
 	rows, err := db.DB().QueryContext(
 		ctx,
 		fmt.Sprintf(
@@ -79,6 +78,7 @@ func SimilarARFWords(
 		lemma.SimFreqScore, upperScoreLim, halfl,
 		lowerScoreLim, lemma.SimFreqScore, halfl,
 	)
+
 	if err != nil {
 		return []Lemma{}, fmt.Errorf("failed to get similar freq. words: %w", err)
 	}
