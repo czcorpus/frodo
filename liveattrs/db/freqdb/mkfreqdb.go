@@ -49,15 +49,28 @@ const (
 )
 
 type NgramFreqGenerator struct {
-	db              *mysql.Adapter
-	customDBDataDir string
-	groupedName     string
-	corpusName      string
-	appendExisting  bool
-	ngramSize       int
-	posFn           *modders.StringTransformerChain
-	jobActions      *jobs.Actions
-	qsaAttrs        QSAttributes
+	db                   *mysql.Adapter
+	customDBDataDir      string
+	useTablePartitioning bool
+	groupedName          string
+	corpusName           string
+	appendExisting       bool
+	ngramSize            int
+	posFn                *modders.StringTransformerChain
+	jobActions           *jobs.Actions
+	qsaAttrs             QSAttributes
+}
+
+// updateTablesStats plays crucial role after table data insert. Experience shows,
+// that not running analyze may completely kill performance of word search.
+func (nfg *NgramFreqGenerator) updateTablesStats() error {
+	if _, err := nfg.db.DB().Exec(fmt.Sprintf("ANALYZE TABLE %s_term_search", nfg.groupedName)); err != nil {
+		return fmt.Errorf("failed to update stats for the %s_term_search: %w", nfg.groupedName, err)
+	}
+	if _, err := nfg.db.DB().Exec(fmt.Sprintf("ANALYZE TABLE %s_word", nfg.groupedName)); err != nil {
+		return fmt.Errorf("failed to update stats for the %s_word: %w", nfg.groupedName, err)
+	}
+	return nil
 }
 
 func (nfg *NgramFreqGenerator) createTables(tx *sql.Tx) error {
@@ -74,6 +87,16 @@ func (nfg *NgramFreqGenerator) createTables(tx *sql.Tx) error {
 		fmt.Sprintf(" DATA DIRECTORY '%s'", nfg.customDBDataDir),
 		"",
 	)
+	primaryKeySQL := util.Ternary(
+		nfg.useTablePartitioning,
+		"PRIMARY KEY (id)",
+		"PRIMARY KEY (id, ngram)",
+	)
+	partitioningSQL := util.Ternary(
+		nfg.useTablePartitioning,
+		"PARTITION BY KEY (ngram) PARTITIONS 2",
+		"",
+	)
 	if _, err := tx.Exec(
 		fmt.Sprintf(
 			`CREATE TABLE %s_word (
@@ -87,9 +110,11 @@ func (nfg *NgramFreqGenerator) createTables(tx *sql.Tx) error {
 			arf FLOAT,
 			sim_freqs_score FLOAT NOT NULL DEFAULT 0,
 			initial_cap TINYINT NOT NULL DEFAULT 0,
-			PRIMARY KEY (id)
-			) COLLATE utf8mb4_bin %s`,
+			%s
+			) COLLATE utf8mb4_bin %s %s`,
 			nfg.groupedName,
+			primaryKeySQL,
+			partitioningSQL,
 			dataDirSQL,
 		),
 	); err != nil {
@@ -113,6 +138,15 @@ func (nfg *NgramFreqGenerator) createTables(tx *sql.Tx) error {
 	)); err != nil {
 		return fmt.Errorf(errMsgTpl, err)
 	}
+	if nfg.useTablePartitioning { // in this case, foreign keys are off as is the default index
+		if _, err := tx.Exec(fmt.Sprintf(
+			`create index %s_term_search_word_id_idx %s_term_search_word(word_id)`,
+			nfg.groupedName, nfg.groupedName,
+		)); err != nil {
+			return fmt.Errorf(errMsgTpl, err)
+		}
+	}
+
 	if _, err := tx.Exec(fmt.Sprintf(
 		`CREATE index %s_word_pos_idx ON %s_word(pos)`,
 		nfg.groupedName, nfg.groupedName,
@@ -131,6 +165,7 @@ func (nfg *NgramFreqGenerator) createTables(tx *sql.Tx) error {
 	)); err != nil {
 		return fmt.Errorf(errMsgTpl, err)
 	}
+
 	return nil
 }
 
@@ -448,7 +483,7 @@ func (nfg *NgramFreqGenerator) run(
 	}
 
 	numChunks := int(math.Ceil(float64(len(ngrams)) / float64(procChunkSize)))
-	for i := 0; i < numChunks; i++ {
+	for i := range numChunks {
 		baseStatus := genNgramsStatus{
 			CorpusID:           nfg.corpusName,
 			ChunkID:            i,
@@ -530,6 +565,10 @@ func (nfg *NgramFreqGenerator) generateSync(
 		return
 	}
 	nfg.run(ctx, statusChan)
+
+	if err := nfg.updateTablesStats(); err != nil {
+		status.Error = err
+	}
 }
 
 // GenerateAfter creates a new job to generate ngrams. In case
@@ -626,20 +665,22 @@ func NewNgramFreqGenerator(
 	groupedName string,
 	corpusName string,
 	customDBDataDir string,
+	usePartitionedTable bool,
 	appendExisting bool,
 	ngramSize int,
 	posFn *modders.StringTransformerChain,
 	qsaAttrs QSAttributes,
 ) *NgramFreqGenerator {
 	return &NgramFreqGenerator{
-		db:              db,
-		jobActions:      jobActions,
-		groupedName:     groupedName,
-		corpusName:      corpusName,
-		customDBDataDir: customDBDataDir,
-		ngramSize:       ngramSize,
-		posFn:           posFn,
-		qsaAttrs:        qsaAttrs,
-		appendExisting:  appendExisting,
+		db:                   db,
+		jobActions:           jobActions,
+		groupedName:          groupedName,
+		corpusName:           corpusName,
+		customDBDataDir:      customDBDataDir,
+		useTablePartitioning: usePartitionedTable,
+		ngramSize:            ngramSize,
+		posFn:                posFn,
+		qsaAttrs:             qsaAttrs,
+		appendExisting:       appendExisting,
 	}
 }

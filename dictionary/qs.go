@@ -17,6 +17,7 @@
 package dictionary
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -206,6 +207,11 @@ type SearchOptions struct {
 	NgramSize        int
 }
 
+func (so SearchOptions) InferNgramSize() int {
+	v := cmp.Or(so.Lemma, so.Sublemma, so.Word)
+	return len(strings.Split(v, " "))
+}
+
 type SearchOption func(c *SearchOptions)
 
 func SearchWithSublemma(v string) SearchOption {
@@ -274,6 +280,14 @@ func Search(
 	for _, opt := range opts {
 		opt(&srchOpts)
 	}
+
+	ngramSize := srchOpts.InferNgramSize()
+	if ngramSize <= 0 {
+		return []Lemma{}, fmt.Errorf("failed to determine n-gram size in the query")
+	}
+	whereSQL = append(whereSQL, "w.ngram = ?")
+	whereArgs = append(whereArgs, ngramSize)
+
 	if srchOpts.Lemma != "" {
 		whereSQL = append(whereSQL, "w.lemma = ?")
 		whereArgs = append(whereArgs, srchOpts.Lemma)

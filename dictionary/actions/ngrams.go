@@ -36,8 +36,9 @@ import (
 )
 
 type reqArgs struct {
-	ColMapping *freqdb.QSAttributes   `json:"colMapping,omitempty"`
-	PosTagset  common.SupportedTagset `json:"posTagset"`
+	ColMapping          *freqdb.QSAttributes   `json:"colMapping,omitempty"`
+	PosTagset           common.SupportedTagset `json:"posTagset"`
+	UsePartitionedTable bool                   `json:"usePartitionedTable"`
 }
 
 func (args reqArgs) Validate() error {
@@ -190,6 +191,7 @@ func (a *Actions) GenerateNgrams(ctx *gin.Context) {
 		corpusDBInfo.GroupedName(),
 		corpusDBInfo.Name,
 		a.laCustomNgramDataDirPath,
+		args.UsePartitionedTable,
 		appendMode,
 		ngramSize,
 		posFn,
