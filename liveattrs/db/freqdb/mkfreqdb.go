@@ -331,9 +331,9 @@ func (nfg *NgramFreqGenerator) preloadCols(
 			&rec.initialCap,
 		)
 		if err != nil {
-			baseStatus.Error = fmt.Errorf("failed to process db row %d for the chunk: %w", rowNum, err)
-			statusCh <- baseStatus
-			return []*ngRecord{}
+			err = fmt.Errorf("failed to process db row %d for the chunk: %w", rowNum, err)
+			log.Warn().Err(err).Msg("failed to read colcounts record, skipping")
+			continue
 		}
 		if isStopNgram(rec.lemma) {
 			continue

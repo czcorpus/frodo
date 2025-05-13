@@ -61,6 +61,7 @@ func (a *Actions) SimilarARFWords(ctx *gin.Context) {
 	corpusID := ctx.Param("corpusId")
 	word := ctx.Param("term")
 	pos := ctx.Query("pos")
+	lemma := ctx.Query("lemma")
 	rangeCoeff, ok := unireq.GetURLFloatArgOrFail(ctx, "rangeCoeff", defaultSimFreqRangeCoeff)
 	if !ok {
 		return
@@ -101,7 +102,8 @@ func (a *Actions) SimilarARFWords(ctx *gin.Context) {
 		ctx,
 		a.laDB,
 		corpusID,
-		dictionary.SearchWithLemma(word),
+		dictionary.SearchWithWord(word),
+		dictionary.SearchWithLemma(lemma),
 		dictionary.SearchWithPoS(pos),
 		dictionary.SearchWithLimit(1),
 	)
