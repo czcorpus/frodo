@@ -5,7 +5,7 @@ go 1.23.1
 require (
 	github.com/czcorpus/cnc-gokit v0.13.0
 	github.com/czcorpus/rexplorer v0.0.8
-	github.com/czcorpus/vert-tagextract/v3 v3.1.1
+	github.com/czcorpus/vert-tagextract/v3 v3.1.3
 	github.com/davecgh/go-spew v1.1.1
 	github.com/gin-gonic/gin v1.10.0
 	github.com/go-sql-driver/mysql v1.8.1
