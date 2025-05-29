@@ -6,5 +6,7 @@ RUN apt-get update && apt-get install python3-dev python3-pip -y \
 WORKDIR /opt/frodo
 COPY . .
 
+RUN git config --global --add safe.directory /opt/frodo && make build
+
 EXPOSE 8088
-CMD ["go", "run", ".", "start", "conf-docker.json"]
+CMD ["./frodo", "start", "conf-docker.json"]
