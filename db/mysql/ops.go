@@ -75,6 +75,10 @@ func OpenDB(conf db.Conf) (*Adapter, error) {
 	return &Adapter{db: db, dbName: mconf.DBName, conf: conf}, nil
 }
 
+// OpenImportTunedDB creates an Adapter instance with
+// undrelying connection session having slightly modified
+// parameters suitable for faster data import (unique checks disabled,
+// foreign checks disabled).
 func OpenImportTunedDB(conf db.Conf) (*Adapter, error) {
 	a, err := OpenDB(conf)
 	if err != nil {

@@ -45,6 +45,7 @@ const (
 	TagsetCSCNC2000SPK SupportedTagset = "cs_cnc2000_spk"
 	TagsetCSCNC2000    SupportedTagset = "cs_cnc2000"
 	TagsetCSCNC2020    SupportedTagset = "cs_cnc2020"
+	TagsetUD           SupportedTagset = "ud"
 )
 
 func InferQSAttrMapping(regPath string, tagset SupportedTagset) (freqdb.QSAttributes, error) {

@@ -39,9 +39,13 @@ type reqArgs struct {
 	ColMapping          *freqdb.QSAttributes   `json:"colMapping,omitempty"`
 	PosTagset           common.SupportedTagset `json:"posTagset"`
 	UsePartitionedTable bool                   `json:"usePartitionedTable"`
+	MinFreq             int                    `json:"minFreq"`
 }
 
 func (args reqArgs) Validate() error {
+	if args.MinFreq <= 0 {
+		args.MinFreq = 1
+	}
 	if err := args.PosTagset.Validate(); err != nil {
 		return fmt.Errorf("failed to validate tagset: %w", err)
 	}
@@ -196,6 +200,7 @@ func (a *Actions) GenerateNgrams(ctx *gin.Context) {
 		ngramSize,
 		posFn,
 		*args.ColMapping,
+		args.MinFreq,
 	)
 	jobInfo, err := generator.GenerateAfter(ctx.Request.URL.Query().Get("parentJobId"))
 	if err != nil {

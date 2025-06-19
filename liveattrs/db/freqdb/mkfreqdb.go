@@ -59,6 +59,7 @@ type NgramFreqGenerator struct {
 	posFn                *modders.StringTransformerChain
 	jobActions           *jobs.Actions
 	qsaAttrs             QSAttributes
+	minFreq              int
 }
 
 // updateTablesStats plays crucial role after table data insert. Experience shows,
@@ -291,6 +292,7 @@ func (nfg *NgramFreqGenerator) findTotalNumLines() (int, error) {
 	return ans, nil
 }
 
+// preloadCols loads ngram info
 func (nfg *NgramFreqGenerator) preloadCols(
 	ctx context.Context,
 	totalItems int64,
@@ -317,6 +319,7 @@ func (nfg *NgramFreqGenerator) preloadCols(
 		return []*ngRecord{}
 	}
 	ngrams := make([]*ngRecord, 0, totalItems)
+	numIgnored := 0
 	for rowNum := 1; rows.Next(); rowNum++ {
 		baseStatus.NumProcLines = rowNum
 		rec := &ngRecord{ngramSize: nfg.ngramSize}
@@ -335,7 +338,8 @@ func (nfg *NgramFreqGenerator) preloadCols(
 			log.Warn().Err(err).Msg("failed to read colcounts record, skipping")
 			continue
 		}
-		if isStopNgram(rec.lemma) {
+		if isStopNgram(rec.lemma) || rec.abs < nfg.minFreq {
+			numIgnored++
 			continue
 		}
 		ngrams = append(ngrams, rec)
@@ -659,6 +663,10 @@ func (nfg *NgramFreqGenerator) GenerateAfter(parentJobID string) (NgramJobInfo, 
 	return jobStatus, nil
 }
 
+// NewNgramFreqGenerator
+// The minFreq argument with value 0 means "no limit"
+//
+// TODO the number of args is too much here
 func NewNgramFreqGenerator(
 	db *mysql.Adapter,
 	jobActions *jobs.Actions,
@@ -670,6 +678,7 @@ func NewNgramFreqGenerator(
 	ngramSize int,
 	posFn *modders.StringTransformerChain,
 	qsaAttrs QSAttributes,
+	minFreq int,
 ) *NgramFreqGenerator {
 	return &NgramFreqGenerator{
 		db:                   db,
