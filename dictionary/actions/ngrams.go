@@ -57,9 +57,9 @@ func (args reqArgs) Validate() error {
 		tmp[args.ColMapping.Word]++
 		tmp[args.ColMapping.Tag]++
 
-		if len(tmp) < 4 {
+		if !(len(tmp) == 4 || len(tmp) == 3 && args.ColMapping.Sublemma == args.ColMapping.Lemma) {
 			return errors.New(
-				"each of the lemma, sublemma, word, tag must be mapped to a unique table column")
+				"each of the lemma, sublemma, word, tag must be mapped to a unique table column with the exception that lemma and sublemma may address the same position")
 		}
 	}
 	return nil
