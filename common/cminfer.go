@@ -31,7 +31,11 @@ type SupportedTagset string
 // Please note that the empty value is also considered OK
 // (otherwise we wouldn't have a valid zero value)
 func (st SupportedTagset) Validate() error {
-	if st == TagsetCSCNC2000SPK || st == TagsetCSCNC2000 || st == TagsetCSCNC2020 || st == "" {
+	if st == TagsetCSCNC2000SPK ||
+		st == TagsetCSCNC2000 ||
+		st == TagsetCSCNC2020 ||
+		st == TagsetUD ||
+		st == "" {
 		return nil
 	}
 	return fmt.Errorf("invalid tagset type: %s", st)
