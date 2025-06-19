@@ -82,62 +82,6 @@ func (a *Actions) GenerateNgrams(ctx *gin.Context) {
 		return
 	}
 
-	args, err := a.getNgramArgs(ctx.Request)
-	if err != nil {
-		uniresp.RespondWithErrorJSON(ctx, err, http.StatusBadRequest)
-		return
-	}
-	if err = args.Validate(); err != nil {
-		uniresp.RespondWithErrorJSON(ctx, err, http.StatusUnprocessableEntity)
-		return
-	}
-
-	var tagset common.SupportedTagset
-
-	if args.ColMapping == nil {
-		regPath := filepath.Join(a.corpConf.RegistryDirPaths[0], corpusID) // TODO the [0]
-
-		var corpTagsets []common.SupportedTagset
-		var err error
-
-		if args.PosTagset != "" {
-			corpTagsets = []common.SupportedTagset{args.PosTagset}
-
-		} else {
-			corpTagsets, err = a.cncDB.GetCorpusTagsets(corpusID)
-			if err != nil {
-				uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
-				return
-			}
-		}
-		tagset = common.GetFirstSupportedTagset(corpTagsets)
-		if tagset == "" {
-			avail := strutil.JoinAny(corpTagsets, func(v common.SupportedTagset) string { return v.String() }, ", ")
-			uniresp.RespondWithErrorJSON(
-				ctx, fmt.Errorf(
-					"cannot find a suitable default tagset for %s (found: %s)",
-					corpusID, avail,
-				),
-				http.StatusUnprocessableEntity,
-			)
-			return
-		}
-		attrMapping, err := common.InferQSAttrMapping(regPath, tagset)
-		if err != nil {
-			uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
-			return
-		}
-		args.ColMapping = &attrMapping
-		// now we need to revalidate to make sure the inference provided correct setup
-		if err = args.Validate(); err != nil {
-			uniresp.RespondWithErrorJSON(ctx, err, http.StatusUnprocessableEntity)
-			return
-		}
-
-	} else {
-		tagset = args.PosTagset
-	}
-
 	laConf, err := a.laConfCache.Get(corpusID)
 	if err == laconf.ErrorNoSuchConfig {
 		uniresp.RespondWithErrorJSON(
@@ -151,6 +95,85 @@ func (a *Actions) GenerateNgrams(ctx *gin.Context) {
 		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 		return
 	}
+
+	args, err := a.getNgramArgs(ctx.Request)
+	if err != nil {
+		uniresp.RespondWithErrorJSON(ctx, err, http.StatusBadRequest)
+		return
+	}
+	if err = args.Validate(); err != nil {
+		uniresp.RespondWithErrorJSON(ctx, err, http.StatusUnprocessableEntity)
+		return
+	}
+
+	var tagset common.SupportedTagset
+
+	if args.ColMapping == nil {
+
+		if len(laConf.Ngrams.VertColumns) > 0 {
+			args.ColMapping = &freqdb.QSAttributes{}
+			for _, v := range laConf.Ngrams.VertColumns {
+				switch v.Role {
+				case "word":
+					args.ColMapping.Word = v.Idx
+				case "lemma":
+					args.ColMapping.Lemma = v.Idx
+				case "tag":
+					args.ColMapping.Tag = v.Idx
+				case "pos":
+					args.ColMapping.Pos = v.Idx
+				case "sublemma":
+					args.ColMapping.Sublemma = v.Idx
+				}
+			}
+			tagset = args.PosTagset
+
+		} else {
+
+			regPath := filepath.Join(a.corpConf.RegistryDirPaths[0], corpusID) // TODO the [0]
+
+			var corpTagsets []common.SupportedTagset
+			var err error
+
+			if args.PosTagset != "" {
+				corpTagsets = []common.SupportedTagset{args.PosTagset}
+
+			} else {
+				corpTagsets, err = a.cncDB.GetCorpusTagsets(corpusID)
+				if err != nil {
+					uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
+					return
+				}
+			}
+			tagset = common.GetFirstSupportedTagset(corpTagsets)
+			if tagset == "" {
+				avail := strutil.JoinAny(corpTagsets, func(v common.SupportedTagset) string { return v.String() }, ", ")
+				uniresp.RespondWithErrorJSON(
+					ctx, fmt.Errorf(
+						"cannot find a suitable default tagset for %s (found: %s)",
+						corpusID, avail,
+					),
+					http.StatusUnprocessableEntity,
+				)
+				return
+			}
+			attrMapping, err := common.InferQSAttrMapping(regPath, tagset)
+			if err != nil {
+				uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
+				return
+			}
+			args.ColMapping = &attrMapping
+			// now we need to revalidate to make sure the inference provided correct setup
+			if err = args.Validate(); err != nil {
+				uniresp.RespondWithErrorJSON(ctx, err, http.StatusUnprocessableEntity)
+				return
+			}
+		}
+
+	} else {
+		tagset = args.PosTagset
+	}
+
 	// the args.ColMapping.Tag arg below is likely OK,
 	// but in such case, do we need args.ColMapping.Tag?
 	// TODO !!! we probably do not need the ApplyPosProperties at all,
