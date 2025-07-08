@@ -63,6 +63,15 @@ func (a *Actions) Create(ctx *gin.Context) {
 		return
 	}
 
+	if err := jsonArgs.ValidateDataWindow(); err != nil {
+		uniresp.RespondWithErrorJSON(
+			ctx,
+			err,
+			http.StatusBadRequest,
+		)
+		return
+	}
+
 	if conf == nil {
 		var newConf *vteCnf.VTEConf
 		var err error

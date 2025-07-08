@@ -151,6 +151,14 @@ func (a *Actions) applyPatchArgs(
 		targetConf.SelfJoin = *jsonArgs.SelfJoin
 	}
 
+	if jsonArgs.RemoveEntriesBeforeDate != nil {
+		targetConf.RemoveEntriesBeforeDate = jsonArgs.RemoveEntriesBeforeDate
+	}
+
+	if jsonArgs.DatetimeAttr != nil {
+		targetConf.DatetimeAttr = jsonArgs.DatetimeAttr
+	}
+
 	return nil
 }
 

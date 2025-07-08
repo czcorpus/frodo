@@ -17,8 +17,15 @@
 package laconf
 
 import (
+	"fmt"
+	"regexp"
+
 	vteCnf "github.com/czcorpus/vert-tagextract/v3/cnf"
 	vteDb "github.com/czcorpus/vert-tagextract/v3/db"
+)
+
+var (
+	dateFormatRegexp = regexp.MustCompile(`[0-9]{4}-[0-9]{2}-[0-9]{2}`)
 )
 
 // PatchArgs is a subset of vert-tagextract's VTEConf
@@ -37,12 +44,26 @@ import (
 //
 // Note: the most important self join functions are: "identity", "intecorp"
 type PatchArgs struct {
-	VerticalFiles []string            `json:"verticalFiles"`
-	MaxNumErrors  *int                `json:"maxNumErrors"`
-	AtomStructure *string             `json:"atomStructure"`
-	SelfJoin      *vteDb.SelfJoinConf `json:"selfJoin"`
-	BibView       *vteDb.BibViewConf  `json:"bibView"`
-	Ngrams        *vteCnf.NgramConf   `json:"ngrams"`
+	VerticalFiles           []string            `json:"verticalFiles"`
+	DatetimeAttr            *string             `json:"datetimeAttr"`
+	RemoveEntriesBeforeDate *string             `json:"removeEntriesBeforeDate"`
+	MaxNumErrors            *int                `json:"maxNumErrors"`
+	AtomStructure           *string             `json:"atomStructure"`
+	SelfJoin                *vteDb.SelfJoinConf `json:"selfJoin"`
+	BibView                 *vteDb.BibViewConf  `json:"bibView"`
+	Ngrams                  *vteCnf.NgramConf   `json:"ngrams"`
+}
+
+func (la *PatchArgs) ValidateDataWindow() error {
+	if la.RemoveEntriesBeforeDate != nil {
+		if !dateFormatRegexp.MatchString(*la.RemoveEntriesBeforeDate) {
+			return fmt.Errorf("invalid date format (expecting yyyy-mm-dd)")
+		}
+		if la.DatetimeAttr == nil || *la.DatetimeAttr == "" {
+			return fmt.Errorf("removeEntriesBeforeDate must be accompanied by datetimeAttr")
+		}
+	}
+	return nil
 }
 
 func (la *PatchArgs) GetVerticalFiles() []string {
