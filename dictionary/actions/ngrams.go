@@ -36,10 +36,11 @@ import (
 )
 
 type reqArgs struct {
-	ColMapping          *freqdb.QSAttributes   `json:"colMapping,omitempty"`
-	PosTagset           common.SupportedTagset `json:"posTagset"`
-	UsePartitionedTable bool                   `json:"usePartitionedTable"`
-	MinFreq             int                    `json:"minFreq"`
+	ColMapping            *freqdb.QSAttributes   `json:"colMapping,omitempty"`
+	PosTagset             common.SupportedTagset `json:"posTagset"`
+	UsePartitionedTable   bool                   `json:"usePartitionedTable"`
+	MinFreq               int                    `json:"minFreq"`
+	SkipGroupedNameSearch bool                   `json:"skipGroupedNameSearch"`
 }
 
 func (args reqArgs) Validate() error {
@@ -201,14 +202,18 @@ func (a *Actions) GenerateNgrams(ctx *gin.Context) {
 		return
 	}
 
-	corpusDBInfo, err := a.cncDB.LoadInfo(corpusID)
-	if err != nil {
-		uniresp.RespondWithErrorJSON(
-			ctx,
-			err,
-			http.StatusInternalServerError,
-		)
-		return
+	groupedName := corpusID
+	if !args.SkipGroupedNameSearch {
+		corpusDBInfo, err := a.cncDB.LoadInfo(corpusID)
+		if err != nil {
+			uniresp.RespondWithErrorJSON(
+				ctx,
+				err,
+				http.StatusInternalServerError,
+			)
+			return
+		}
+		groupedName = corpusDBInfo.GroupedName()
 	}
 
 	tunedDb, err := mysql.OpenImportTunedDB(a.laDB.Conf())
@@ -223,8 +228,8 @@ func (a *Actions) GenerateNgrams(ctx *gin.Context) {
 	generator := freqdb.NewNgramFreqGenerator(
 		tunedDb,
 		a.jobActions,
-		corpusDBInfo.GroupedName(),
-		corpusDBInfo.Name,
+		groupedName,
+		corpusID,
 		a.laCustomNgramDataDirPath,
 		args.UsePartitionedTable,
 		appendMode,
