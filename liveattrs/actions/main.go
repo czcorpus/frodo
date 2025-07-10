@@ -44,6 +44,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	vteCnf "github.com/czcorpus/vert-tagextract/v3/cnf"
+	vteDB "github.com/czcorpus/vert-tagextract/v3/db"
 	"github.com/czcorpus/vert-tagextract/v3/fs"
 	vteLib "github.com/czcorpus/vert-tagextract/v3/library"
 	vteProc "github.com/czcorpus/vert-tagextract/v3/proc"
@@ -155,8 +156,9 @@ func (a *Actions) applyPatchArgs(
 		targetConf.RemoveEntriesBeforeDate = jsonArgs.RemoveEntriesBeforeDate
 	}
 
-	if jsonArgs.DatetimeAttr != nil {
-		targetConf.DatetimeAttr = jsonArgs.DatetimeAttr
+	if jsonArgs.DateAttr != nil {
+		tmp := vteDB.DateAttr(*jsonArgs.DateAttr)
+		targetConf.DateAttr = &tmp
 	}
 
 	return nil

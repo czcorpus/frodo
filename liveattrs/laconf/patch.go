@@ -45,7 +45,7 @@ var (
 // Note: the most important self join functions are: "identity", "intecorp"
 type PatchArgs struct {
 	VerticalFiles           []string            `json:"verticalFiles"`
-	DatetimeAttr            *string             `json:"datetimeAttr"`
+	DateAttr                *string             `json:"dateAttr"`
 	RemoveEntriesBeforeDate *string             `json:"removeEntriesBeforeDate"`
 	MaxNumErrors            *int                `json:"maxNumErrors"`
 	AtomStructure           *string             `json:"atomStructure"`
@@ -59,8 +59,8 @@ func (la *PatchArgs) ValidateDataWindow() error {
 		if !dateFormatRegexp.MatchString(*la.RemoveEntriesBeforeDate) {
 			return fmt.Errorf("invalid date format (expecting yyyy-mm-dd)")
 		}
-		if la.DatetimeAttr == nil || *la.DatetimeAttr == "" {
-			return fmt.Errorf("removeEntriesBeforeDate must be accompanied by datetimeAttr")
+		if la.DateAttr == nil || *la.DateAttr == "" {
+			return fmt.Errorf("removeEntriesBeforeDate must be accompanied by dateAttr")
 		}
 	}
 	return nil

@@ -16,8 +16,8 @@ github.com/czcorpus/cnc-gokit v0.13.0 h1:1WmKVDibQvSJciPJuMUjlZCcIBP279+sOMvw8bz
 github.com/czcorpus/cnc-gokit v0.13.0/go.mod h1:BZSRrYUFIHXVIiuqnSoZbfXfL2X/gHWG3w35aIVW36U=
 github.com/czcorpus/rexplorer v0.0.8 h1:rxBivMmo10xGlCDaxzH9IeD23YzS8QM5cyTXiEFPllE=
 github.com/czcorpus/rexplorer v0.0.8/go.mod h1:9KwJWUp9tqn5gDjN3sS2jcsaaMWsfi3qPaqN5s9DY9Y=
-github.com/czcorpus/vert-tagextract/v3 v3.2.0 h1:uRNgE9duBtnLsZrQ1VsIhAszXIu3sPPZzXAzc9PV4/U=
-github.com/czcorpus/vert-tagextract/v3 v3.2.0/go.mod h1:1twSh9ZvmAkCOG3XAig+e4MvVQZmSH8HOwHdLf0zlsM=
+github.com/czcorpus/vert-tagextract/v3 v3.4.1 h1:HOAfrzvJnIcsqMOgQil+WeJv9QinBqU0Z+lFb4yKCfs=
+github.com/czcorpus/vert-tagextract/v3 v3.4.1/go.mod h1:1twSh9ZvmAkCOG3XAig+e4MvVQZmSH8HOwHdLf0zlsM=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
