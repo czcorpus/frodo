@@ -164,8 +164,14 @@ func (a *Actions) registerJob(j GeneralJobInfo) chan GeneralJobInfo {
 	return syncUpdates
 }
 
-// JobList returns a list of corpus data synchronization jobs
-// (i.e. syncing between /cnk/run/manatee/data and /cnk/local/ssd/run/manatee/data)
+// JobList godoc
+// @Summary      Returns a list of corpus data synchronization jobs
+// @Description  Returns a list of corpus data synchronization jobs (i.e. syncing between /cnk/run/manatee/data and /cnk/local/ssd/run/manatee/data)
+// @Produce      json
+// @Param        unfinishedOnly query int false "Get only unfinished jobs" default(0)
+// @Param        compact query int false "Get compact info" default(0)
+// @Success      200 {object} []any
+// @Router       /jobs [get]
 func (a *Actions) JobList(ctx *gin.Context) {
 	unOnly := ctx.Request.URL.Query().Get("unfinishedOnly") == "1"
 	if ctx.Request.URL.Query().Get("compact") == "1" {
@@ -190,7 +196,13 @@ func (a *Actions) JobList(ctx *gin.Context) {
 	}
 }
 
-// JobInfo gives an information about a specific data sync job
+// JobInfo godoc
+// @Summary      Gives an information about a specific data sync job
+// @Produce      json
+// @Param        jobId path string true "Job ID"
+// @Param        compact query int false "Get compact info" default(0)
+// @Success      200 {object} any
+// @Router       /jobs/{jobId} [get]
 func (a *Actions) JobInfo(ctx *gin.Context) {
 	job := FindJob(a.jobList, ctx.Param("jobId"))
 	if job != nil {
@@ -206,6 +218,14 @@ func (a *Actions) JobInfo(ctx *gin.Context) {
 	}
 }
 
+// Delete godoc
+// @Summary      Delete existing job
+// @Produce      json
+// @Param        jobId path string true "Job ID"
+// @Param        compact query int false "Get compact info" default(0)
+// @Success      200 {object} GeneralJobInfo
+// @Failure      404 {object} uniresp.ActionError
+// @Router       /jobs/{jobId} [delete]
 func (a *Actions) Delete(ctx *gin.Context) {
 	job := FindJob(a.jobList, ctx.Param("jobId"))
 	if job != nil {
@@ -217,6 +237,13 @@ func (a *Actions) Delete(ctx *gin.Context) {
 	}
 }
 
+// ClearIfFinished godoc
+// @Summary      Clear finished job
+// @Produce      json
+// @Param        jobId path string true "Job ID"
+// @Success      200 {object} map[string]any
+// @Failure      404 {object} uniresp.ActionError
+// @Router       /jobs/{jobId}/clearIfFinished [get]
 func (a *Actions) ClearIfFinished(ctx *gin.Context) {
 	job, removed := ClearFinishedJob(a.jobList, ctx.Param("jobId"))
 	if job != nil {
@@ -290,6 +317,14 @@ func (a *Actions) GetJob(jobID string) (GeneralJobInfo, bool) {
 	return v, ok
 }
 
+// AddNotification godoc
+// @Summary      Add recipient for email notification on job finish
+// @Produce      json
+// @Param        jobId path string true "Job ID"
+// @Param        address path string true "Email address"
+// @Success      200 {object} any
+// @Failure      404 {object} uniresp.ActionError
+// @Router       /jobs/{jobId}/emailNotification/{address} [put]
 func (a *Actions) AddNotification(ctx *gin.Context) {
 	jobID := ctx.Param("jobId")
 	job := FindJob(a.jobList, jobID)
@@ -322,6 +357,13 @@ func (a *Actions) AddNotification(ctx *gin.Context) {
 	}
 }
 
+// GetNotifications godoc
+// @Summary      Get recipients for email notification on job finish
+// @Produce      json
+// @Param        jobId path string true "Job ID"
+// @Success      200 {object} any
+// @Failure      404 {object} uniresp.ActionError
+// @Router       /jobs/{jobId}/emailNotification [get]
 func (a *Actions) GetNotifications(ctx *gin.Context) {
 	jobID := ctx.Param("jobId")
 	job := FindJob(a.jobList, jobID)
@@ -342,6 +384,14 @@ func (a *Actions) GetNotifications(ctx *gin.Context) {
 	}
 }
 
+// CheckNotification godoc
+// @Summary      Check if email notification will be sent to a specific address
+// @Produce      json
+// @Param        jobId path string true "Job ID"
+// @Param        address path string true "Email address"
+// @Success      200 {object} any
+// @Failure      404 {object} uniresp.ActionError
+// @Router       /jobs/{jobId}/emailNotification/{address} [get]
 func (a *Actions) CheckNotification(ctx *gin.Context) {
 	jobID := ctx.Param("jobId")
 	job := FindJob(a.jobList, jobID)
@@ -374,6 +424,14 @@ func (a *Actions) CheckNotification(ctx *gin.Context) {
 	}
 }
 
+// RemoveNotification godoc
+// @Summary      Remove recipient for email notification on job finish
+// @Produce      json
+// @Param        jobId path string true "Job ID"
+// @Param        address path string true "Email address"
+// @Success      200 {object} any
+// @Failure      404 {object} uniresp.ActionError
+// @Router       /jobs/{jobId}/emailNotification/{address} [delete]
 func (a *Actions) RemoveNotification(ctx *gin.Context) {
 	jobID := ctx.Param("jobId")
 	job := FindJob(a.jobList, jobID)
@@ -401,6 +459,11 @@ func (a *Actions) RemoveNotification(ctx *gin.Context) {
 	}
 }
 
+// Utilization godoc
+// @Summary      Get utilization stats
+// @Produce      json
+// @Success      200 {object} map[string]any
+// @Router       /jobs/utilization [get]
 func (a *Actions) Utilization(ctx *gin.Context) {
 	numUnfinished := a.numOfUnfinishedJobs()
 	ans := map[string]any{

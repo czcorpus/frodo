@@ -1,12 +1,14 @@
-FROM golang
+FROM ubuntu:noble
 
-RUN apt-get update && apt-get install python3-dev python3-pip -y \
-    && pip3 install pulp numpy --break-system-packages
+RUN apt-get update && apt-get install git wget curl tar python3-pip -y \
+    && wget https://go.dev/dl/go1.23.6.linux-amd64.tar.gz \
+    && tar -C /usr/local -xzf go1.23.6.linux-amd64.tar.gz \
+    && pip install pulp numpy --break-system-packages
 
 WORKDIR /opt/frodo
 COPY . .
+RUN git config --global --add safe.directory /opt/frodo \
+    && PATH=$PATH:/usr/local/go/bin:/root/go/bin \
+    && make swagger && make build
 
-RUN git config --global --add safe.directory /opt/frodo && make build
-
-EXPOSE 8088
-CMD ["./frodo", "start", "conf-docker.json"]
+CMD ["./frodo", "start", "conf.docker.json"]

@@ -308,6 +308,14 @@ func (a *Actions) runStopJobListener() {
 	}
 }
 
+// Query godoc
+// @Summary      Query liveattrs for specified corpus
+// @Accept  	 json
+// @Produce      json
+// @Param        corpusId path string true "An ID of a corpus for which to make query"
+// @Param 		 queryArgs body query.Payload true "Query arguments"
+// @Success      200 {object} response.QueryAns
+// @Router       /liveAttributes/{corpusId}/query [post]
 func (a *Actions) Query(ctx *gin.Context) {
 	t0 := time.Now()
 	corpusID := ctx.Param("corpusId")
@@ -354,6 +362,14 @@ func (a *Actions) Query(ctx *gin.Context) {
 	uniresp.WriteJSONResponse(ctx.Writer, &ans)
 }
 
+// FillAttrs godoc
+// @Summary      Fill attributes for specified corpus
+// @Accept  	 json
+// @Produce      json
+// @Param        corpusId path string true "Used corpus"
+// @Param 		 queryArgs body fillattrs.Payload true "Query arguments"
+// @Success      200 {object} map[string]map[string]string
+// @Router       /liveAttributes/{corpusId}/fillAttrs [post]
 func (a *Actions) FillAttrs(ctx *gin.Context) {
 	corpusID := ctx.Param("corpusId")
 	baseErrTpl := "failed to fill attributes for corpus %s: %w"
@@ -381,6 +397,14 @@ func (a *Actions) FillAttrs(ctx *gin.Context) {
 	uniresp.WriteJSONResponse(ctx.Writer, &ans)
 }
 
+// GetAdhocSubcSize godoc
+// @Summary      Get ad-hoc subcorpus size for specified corpus
+// @Accept  	 json
+// @Produce      json
+// @Param        corpusId path string true "Used corpus"
+// @Param 		 queryArgs body equery.Payload true "Query arguments"
+// @Success      200 {object} response.GetSubcSize
+// @Router       /liveAttributes/{corpusId}/selectionSubcSize [post]
 func (a *Actions) GetAdhocSubcSize(ctx *gin.Context) {
 	corpusID := ctx.Param("corpusId")
 	baseErrTpl := "failed to get ad-hoc subcorpus of corpus %s: %w"
@@ -405,6 +429,14 @@ func (a *Actions) GetAdhocSubcSize(ctx *gin.Context) {
 	uniresp.WriteJSONResponse(ctx.Writer, response.GetSubcSize{Total: size})
 }
 
+// AttrValAutocomplete godoc
+// @Summary      Find autocomplete suggestions for specified corpus
+// @Accept  	 json
+// @Produce      json
+// @Param        corpusId path string true "Used corpus"
+// @Param 		 queryArgs body query.Payload true "Query arguments"
+// @Success      200 {object} response.QueryAns
+// @Router       /liveAttributes/{corpusId}/attrValAutocomplete [post]
 func (a *Actions) AttrValAutocomplete(ctx *gin.Context) {
 	corpusID := ctx.Param("corpusId")
 	baseErrTpl := "failed to find autocomplete suggestions in corpus %s: %w"
@@ -428,6 +460,12 @@ func (a *Actions) AttrValAutocomplete(ctx *gin.Context) {
 	uniresp.WriteJSONResponse(ctx.Writer, &ans)
 }
 
+// Stats godoc
+// @Summary      Get stats for specified corpusS
+// @Produce      json
+// @Param        corpusId path string true "Used corpus"
+// @Success      200 {object} map[string]int
+// @Router       /liveAttributes/{corpusId}/stats [get]
 func (a *Actions) Stats(ctx *gin.Context) {
 	corpusID := ctx.Param("corpusId")
 	ans, err := db.LoadUsage(a.laDB.DB(), corpusID)
@@ -460,6 +498,13 @@ func (a *Actions) updateIndexesFromJobStatus(status *liveattrs.IdxUpdateJobInfo)
 	a.jobActions.EnqueueJob(&fn, status)
 }
 
+// UpdateIndexes godoc
+// @Summary      Update indexes for specified corpus
+// @Produce      json
+// @Param        corpusId path string true "Used corpus"
+// @Param        maxColumns query int true "???"
+// @Success      200 {object} liveattrs.IdxUpdateJobInfo
+// @Router       /liveAttributes/{corpusId}/updateIndexes [post]
 func (a *Actions) UpdateIndexes(ctx *gin.Context) {
 	corpusID := ctx.Param("corpusId")
 	maxColumnsArg := ctx.Request.URL.Query().Get("maxColumns")
@@ -510,6 +555,12 @@ func (a *Actions) RestartIdxUpdateJob(jinfo *liveattrs.IdxUpdateJobInfo) error {
 	return nil
 }
 
+// InferredAtomStructure godoc
+// @Summary      Get inferred atom structure for specified corpus
+// @Produce      json
+// @Param        corpusId path string true "Used corpus"
+// @Success      200 {object} map[string]any
+// @Router       /liveAttributes/{corpusId}/inferredAtomStructure [get]
 func (a *Actions) InferredAtomStructure(ctx *gin.Context) {
 	corpusID := ctx.Param("corpusId")
 
