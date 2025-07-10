@@ -101,6 +101,7 @@ func (a *Actions) ViewConf(ctx *gin.Context) {
 	}
 	if err == laconf.ErrorNoSuchConfig {
 		uniresp.WriteJSONErrorResponse(ctx.Writer, uniresp.NewActionError(baseErrTpl, corpusID, err), http.StatusNotFound)
+		return
 
 	} else if err != nil {
 		uniresp.WriteJSONErrorResponse(ctx.Writer, uniresp.NewActionError(baseErrTpl, corpusID, err), http.StatusBadRequest)
