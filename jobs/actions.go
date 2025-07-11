@@ -165,12 +165,12 @@ func (a *Actions) registerJob(j GeneralJobInfo) chan GeneralJobInfo {
 }
 
 // JobList godoc
-// @Summary      Returns a list of corpus data synchronization jobs
-// @Description  Returns a list of corpus data synchronization jobs (i.e. syncing between /cnk/run/manatee/data and /cnk/local/ssd/run/manatee/data)
+// @Summary      Returns a list of currently processed jobs
+// @Description
 // @Produce      json
 // @Param        unfinishedOnly query int false "Get only unfinished jobs" default(0)
-// @Param        compact query int false "Get compact info" default(0)
-// @Success      200 {object} []any
+// @Param        compact query int false "Get jobs in compact and unified format without job type-specific details" default(0)
+// @Success      200 {array} any "JobInfoListCompact or a custom type based on job type"
 // @Router       /jobs [get]
 func (a *Actions) JobList(ctx *gin.Context) {
 	unOnly := ctx.Request.URL.Query().Get("unfinishedOnly") == "1"
