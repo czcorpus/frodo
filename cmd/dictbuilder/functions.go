@@ -18,40 +18,27 @@ package main
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"frodo/db/mysql"
 	"io"
 	"net/http"
 	"net/url"
 	"time"
 
-	"github.com/go-sql-driver/mysql"
 	"github.com/rs/zerolog/log"
 )
 
-func connectDB(config DictbuilderConfig) (*sql.DB, error) {
-	dbConf := mysql.NewConfig()
-	dbConf.User = config.Database.User
-	dbConf.Passwd = config.Database.Password
-	dbConf.DBName = config.Database.Name
-	dbConf.Addr = fmt.Sprintf("%s:%d", config.Database.Host, config.Database.Port)
-	dbConf.Net = "tcp"
-	dbConf.ParseTime = true
-	dbConf.Loc = time.Local
-	return sql.Open("mysql", dbConf.FormatDSN())
-}
-
-func replaceTable(db *sql.DB, corpusName string, tmpCorpusName string, suffix string) error {
+func replaceTable(db *mysql.Adapter, corpusName string, tmpCorpusName string, suffix string) error {
 	// Delete existing table if it exists
-	_, err := db.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s_%s", corpusName, suffix))
+	_, err := db.DB().Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s_%s", corpusName, suffix))
 	if err != nil {
 		return err
 	}
 
 	// Rename table in the database
-	_, err = db.Exec(fmt.Sprintf("ALTER TABLE %s_%s RENAME TO %s_%s", tmpCorpusName, suffix, corpusName, suffix))
+	_, err = db.DB().Exec(fmt.Sprintf("ALTER TABLE %s_%s RENAME TO %s_%s", tmpCorpusName, suffix, corpusName, suffix))
 	if err != nil {
 		return err
 	}

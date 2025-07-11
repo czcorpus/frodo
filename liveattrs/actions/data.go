@@ -54,7 +54,7 @@ import (
 // @Param 		 patchArgs body laconf.PatchArgs true "The input todo struct"
 // @Param 		 reconfigure query int false "Ignore the stored liveattrs config (if any) and generate a new one based on corpus properties and provided PatchArgs. The resulting new config will be stored replacing the previous one." default(1)
 // @Param 		 append query int false "Append mode" default(0)
-// @Param 		 noCorpusUpdate query int false "???" default(0)
+// @Param 		 noCorpusDbUpdate query int false "Do not update corpora database. This e.g. allows for working with special/testing/etc. corpora without proper entry in corpora db. " default(0)
 // @Success      200 {object} any
 // @Router       /liveAttributes/{corpusId}/data [post]
 func (a *Actions) Create(ctx *gin.Context) {
@@ -136,15 +136,15 @@ func (a *Actions) Create(ctx *gin.Context) {
 	}
 
 	append := ctx.Request.URL.Query().Get("append")
-	noCorpusUpdate := ctx.Request.URL.Query().Get("noCorpusUpdate")
+	noCorpusDbUpdate := ctx.Request.URL.Query().Get("noCorpusDbUpdate")
 	status := &liveattrs.LiveAttrsJobInfo{
 		ID:       jobID.String(),
 		CorpusID: corpusID,
 		Start:    jobs.CurrentDatetime(),
 		Args: liveattrs.JobInfoArgs{
-			VteConf:        runtimeConf,
-			Append:         append == "1",
-			NoCorpusUpdate: noCorpusUpdate == "1",
+			VteConf:          runtimeConf,
+			Append:           append == "1",
+			NoCorpusDBUpdate: noCorpusDbUpdate == "1",
 		},
 	}
 	a.generateData(status)
