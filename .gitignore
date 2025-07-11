@@ -24,7 +24,11 @@ go.work.sum
 # env file
 .env
 
+# development
+.vscode/
+
 #
 frodo
+mkdict
 conf*.json
 docs/*

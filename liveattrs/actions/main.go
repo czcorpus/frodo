@@ -256,7 +256,7 @@ func (a *Actions) generateData(initialStatus *liveattrs.LiveAttrsJobInfo) {
 				updateJobChan <- jobStatus.WithError(fmt.Errorf("only mysql liveattrs backend is supported in Frodo"))
 				return
 			}
-			if !jobStatus.Args.NoCorpusUpdate {
+			if !jobStatus.Args.NoCorpusDBUpdate {
 				transact, err := a.cncDB.StartTx()
 				if err != nil {
 					updateJobChan <- jobStatus.WithError(err)

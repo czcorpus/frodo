@@ -28,9 +28,9 @@ const (
 )
 
 type JobInfoArgs struct {
-	Append         bool           `json:"append"`
-	VteConf        vteCnf.VTEConf `json:"vteConf"`
-	NoCorpusUpdate bool           `json:"noCorpusUpdate"`
+	Append           bool           `json:"append"`
+	VteConf          vteCnf.VTEConf `json:"vteConf"`
+	NoCorpusDBUpdate bool           `json:"noCorpusDbUpdate"`
 }
 
 func (jargs JobInfoArgs) WithoutPasswords() JobInfoArgs {

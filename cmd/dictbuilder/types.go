@@ -16,25 +16,22 @@
 
 package main
 
-import "github.com/czcorpus/cnc-gokit/logging"
+import (
+	"github.com/czcorpus/cnc-gokit/logging"
+	vtedb "github.com/czcorpus/vert-tagextract/v3/db"
+)
 
 type DictbuilderConfig struct {
 	Logging  logging.LoggingConf `json:"logging"`
-	Database struct {
-		Host     string `json:"host"`
-		Port     int    `json:"port"`
-		User     string `json:"user"`
-		Password string `json:"password"`
-		Name     string `json:"name"`
-	} `json:"database"`
-	API struct {
-		BaseURL string `json:"base_url"`
+	Database *vtedb.Conf         `json:"database"`
+	API      struct {
+		BaseURL string `json:"baseUrl"`
 	} `json:"api"`
-	NumberOfDays int    `json:"number_of_days"`
-	VerticalDir  string `json:"vertical_dir"`
-	Corpname     string `json:"corpname"`
-	TempCorpname string `json:"temp_corpname"`
-	NGramSize    int    `json:"ngram_size"`
+	NumOfLookbackDays int    `json:"numOfLookbackDays"`
+	VerticalDir       string `json:"verticalDir"`
+	Corpname          string `json:"corpname"`
+	TempCorpname      string `json:"tmpCorpname"`
+	NGramSize         int    `json:"ngramSize"`
 }
 
 type JobStatus struct {

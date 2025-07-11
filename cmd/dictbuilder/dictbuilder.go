@@ -28,18 +28,83 @@ import (
 	"github.com/czcorpus/cnc-gokit/logging"
 	"github.com/rs/zerolog/log"
 
+	"frodo/cnf"
 	"frodo/common"
+	"frodo/db/mysql"
 	dictActions "frodo/dictionary/actions"
 	"frodo/liveattrs/laconf"
 )
 
+var (
+	version   string
+	buildDate string
+	gitCommit string
+)
+
 func main() {
-	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Dictbuilder\n\nUsage:\n\t%s [options] start [config.json]\n\t%s [options] version\n", filepath.Base(os.Args[0]), filepath.Base(os.Args[0]))
+	runCmd := flag.NewFlagSet("run the dictionary build command", flag.ExitOnError)
+	confgenCmd := flag.NewFlagSet("generate a config template using a server conf.", flag.ExitOnError)
+	versionCmd := flag.NewFlagSet("show version", flag.ExitOnError)
+
+	runCmd.Usage = func() {
+		fmt.Fprintf(os.Stderr, "mkdict\n\nUsage:\n\t%s [options] run [config.json]\n\n", filepath.Base(os.Args[0]))
+		runCmd.PrintDefaults()
+	}
+	confgenCmd.Usage = func() {
+		fmt.Fprintf(os.Stderr, "\n\t%s [options] confgen [server config.json]\n\n", filepath.Base(os.Args[0]))
+		confgenCmd.PrintDefaults()
+	}
+	versionCmd.Usage = func() {
+		fmt.Fprintf(os.Stderr, "\n\t%s version\n", filepath.Base(os.Args[0]))
+		versionCmd.PrintDefaults()
+	}
+
+	generalUsage := func() {
+		fmt.Fprintf(os.Stderr, "mkdict - create a dictionary out of monitoring corpus verticals\n\n")
+		fmt.Fprintf(os.Stderr, "Usage:\t%s [options] run\n", filepath.Base(os.Args[0]))
+		fmt.Fprintf(os.Stderr, "\t%s [options] confgen [server config.json] [corpname]\n", filepath.Base(os.Args[0]))
+		fmt.Fprintf(os.Stderr, "\t%s help [command]\n", filepath.Base(os.Args[0]))
+		fmt.Fprintf(os.Stderr, "\t%s version\n", filepath.Base(os.Args[0]))
 		flag.PrintDefaults()
 	}
-	flag.Parse()
-	configFilePath := flag.Arg(0)
+
+	var action string
+	if len(os.Args) > 1 {
+		action = os.Args[1]
+	}
+
+	switch action {
+	case "run":
+		runCmd.Parse(os.Args[2:])
+		run(runCmd.Arg(0))
+	case "confgen":
+		confgenCmd.Parse(os.Args[2:])
+		generateConf(confgenCmd.Arg(0), confgenCmd.Arg(1))
+	case "version":
+		fmt.Printf("mkdict %s\nbuild date: %s\nlast commit: %s\n", version, buildDate, gitCommit)
+	case "help":
+		if len(os.Args) > 2 {
+			helpCmd := os.Args[2]
+			switch helpCmd {
+			case "run":
+				runCmd.Usage()
+			case "confgen":
+				confgenCmd.Usage()
+			case "version":
+				versionCmd.Usage()
+			default:
+				fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n", helpCmd)
+				generalUsage()
+			}
+		} else {
+			generalUsage()
+		}
+	default:
+		generalUsage()
+	}
+}
+
+func run(configFilePath string) {
 
 	// Load configuration from JSON file
 	configRaw, err := os.Open(configFilePath)
@@ -59,13 +124,13 @@ func main() {
 	// Run liveattrs job
 	verts := []string{}
 	now := time.Now()
-	for i := 1; i <= config.NumberOfDays; i++ {
+	for i := 1; i <= config.NumOfLookbackDays; i++ {
 		vertDate := now.AddDate(0, 0, -i)
 		verts = append(verts, path.Join(config.VerticalDir, fmt.Sprintf("%s.vrt", vertDate.Format("2006-01-02"))))
 	}
 
 	liveattrsPath := fmt.Sprintf("liveAttributes/%s/data", config.TempCorpname)
-	liveattrsParams := "noCorpusUpdate=1" // required so the liveattrs job don't search for the corpus in the database
+	liveattrsParams := "noCorpusDbUpdate=1" // required so the liveattrs job don't search for the corpus in the database
 	liveAttrsArgs := laconf.PatchArgs{
 		VerticalFiles: verts,
 	}
@@ -92,7 +157,7 @@ func main() {
 	}
 
 	// Rename tables in database
-	db, err := connectDB(config)
+	db, err := mysql.OpenDB(*config.Database)
 	if err != nil {
 		log.Error().Err(err).Msg("Error opening database connection")
 		return
@@ -106,4 +171,29 @@ func main() {
 		}
 	}
 	log.Info().Msg("Job done!")
+}
+
+func generateConf(serverConfPath string, corpname string) {
+	conf := cnf.LoadConfig(serverConfPath)
+	var mkdirConf DictbuilderConfig
+	mkdirConf.Database = conf.LiveAttrs.DB
+	mkdirConf.API = struct {
+		BaseURL string "json:\"baseUrl\""
+	}{
+		BaseURL: fmt.Sprintf("http://%s:%d", conf.ListenAddress, conf.ListenPort),
+	}
+	mkdirConf.NumOfLookbackDays = 365
+	mkdirConf.NGramSize = 1
+	mkdirConf.VerticalDir = "/cnk/common/korpus/vertikaly/monitora"
+	if corpname == "" {
+		corpname = "my_corpus"
+	}
+	mkdirConf.Corpname = corpname
+	mkdirConf.TempCorpname = "tmp_" + corpname
+	jsonData, err := json.Marshal(mkdirConf)
+	if err != nil {
+		log.Error().Err(err).Msg("failed to store template json")
+		os.Exit(1)
+	}
+	fmt.Println(string(jsonData))
 }
