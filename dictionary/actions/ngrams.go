@@ -35,7 +35,7 @@ import (
 	"github.com/czcorpus/cnc-gokit/uniresp"
 )
 
-type reqArgs struct {
+type NGramsReqArgs struct {
 	ColMapping            *freqdb.QSAttributes   `json:"colMapping,omitempty"`
 	PosTagset             common.SupportedTagset `json:"posTagset"`
 	UsePartitionedTable   bool                   `json:"usePartitionedTable"`
@@ -43,7 +43,7 @@ type reqArgs struct {
 	SkipGroupedNameSearch bool                   `json:"skipGroupedNameSearch"`
 }
 
-func (args reqArgs) Validate() error {
+func (args NGramsReqArgs) Validate() error {
 	if args.MinFreq <= 0 {
 		args.MinFreq = 1
 	}
@@ -66,8 +66,8 @@ func (args reqArgs) Validate() error {
 	return nil
 }
 
-func (a *Actions) getNgramArgs(req *http.Request) (reqArgs, error) {
-	var jsonArgs reqArgs
+func (a *Actions) getNgramArgs(req *http.Request) (NGramsReqArgs, error) {
+	var jsonArgs NGramsReqArgs
 	err := json.NewDecoder(req.Body).Decode(&jsonArgs)
 	if err == io.EOF {
 		err = nil
