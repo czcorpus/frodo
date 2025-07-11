@@ -22,10 +22,12 @@ import (
 	"frodo/kontext"
 	"frodo/liveattrs"
 	"frodo/liveattrs/db"
+	_ "frodo/liveattrs/laconf"
 	"net/http"
 
 	"github.com/czcorpus/cnc-gokit/uniresp"
 	vteCnf "github.com/czcorpus/vert-tagextract/v3/cnf"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
