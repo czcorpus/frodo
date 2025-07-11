@@ -59,6 +59,7 @@ help:
 	@echo "Available targets:"
 	@echo "  all           - Run tests and build both binaries (default)"
 	@echo "  build         - Build both binaries"
+	@echo "  devbuild      - Build both binaries without Swagger docs (faster)"
 	@echo "  server        - Build server binary"
 	@echo "  dictbuilder   - Build dictbuilder binary"
 	@echo "  test          - Run tests"
