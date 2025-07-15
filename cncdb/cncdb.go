@@ -40,17 +40,20 @@ type CNCMySQLHandler struct {
 	corpusInfoCache  map[string]*corpus.DBInfo
 }
 
-func (c *CNCMySQLHandler) ifMissingAddBibStructattr(
+func (c *CNCMySQLHandler) ifMissingAddStructattr(
 	transact *sql.Tx,
-	corpus, bibIDStruct, bibIDAttr string,
+	corpus, structName, attrName string,
 ) error {
 	row := transact.QueryRow(
 		"SELECT COUNT(*) FROM corpus_structattr WHERE corpus_name = ? AND structure_name = ? AND name = ?",
-		corpus, bibIDStruct, bibIDAttr,
+		corpus, structName, attrName,
 	)
 	var ans int
 	if err := row.Scan(&ans); err != nil {
-		return fmt.Errorf("failed to determine bibIdAttr existence: %w", err)
+		return fmt.Errorf(
+			"failed to determine struct. attr. existence (name: %s.%s): %w",
+			structName, attrName, err,
+		)
 	}
 	if ans > 0 {
 		return nil
@@ -67,7 +70,7 @@ func (c *CNCMySQLHandler) ifMissingAddBibStructattr(
 
 	if _, err := transact.Exec(
 		"INSERT INTO corpus_structattr (corpus_name, structure_name, name, position) VALUES (?, ?, ?, ?)",
-		corpus, bibIDStruct, bibIDAttr, util.Ternary(maxPos.Valid, 0, maxPos.Int64)+1,
+		corpus, structName, attrName, util.Ternary(maxPos.Valid, 0, maxPos.Int64)+1,
 	); err != nil {
 		return fmt.Errorf("failed to insert corpus_structattr: %w", err)
 	}
@@ -144,7 +147,9 @@ func (c *CNCMySQLHandler) ifMissingAddTagPosattr(
 	return nil
 }
 
-func (c *CNCMySQLHandler) IfMissingAddCorpusMetadata(
+// IfMissingAddCorpusBibMetadata handles mostly missing bib id attr and tag
+// information in case it is not defined for a corpus.
+func (c *CNCMySQLHandler) IfMissingAddCorpusBibMetadata(
 	transact *sql.Tx,
 	corpus, bibIDStruct, bibIDAttr, tagAttr string,
 	tagsetName common.SupportedTagset,
@@ -157,8 +162,8 @@ func (c *CNCMySQLHandler) IfMissingAddCorpusMetadata(
 	if err := row.Scan(&ans); err != nil {
 		return fmt.Errorf("failed to determine bibIdStruct existence: %w", err)
 	}
-	if ans > 0 {
-		if err := c.ifMissingAddBibStructattr(transact, corpus, bibIDStruct, bibIDAttr); err != nil {
+	if ans > 0 { // bib id structure exists
+		if err := c.ifMissingAddStructattr(transact, corpus, bibIDStruct, bibIDAttr); err != nil {
 			return err
 		}
 		return nil
@@ -180,12 +185,10 @@ func (c *CNCMySQLHandler) IfMissingAddCorpusMetadata(
 	if err != nil {
 		return fmt.Errorf("failed to insert corpus_structure: %w", err)
 	}
-	if err := c.ifMissingAddBibStructattr(transact, corpus, bibIDStruct, bibIDAttr); err != nil {
+	if err := c.ifMissingAddStructattr(transact, corpus, bibIDStruct, bibIDAttr); err != nil {
 		return err
 	}
-	if err := c.ifMissingAddCorpusTagset(transact, corpus, tagAttr, tagsetName); err != nil {
-		return err
-	}
+
 	return nil
 }
 
@@ -197,8 +200,13 @@ func (c *CNCMySQLHandler) SetLiveAttrs(
 	if bibIDAttr != "" && bibIDStruct == "" || bibIDAttr == "" && bibIDStruct != "" {
 		return fmt.Errorf("SetLiveAttrs requires either both bibIDStruct, bibIDAttr empty or defined")
 	}
-	if err := c.IfMissingAddCorpusMetadata(
-		transact, corpus, bibIDStruct, bibIDAttr, tagAttr, tagsetName); err != nil {
+	if bibIDAttr != "" && bibIDStruct != "" {
+		if err := c.IfMissingAddCorpusBibMetadata(
+			transact, corpus, bibIDStruct, bibIDAttr, tagAttr, tagsetName); err != nil {
+			return err
+		}
+	}
+	if err := c.ifMissingAddCorpusTagset(transact, corpus, tagAttr, tagsetName); err != nil {
 		return err
 	}
 
