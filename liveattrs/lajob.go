@@ -17,6 +17,7 @@
 package liveattrs
 
 import (
+	"frodo/corpus"
 	"frodo/jobs"
 	"time"
 
@@ -28,9 +29,11 @@ const (
 )
 
 type JobInfoArgs struct {
-	Append           bool           `json:"append"`
-	VteConf          vteCnf.VTEConf `json:"vteConf"`
-	NoCorpusDBUpdate bool           `json:"noCorpusDbUpdate"`
+	Append           bool                   `json:"append"`
+	VteConf          vteCnf.VTEConf         `json:"vteConf"`
+	NoCorpusDBUpdate bool                   `json:"noCorpusDbUpdate"`
+	TagsetAttr       string                 `json:"tagsetAttr"`
+	TagsetName       corpus.SupportedTagset `json:"tagsetName"`
 }
 
 func (jargs JobInfoArgs) WithoutPasswords() JobInfoArgs {

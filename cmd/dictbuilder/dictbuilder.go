@@ -29,7 +29,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"frodo/cnf"
-	"frodo/common"
+	"frodo/corpus"
 	"frodo/db/mysql"
 	dictActions "frodo/dictionary/actions"
 	"frodo/liveattrs/laconf"
@@ -145,7 +145,7 @@ func run(configFilePath string) {
 	ngramsPath := fmt.Sprintf("dictionary/%s/ngrams", config.TempCorpname)
 	ngramsParams := fmt.Sprintf("append=0&ngramSize=%d", config.NGramSize)
 	ngramsArgs := dictActions.NGramsReqArgs{
-		PosTagset:             common.TagsetCSCNC2020,
+		PosTagset:             corpus.TagsetCSCNC2020,
 		UsePartitionedTable:   false,
 		MinFreq:               1,
 		SkipGroupedNameSearch: true, // required so the ngrams job don't search for the corpus in the database

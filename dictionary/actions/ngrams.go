@@ -20,7 +20,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"frodo/common"
+	"frodo/corpus"
 	"frodo/db/mysql"
 	"frodo/liveattrs/db/freqdb"
 	"frodo/liveattrs/laconf"
@@ -36,8 +36,8 @@ import (
 )
 
 type NGramsReqArgs struct {
-	ColMapping            *freqdb.QSAttributes   `json:"colMapping,omitempty"`
-	PosTagset             common.SupportedTagset `json:"posTagset"`
+	ColMapping            *corpus.QSAttributes   `json:"colMapping,omitempty"`
+	PosTagset             corpus.SupportedTagset `json:"posTagset"`
 	UsePartitionedTable   bool                   `json:"usePartitionedTable"`
 	MinFreq               int                    `json:"minFreq"`
 	SkipGroupedNameSearch bool                   `json:"skipGroupedNameSearch"`
@@ -115,12 +115,12 @@ func (a *Actions) GenerateNgrams(ctx *gin.Context) {
 		return
 	}
 
-	var tagset common.SupportedTagset
+	var tagset corpus.SupportedTagset
 
 	if args.ColMapping == nil {
 
 		if len(laConf.Ngrams.VertColumns) > 0 {
-			args.ColMapping = &freqdb.QSAttributes{}
+			args.ColMapping = &corpus.QSAttributes{}
 			for _, v := range laConf.Ngrams.VertColumns {
 				switch v.Role {
 				case "word":
@@ -141,11 +141,11 @@ func (a *Actions) GenerateNgrams(ctx *gin.Context) {
 
 			regPath := filepath.Join(a.corpConf.RegistryDirPaths[0], corpusID) // TODO the [0]
 
-			var corpTagsets []common.SupportedTagset
+			var corpTagsets []corpus.SupportedTagset
 			var err error
 
 			if args.PosTagset != "" {
-				corpTagsets = []common.SupportedTagset{args.PosTagset}
+				corpTagsets = []corpus.SupportedTagset{args.PosTagset}
 
 			} else {
 				corpTagsets, err = a.cncDB.GetCorpusTagsets(corpusID)
@@ -154,9 +154,9 @@ func (a *Actions) GenerateNgrams(ctx *gin.Context) {
 					return
 				}
 			}
-			tagset = common.GetFirstSupportedTagset(corpTagsets)
+			tagset = corpus.GetFirstSupportedTagset(corpTagsets)
 			if tagset == "" {
-				avail := strutil.JoinAny(corpTagsets, func(v common.SupportedTagset) string { return v.String() }, ", ")
+				avail := strutil.JoinAny(corpTagsets, func(v corpus.SupportedTagset) string { return v.String() }, ", ")
 				uniresp.RespondWithErrorJSON(
 					ctx, fmt.Errorf(
 						"cannot find a suitable default tagset for %s (found: %s)",
@@ -166,7 +166,7 @@ func (a *Actions) GenerateNgrams(ctx *gin.Context) {
 				)
 				return
 			}
-			attrMapping, err := common.InferQSAttrMapping(regPath, tagset)
+			attrMapping, err := corpus.InferQSAttrMapping(regPath, tagset)
 			if err != nil {
 				uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 				return
@@ -188,8 +188,8 @@ func (a *Actions) GenerateNgrams(ctx *gin.Context) {
 	// TODO !!! we probably do not need the ApplyPosProperties at all,
 	// because the transformation is performed earlier in the liveattrs part
 	// ([corpus]_colcounts table)
-	posFn, err := common.ApplyPosProperties(&laConf.Ngrams, args.ColMapping.Tag, tagset)
-	if err == common.ErrorPosNotDefined {
+	posFn, err := corpus.ApplyPosProperties(&laConf.Ngrams, args.ColMapping.Tag, tagset)
+	if err == corpus.ErrorPosNotDefined {
 		uniresp.RespondWithErrorJSON(ctx, err, http.StatusUnprocessableEntity)
 		return
 

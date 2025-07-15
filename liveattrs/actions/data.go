@@ -145,6 +145,8 @@ func (a *Actions) Create(ctx *gin.Context) {
 			VteConf:          runtimeConf,
 			Append:           append == "1",
 			NoCorpusDBUpdate: noCorpusDbUpdate == "1",
+			TagsetAttr:       jsonArgs.GetTagsetAttr(),
+			TagsetName:       jsonArgs.GetTagsetName(),
 		},
 	}
 	a.generateData(status)

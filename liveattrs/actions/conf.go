@@ -19,7 +19,6 @@ package actions
 import (
 	"encoding/json"
 	"fmt"
-	"frodo/common"
 	"frodo/corpus"
 	"frodo/liveattrs/laconf"
 	"io"
@@ -30,6 +29,7 @@ import (
 	vteCnf "github.com/czcorpus/vert-tagextract/v3/cnf"
 	"github.com/czcorpus/vert-tagextract/v3/db"
 	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog/log"
 )
 
 func (a *Actions) getPatchArgs(req *http.Request) (*laconf.PatchArgs, error) {
@@ -37,6 +37,16 @@ func (a *Actions) getPatchArgs(req *http.Request) (*laconf.PatchArgs, error) {
 	err := json.NewDecoder(req.Body).Decode(&jsonArgs)
 	if err == io.EOF {
 		err = nil
+	}
+	if jsonArgs.GetTagsetAttr() == "" {
+		ta := "tag"
+		log.Warn().Str("value", ta).Msg("filling missing value of tagsetAttr in patchArgs")
+		jsonArgs.TagsetAttr = &ta
+	}
+	if jsonArgs.GetTagsetName() == "" {
+		tn := corpus.TagsetCSCNC2020
+		log.Warn().Str("value", tn.String()).Msg("filling missing value of tagsetName in patchArgs")
+		jsonArgs.TagsetName = &tn
 	}
 	return &jsonArgs, err
 }
@@ -210,12 +220,12 @@ func (a *Actions) PatchConfig(ctx *gin.Context) {
 			uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 			return
 		}
-		tagset := common.GetFirstSupportedTagset(corpTagsets)
+		tagset := corpus.GetFirstSupportedTagset(corpTagsets)
 		if tagset == "" {
 			uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 			return
 		}
-		attrMapping, err := common.InferQSAttrMapping(regPath, tagset)
+		attrMapping, err := corpus.InferQSAttrMapping(regPath, tagset)
 		if err != nil {
 			uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 			return
@@ -271,12 +281,12 @@ func (a *Actions) QSDefaults(ctx *gin.Context) {
 	corpusID := ctx.Param("corpusId")
 	regPath := filepath.Join(a.conf.Corp.RegistryDirPaths[0], corpusID)
 	corpTagsets, err := a.cncDB.GetCorpusTagsets(corpusID)
-	tagset := common.GetFirstSupportedTagset(corpTagsets)
+	tagset := corpus.GetFirstSupportedTagset(corpTagsets)
 	if tagset == "" {
 		uniresp.RespondWithErrorJSON(ctx, fmt.Errorf("no supported tagset"), http.StatusUnprocessableEntity)
 		return
 	}
-	attrMapping, err := common.InferQSAttrMapping(regPath, tagset)
+	attrMapping, err := corpus.InferQSAttrMapping(regPath, tagset)
 	if err != nil {
 		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 		return

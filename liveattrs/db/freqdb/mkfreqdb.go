@@ -26,6 +26,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"frodo/corpus"
 	"frodo/db/mysql"
 	"frodo/jobs"
 	"frodo/liveattrs/db"
@@ -58,7 +59,7 @@ type NgramFreqGenerator struct {
 	ngramSize            int
 	posFn                *modders.StringTransformerChain
 	jobActions           *jobs.Actions
-	qsaAttrs             QSAttributes
+	qsaAttrs             corpus.QSAttributes
 	minFreq              int
 }
 
@@ -677,7 +678,7 @@ func NewNgramFreqGenerator(
 	appendExisting bool,
 	ngramSize int,
 	posFn *modders.StringTransformerChain,
-	qsaAttrs QSAttributes,
+	qsaAttrs corpus.QSAttributes,
 	minFreq int,
 ) *NgramFreqGenerator {
 	return &NgramFreqGenerator{

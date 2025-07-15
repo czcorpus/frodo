@@ -17,17 +17,43 @@
 package corpus
 
 import (
+	"fmt"
 	"path/filepath"
 
 	"github.com/czcorpus/cnc-gokit/fs"
 )
 
+type CorpusVariant string
+
+type SupportedTagset string
+
 const (
 	CorpusVariantPrimary CorpusVariant = "primary"
 	CorpusVariantLimited CorpusVariant = "omezeni"
+
+	TagsetCSCNC2000SPK SupportedTagset = "cs_cnc2000_spk"
+	TagsetCSCNC2000    SupportedTagset = "cs_cnc2000"
+	TagsetCSCNC2020    SupportedTagset = "cs_cnc2020"
+	TagsetUD           SupportedTagset = "ud"
 )
 
-type CorpusVariant string
+// Validate tests whether the value is one of known types.
+// Please note that the empty value is also considered OK
+// (otherwise we wouldn't have a valid zero value)
+func (st SupportedTagset) Validate() error {
+	if st == TagsetCSCNC2000SPK ||
+		st == TagsetCSCNC2000 ||
+		st == TagsetCSCNC2020 ||
+		st == TagsetUD ||
+		st == "" {
+		return nil
+	}
+	return fmt.Errorf("invalid tagset type: %s", st)
+}
+
+func (st SupportedTagset) String() string {
+	return string(st)
+}
 
 func (cv CorpusVariant) SubDir() string {
 	if cv == "primary" {
