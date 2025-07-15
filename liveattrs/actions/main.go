@@ -22,7 +22,6 @@ import (
 	"errors"
 	"fmt"
 	"frodo/cncdb"
-	"frodo/common"
 	"frodo/corpus"
 	"frodo/db/mysql"
 	"frodo/general"
@@ -271,8 +270,8 @@ func (a *Actions) generateData(initialStatus *liveattrs.LiveAttrsJobInfo) {
 					jobStatus.CorpusID,
 					bibIDStruct,
 					bibIDAttr,
-					"tag",                  // TODO !!! hardcoded 'tag' (even if it should work in 99.9% of cases)
-					common.TagsetCSCNC2020, // TODO !!! hardcoded tagset
+					jobStatus.Args.TagsetAttr,
+					jobStatus.Args.TagsetName,
 				)
 				if err != nil {
 					updateJobChan <- jobStatus.WithError(err)

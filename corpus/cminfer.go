@@ -14,46 +14,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package common
+package corpus
 
 import (
 	"fmt"
-	"frodo/liveattrs/db/freqdb"
 	"os"
 	"path/filepath"
 
 	"github.com/czcorpus/rexplorer/parser"
 )
 
-type SupportedTagset string
-
-// Validate tests whether the value is one of known types.
-// Please note that the empty value is also considered OK
-// (otherwise we wouldn't have a valid zero value)
-func (st SupportedTagset) Validate() error {
-	if st == TagsetCSCNC2000SPK ||
-		st == TagsetCSCNC2000 ||
-		st == TagsetCSCNC2020 ||
-		st == TagsetUD ||
-		st == "" {
-		return nil
-	}
-	return fmt.Errorf("invalid tagset type: %s", st)
-}
-
-func (st SupportedTagset) String() string {
-	return string(st)
-}
-
-const (
-	TagsetCSCNC2000SPK SupportedTagset = "cs_cnc2000_spk"
-	TagsetCSCNC2000    SupportedTagset = "cs_cnc2000"
-	TagsetCSCNC2020    SupportedTagset = "cs_cnc2020"
-	TagsetUD           SupportedTagset = "ud"
-)
-
-func InferQSAttrMapping(regPath string, tagset SupportedTagset) (freqdb.QSAttributes, error) {
-	ans := freqdb.QSAttributes{
+func InferQSAttrMapping(regPath string, tagset SupportedTagset) (QSAttributes, error) {
+	ans := QSAttributes{
 		Word:     -1,
 		Sublemma: -1,
 		Lemma:    -1,
@@ -72,15 +44,15 @@ func InferQSAttrMapping(regPath string, tagset SupportedTagset) (freqdb.QSAttrib
 	for _, attr := range doc.PosAttrs {
 		if attr.GetProperty("DYNAMIC") == "" {
 			switch attr.Name {
-			case freqdb.AttrWord:
+			case AttrWord:
 				ans.Word = i
-			case freqdb.AttrSublemma:
+			case AttrSublemma:
 				ans.Sublemma = i
-			case freqdb.AttrLemma:
+			case AttrLemma:
 				ans.Lemma = i
-			case freqdb.AttrTag:
+			case AttrTag:
 				ans.Tag = i
-			case freqdb.AttrPos:
+			case AttrPos:
 				ans.Pos = i
 			}
 			i++

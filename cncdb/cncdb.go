@@ -20,7 +20,6 @@ package cncdb
 import (
 	"database/sql"
 	"fmt"
-	"frodo/common"
 	"frodo/corpus"
 	"time"
 
@@ -80,7 +79,7 @@ func (c *CNCMySQLHandler) ifMissingAddStructattr(
 func (c *CNCMySQLHandler) ifMissingAddCorpusTagset(
 	transact *sql.Tx,
 	corpus, tagAttr string,
-	tagsetName common.SupportedTagset,
+	tagsetName corpus.SupportedTagset,
 ) error {
 	if err := c.ifMissingAddTagPosattr(transact, corpus, tagAttr); err != nil {
 		return err
@@ -152,7 +151,7 @@ func (c *CNCMySQLHandler) ifMissingAddTagPosattr(
 func (c *CNCMySQLHandler) IfMissingAddCorpusBibMetadata(
 	transact *sql.Tx,
 	corpus, bibIDStruct, bibIDAttr, tagAttr string,
-	tagsetName common.SupportedTagset,
+	tagsetName corpus.SupportedTagset,
 ) error {
 	row := transact.QueryRow(
 		"SELECT COUNT(*) FROM corpus_structure WHERE corpus_name = ? AND name = ?",
@@ -195,7 +194,7 @@ func (c *CNCMySQLHandler) IfMissingAddCorpusBibMetadata(
 func (c *CNCMySQLHandler) SetLiveAttrs(
 	transact *sql.Tx,
 	corpus, bibIDStruct, bibIDAttr, tagAttr string,
-	tagsetName common.SupportedTagset,
+	tagsetName corpus.SupportedTagset,
 ) error {
 	if bibIDAttr != "" && bibIDStruct == "" || bibIDAttr == "" && bibIDStruct != "" {
 		return fmt.Errorf("SetLiveAttrs requires either both bibIDStruct, bibIDAttr empty or defined")
@@ -298,7 +297,7 @@ func (c *CNCMySQLHandler) LoadInfo(corpusID string) (*corpus.DBInfo, error) {
 
 }
 
-func (c *CNCMySQLHandler) GetCorpusTagsets(corpusID string) ([]common.SupportedTagset, error) {
+func (c *CNCMySQLHandler) GetCorpusTagsets(corpusID string) ([]corpus.SupportedTagset, error) {
 	rows, err := c.conn.Query(
 		"SELECT tagset_name FROM corpus_tagset WHERE corpus_name = ?",
 		corpusID,
@@ -306,14 +305,14 @@ func (c *CNCMySQLHandler) GetCorpusTagsets(corpusID string) ([]common.SupportedT
 	if err != nil {
 		return nil, fmt.Errorf("failed to get corpus tagsets: %w", err)
 	}
-	ans := make([]common.SupportedTagset, 0, 5)
+	ans := make([]corpus.SupportedTagset, 0, 5)
 	var val string
 	for rows.Next() {
 		err := rows.Scan(&val)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get corpus tagsets: %w", err)
 		}
-		ans = append(ans, common.SupportedTagset(val))
+		ans = append(ans, corpus.SupportedTagset(val))
 	}
 	return ans, nil
 }
