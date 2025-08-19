@@ -5,7 +5,7 @@ go 1.23.1
 require (
 	github.com/czcorpus/cnc-gokit v0.13.0
 	github.com/czcorpus/rexplorer v0.0.8
-	github.com/czcorpus/vert-tagextract/v3 v3.4.1
+	github.com/czcorpus/vert-tagextract/v3 v3.4.4
 	github.com/davecgh/go-spew v1.1.1
 	github.com/gin-gonic/gin v1.10.0
 	github.com/go-sql-driver/mysql v1.8.1
@@ -51,7 +51,7 @@ require (
 	github.com/natefinch/lumberjack v2.0.0+incompatible // indirect
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/tomachalek/vertigo/v6 v6.0.1 // indirect
+	github.com/tomachalek/vertigo/v6 v6.1.2 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.2.12 // indirect
 	golang.org/x/arch v0.13.0 // indirect
