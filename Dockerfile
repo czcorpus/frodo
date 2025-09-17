@@ -9,6 +9,6 @@ WORKDIR /opt/frodo
 COPY . .
 RUN git config --global --add safe.directory /opt/frodo \
     && PATH=$PATH:/usr/local/go/bin:/root/go/bin \
-    && make swagger && make build
+    && make build
 
 CMD ["./frodo", "start", "conf.docker.json"]

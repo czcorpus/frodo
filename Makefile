@@ -39,8 +39,8 @@ test:
 swagger:
 	@echo "Generating swagger docs..."
 	@mkdir -p ./docs
-	@go install github.com/swaggo/swag/cmd/swag@latest
-	@swag init --parseDependency -g ./cmd/server/frodo.go --dir ./
+	@go install -v github.com/swaggo/swag/cmd/swag@latest
+	@swag init --parseDependency -g frodo.go --dir ./cmd/server --output ./docs --parseDepth 10
 
 clean:
 	@echo "Cleaning build artifacts..."
