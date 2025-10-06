@@ -27,13 +27,29 @@ import (
 	"io"
 	"net/http"
 	"path/filepath"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/czcorpus/cnc-gokit/strutil"
 	"github.com/czcorpus/cnc-gokit/unireq"
 	"github.com/czcorpus/cnc-gokit/uniresp"
+	"github.com/czcorpus/vert-tagextract/v3/cnf"
 )
+
+func ShowErrorChain(err error) string {
+	// Walk through the entire error chain
+	var ans strings.Builder
+	ans.WriteString("Error chain:\n")
+	current := err
+	level := 0
+	for current != nil {
+		fmt.Fprintf(&ans, "%d: %v\n", level, current)
+		current = errors.Unwrap(current)
+		level++
+	}
+	return ans.String()
+}
 
 type NGramsReqArgs struct {
 	ColMapping            *corpus.QSAttributes   `json:"colMapping,omitempty"`
@@ -85,13 +101,22 @@ func (a *Actions) getNgramArgs(req *http.Request) (NGramsReqArgs, error) {
 // @Router       /dictionary/{corpusId}/ngrams [post]
 func (a *Actions) GenerateNgrams(ctx *gin.Context) {
 	corpusID := ctx.Param("corpusId")
+	aliasOf := ctx.Query("aliasOf")
 	appendMode := ctx.Request.URL.Query().Get("append") == "1"
 	ngramSize, ok := unireq.GetURLIntArgOrFail(ctx, "ngramSize", 1)
 	if !ok {
 		return
 	}
+	var laConf *cnf.VTEConf
+	var err error
+	if aliasOf != "" {
+		laConf, err = a.laConfCache.Get(aliasOf)
+		laConf.Corpus = corpusID
 
-	laConf, err := a.laConfCache.Get(corpusID)
+	} else {
+		laConf, err = a.laConfCache.Get(corpusID)
+	}
+
 	if err == laconf.ErrorNoSuchConfig {
 		uniresp.RespondWithErrorJSON(
 			ctx,
@@ -204,7 +229,7 @@ func (a *Actions) GenerateNgrams(ctx *gin.Context) {
 
 	groupedName := corpusID
 	if !args.SkipGroupedNameSearch {
-		corpusDBInfo, err := a.cncDB.LoadInfo(corpusID)
+		corpusDBInfo, err := a.cncDB.LoadAliasedInfo(corpusID, aliasOf)
 		if err != nil {
 			uniresp.RespondWithErrorJSON(
 				ctx,
@@ -213,6 +238,7 @@ func (a *Actions) GenerateNgrams(ctx *gin.Context) {
 			)
 			return
 		}
+		corpusDBInfo.Name = corpusID
 		groupedName = corpusDBInfo.GroupedName()
 	}
 

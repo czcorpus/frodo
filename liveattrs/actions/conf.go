@@ -57,15 +57,25 @@ func (a *Actions) getPatchArgs(req *http.Request) (*laconf.PatchArgs, error) {
 // (where it expects JSON version of liveattrsJsonArgs).
 func (a *Actions) createConf(
 	corpusID string,
+	aliasOf string,
 	jsonArgs *laconf.PatchArgs,
 ) (*vteCnf.VTEConf, error) {
-	corpusInfo, err := corpus.GetCorpusInfo(corpusID, a.conf.Corp, false)
+	srcCorpusID := corpusID
+	if aliasOf != "" {
+		srcCorpusID = aliasOf
+	}
+	fmt.Println("====== createconf: ", srcCorpusID, corpusID, aliasOf)
+	corpusInfo, err := corpus.GetCorpusInfo(srcCorpusID, a.conf.Corp, false)
 	if err != nil {
 		return nil, err
 	}
-	corpusDBInfo, err := a.cncDB.LoadInfo(corpusID)
+	corpusDBInfo, err := a.cncDB.LoadInfo(srcCorpusID)
 	if err != nil {
 		return nil, err
+	}
+
+	if aliasOf != "" {
+		corpusInfo.ID = corpusID
 	}
 
 	conf, err := laconf.Create(
@@ -131,6 +141,7 @@ func (a *Actions) ViewConf(ctx *gin.Context) {
 // @Router       /liveAttributes/{corpusId}/conf [put]
 func (a *Actions) CreateConf(ctx *gin.Context) {
 	corpusID := ctx.Param("corpusId")
+	aliasOf := ctx.Query("aliasOf")
 	baseErrTpl := "failed to create liveattrs config for %s: %w"
 	jsonArgs, err := a.getPatchArgs(ctx.Request)
 	if err != nil {
@@ -140,7 +151,7 @@ func (a *Actions) CreateConf(ctx *gin.Context) {
 			http.StatusBadRequest,
 		)
 	}
-	newConf, err := a.createConf(corpusID, jsonArgs)
+	newConf, err := a.createConf(corpusID, aliasOf, jsonArgs)
 	if err == ErrorMissingVertical {
 		uniresp.WriteJSONErrorResponse(ctx.Writer, uniresp.NewActionError(baseErrTpl, corpusID, err), http.StatusConflict)
 		return

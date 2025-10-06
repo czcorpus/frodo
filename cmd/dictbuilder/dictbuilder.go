@@ -33,6 +33,13 @@ import (
 	"frodo/db/mysql"
 	dictActions "frodo/dictionary/actions"
 	"frodo/liveattrs/laconf"
+
+	vteCnf "github.com/czcorpus/vert-tagextract/v3/cnf"
+)
+
+const (
+	cncDefaultTemplateVerticalDir = "/cnk/common/korpus/vertikaly/monitora"
+	cncDefaultTemplateCorpusName  = "my_corpus"
 )
 
 var (
@@ -128,22 +135,25 @@ func run(configFilePath string) {
 		vertDate := now.AddDate(0, 0, -i)
 		verts = append(verts, path.Join(config.VerticalDir, fmt.Sprintf("%s.vrt", vertDate.Format("2006-01-02"))))
 	}
-
 	liveattrsPath := fmt.Sprintf("liveAttributes/%s/data", config.TempCorpname)
-	liveattrsParams := "noCorpusDbUpdate=1" // required so the liveattrs job don't search for the corpus in the database
+	liveattrsParams := "aliasOf=" + config.Corpname // required so the liveattrs job don't search for the corpus in the database
 	liveAttrsArgs := laconf.PatchArgs{
 		VerticalFiles: verts,
+		Ngrams:        &vteCnf.NgramConf{},
 	}
 
-	log.Info().Msg("Running live attributes job")
-	if err := doJob(config.API.BaseURL, liveattrsPath, liveattrsParams, liveAttrsArgs); err != nil {
-		log.Error().Err(err).Msg("Error running live attributes job")
-		return
+	for i := 1; i <= config.NGramSize; i++ {
+		log.Info().Msgf("Running live attributes job with ngrams of size %d", i)
+		liveAttrsArgs.Ngrams.NgramSize = i
+		if err := doJob(config.API.BaseURL, liveattrsPath, liveattrsParams, liveAttrsArgs); err != nil {
+			log.Error().Err(err).Msg("Error running live attributes job")
+			return
+		}
 	}
 
 	// Run ngrams job
 	ngramsPath := fmt.Sprintf("dictionary/%s/ngrams", config.TempCorpname)
-	ngramsParams := fmt.Sprintf("append=0&ngramSize=%d", config.NGramSize)
+	ngramsParams := fmt.Sprintf("append=0&ngramSize=%d&aliasOf=%s", config.NGramSize, config.Corpname)
 	ngramsArgs := dictActions.NGramsReqArgs{
 		PosTagset:             corpus.TagsetCSCNC2020,
 		UsePartitionedTable:   false,
@@ -176,17 +186,15 @@ func run(configFilePath string) {
 func generateConf(serverConfPath string, corpname string) {
 	conf := cnf.LoadConfig(serverConfPath)
 	var mkdirConf DictbuilderConfig
+	logConf := &conf.Logging
+	logConf.Level = conf.Logging.Level
 	mkdirConf.Database = conf.LiveAttrs.DB
-	mkdirConf.API = struct {
-		BaseURL string "json:\"baseUrl\""
-	}{
-		BaseURL: fmt.Sprintf("http://%s:%d", conf.ListenAddress, conf.ListenPort),
-	}
+	mkdirConf.API = apiConf{fmt.Sprintf("http://%s:%d", conf.ListenAddress, conf.ListenPort)}
 	mkdirConf.NumOfLookbackDays = 365
 	mkdirConf.NGramSize = 1
-	mkdirConf.VerticalDir = "/cnk/common/korpus/vertikaly/monitora"
+	mkdirConf.VerticalDir = cncDefaultTemplateCorpusName
 	if corpname == "" {
-		corpname = "my_corpus"
+		corpname = cncDefaultTemplateCorpusName
 	}
 	mkdirConf.Corpname = corpname
 	mkdirConf.TempCorpname = "tmp_" + corpname

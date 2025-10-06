@@ -124,10 +124,17 @@ func (a *Actions) applyPatchArgs(
 				return fmt.Errorf("invalid n-gram size: %d", jsonArgs.Ngrams.NgramSize)
 			}
 			targetConf.Ngrams = *jsonArgs.Ngrams
-
-		} else if jsonArgs.Ngrams.NgramSize > 0 {
-			return fmt.Errorf("missing columns to extract n-grams from")
 		}
+		if jsonArgs.Ngrams.NgramSize > 0 {
+			targetConf.Ngrams.NgramSize = jsonArgs.Ngrams.NgramSize
+		}
+		if jsonArgs.Ngrams.CalcARF {
+			jsonArgs.Ngrams.CalcARF = true
+		}
+	}
+
+	if targetConf.Ngrams.NgramSize > 0 && len(targetConf.Ngrams.VertColumns) == 0 {
+		return fmt.Errorf("missing columns to extract n-grams from")
 	}
 
 	if jsonArgs.VerticalFiles != nil {

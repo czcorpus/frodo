@@ -54,21 +54,28 @@ import (
 // @Param 		 patchArgs body laconf.PatchArgs true "The input todo struct"
 // @Param 		 reconfigure query int false "Ignore the stored liveattrs config (if any) and generate a new one based on corpus properties and provided PatchArgs. The resulting new config will be stored replacing the previous one." default(1)
 // @Param 		 append query int false "Append mode" default(0)
-// @Param 		 noCorpusDbUpdate query int false "Do not update corpora database. This e.g. allows for working with special/testing/etc. corpora without proper entry in corpora db. " default(0)
 // @Success      200 {object} any
 // @Router       /liveAttributes/{corpusId}/data [post]
 func (a *Actions) Create(ctx *gin.Context) {
 	corpusID := ctx.Param("corpusId")
+	aliasOf := ctx.Query("aliasOf")
 	baseErrTpl := "failed to generate liveattrs for %s: %w"
 	reconfigure := ctx.Request.URL.Query().Get("reconfigure") == "1"
 
 	var err error
 	var conf *vteCnf.VTEConf
 	if !reconfigure {
-		conf, err = a.laConfCache.Get(corpusID)
+		if aliasOf != "" {
+			conf, err = a.laConfCache.Get(aliasOf)
+			conf.Corpus = corpusID
+
+		} else {
+			conf, err = a.laConfCache.Get(corpusID)
+		}
 	}
 
 	jsonArgs, err := a.getPatchArgs(ctx.Request)
+
 	if err != nil {
 		uniresp.RespondWithErrorJSON(
 			ctx,
@@ -90,7 +97,7 @@ func (a *Actions) Create(ctx *gin.Context) {
 	if conf == nil {
 		var newConf *vteCnf.VTEConf
 		var err error
-		newConf, err = a.createConf(corpusID, jsonArgs)
+		newConf, err = a.createConf(corpusID, aliasOf, jsonArgs)
 		if err != nil && err != ErrorMissingVertical {
 			uniresp.WriteJSONErrorResponse(
 				ctx.Writer, uniresp.NewActionError(baseErrTpl, corpusID, err), http.StatusBadRequest)
@@ -111,7 +118,10 @@ func (a *Actions) Create(ctx *gin.Context) {
 	}
 
 	runtimeConf := *conf
-	a.applyPatchArgs(&runtimeConf, jsonArgs)
+	if err := a.applyPatchArgs(&runtimeConf, jsonArgs); err != nil {
+		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
+		return
+	}
 	if !runtimeConf.HasConfiguredVertical() {
 		uniresp.WriteJSONErrorResponse(
 			ctx.Writer, uniresp.NewActionError(baseErrTpl, corpusID, err), http.StatusConflict)
@@ -136,7 +146,6 @@ func (a *Actions) Create(ctx *gin.Context) {
 	}
 
 	append := ctx.Request.URL.Query().Get("append")
-	noCorpusDbUpdate := ctx.Request.URL.Query().Get("noCorpusDbUpdate")
 	status := &liveattrs.LiveAttrsJobInfo{
 		ID:       jobID.String(),
 		CorpusID: corpusID,
@@ -144,7 +153,7 @@ func (a *Actions) Create(ctx *gin.Context) {
 		Args: liveattrs.JobInfoArgs{
 			VteConf:          runtimeConf,
 			Append:           append == "1",
-			NoCorpusDBUpdate: noCorpusDbUpdate == "1",
+			NoCorpusDBUpdate: aliasOf != "",
 			TagsetAttr:       jsonArgs.GetTagsetAttr(),
 			TagsetName:       jsonArgs.GetTagsetName(),
 		},

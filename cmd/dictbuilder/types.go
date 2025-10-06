@@ -21,17 +21,19 @@ import (
 	vtedb "github.com/czcorpus/vert-tagextract/v3/db"
 )
 
+type apiConf struct {
+	BaseURL string `json:"baseUrl"`
+}
+
 type DictbuilderConfig struct {
-	Logging  logging.LoggingConf `json:"logging"`
-	Database *vtedb.Conf         `json:"database"`
-	API      struct {
-		BaseURL string `json:"baseUrl"`
-	} `json:"api"`
-	NumOfLookbackDays int    `json:"numOfLookbackDays"`
-	VerticalDir       string `json:"verticalDir"`
-	Corpname          string `json:"corpname"`
-	TempCorpname      string `json:"tmpCorpname"`
-	NGramSize         int    `json:"ngramSize"`
+	Logging           logging.LoggingConf `json:"logging"`
+	Database          *vtedb.Conf         `json:"database"`
+	API               apiConf             `json:"api"`
+	NumOfLookbackDays int                 `json:"numOfLookbackDays"`
+	VerticalDir       string              `json:"verticalDir"`
+	Corpname          string              `json:"corpname"`
+	TempCorpname      string              `json:"tmpCorpname"`
+	NGramSize         int                 `json:"ngramSize"`
 }
 
 type JobStatus struct {
