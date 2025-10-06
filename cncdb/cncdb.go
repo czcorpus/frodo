@@ -242,6 +242,26 @@ func (c *CNCMySQLHandler) UnsetLiveAttrs(transact *sql.Tx, corpus string) error 
 	return err
 }
 
+// LoadAliasedInfo loads info of corpus aliasOf as if it were corpus corpusID - i.e. the
+// data will be from aliasOf except for the name.
+// It is ok to provide an empty aliasOf in which case, the behavior will be just like
+// when calling LoadInfo
+func (c *CNCMySQLHandler) LoadAliasedInfo(corpusID, aliasOf string) (*corpus.DBInfo, error) {
+	var ans *corpus.DBInfo
+	var err error
+	if aliasOf != "" {
+		ans, err = c.LoadInfo(aliasOf)
+		if err != nil {
+			return nil, err
+		}
+		ans.Name = corpusID
+		return ans, nil
+
+	} else {
+		return c.LoadInfo(corpusID)
+	}
+}
+
 func (c *CNCMySQLHandler) LoadInfo(corpusID string) (*corpus.DBInfo, error) {
 	srch, ok := c.corpusInfoCache[corpusID]
 	if ok {

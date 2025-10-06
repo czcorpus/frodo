@@ -57,7 +57,7 @@ func (info *DBInfo) GroupedName() string {
 func GetRegistry(regPath string) (*parser.Document, error) {
 	regBytes, err := os.ReadFile(regPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed read registry file %s: %w", regPath, err)
+		return nil, fmt.Errorf("failed reading registry file %s: %w", regPath, err)
 	}
 	doc, err := parser.ParseRegistryBytes(filepath.Base(regPath), regBytes)
 	if err != nil {
@@ -128,7 +128,6 @@ func GetCorpusInfo(corpusID string, setup *CorporaSetup, tryLimited bool) (*Info
 	ans.IndexedData = IndexedData{}
 	ans.RegistryConf = RegistryConf{Paths: make([]FileMappedValue, 0, 10)}
 	ans.RegistryConf.SubcorpAttrs = make(map[string][]string)
-
 	corpReg1 := setup.GetFirstValidRegistry(corpusID, CorpusVariantPrimary.SubDir())
 	value, err := bindValueToPath(corpReg1, corpReg1)
 	if err != nil {
@@ -178,10 +177,7 @@ func GetCorpusInfo(corpusID string, setup *CorporaSetup, tryLimited bool) (*Info
 	unparsedStructs := corp1.GetProperty("STRUCTLIST").String()
 	if unparsedStructs != "" {
 		structs := strings.Split(unparsedStructs, ",")
-		ans.IndexedStructs = make([]string, len(structs))
-		for i, st := range structs {
-			ans.IndexedStructs[i] = st
-		}
+		copy(ans.IndexedStructs, structs)
 	}
 
 	// try registry's VERTICAL
