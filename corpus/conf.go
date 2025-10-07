@@ -18,42 +18,23 @@ package corpus
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 
+	"github.com/bytedance/sonic"
 	"github.com/czcorpus/cnc-gokit/fs"
+	"github.com/czcorpus/mquery-common/corp"
+	"github.com/rs/zerolog/log"
 )
-
-type CorpusVariant string
-
-type SupportedTagset string
 
 const (
 	CorpusVariantPrimary CorpusVariant = "primary"
 	CorpusVariantLimited CorpusVariant = "omezeni"
-
-	TagsetCSCNC2000SPK SupportedTagset = "cs_cnc2000_spk"
-	TagsetCSCNC2000    SupportedTagset = "cs_cnc2000"
-	TagsetCSCNC2020    SupportedTagset = "cs_cnc2020"
-	TagsetUD           SupportedTagset = "ud"
 )
 
-// Validate tests whether the value is one of known types.
-// Please note that the empty value is also considered OK
-// (otherwise we wouldn't have a valid zero value)
-func (st SupportedTagset) Validate() error {
-	if st == TagsetCSCNC2000SPK ||
-		st == TagsetCSCNC2000 ||
-		st == TagsetCSCNC2020 ||
-		st == TagsetUD ||
-		st == "" {
-		return nil
-	}
-	return fmt.Errorf("invalid tagset type: %s", st)
-}
-
-func (st SupportedTagset) String() string {
-	return string(st)
-}
+type CorpusVariant string
 
 func (cv CorpusVariant) SubDir() string {
 	if cv == "primary" {
@@ -62,24 +43,13 @@ func (cv CorpusVariant) SubDir() string {
 	return string(cv)
 }
 
-// CorporaDataPaths describes three
-// different ways how paths to corpora
-// data are specified:
-// 1) CNC - a global storage path (typically slow but reliable)
-// 2) Kontext - a special fast storage for KonText
-// 3) abstract - a path for data consumers; points to either
-// (1) or (2)
-type CorporaDataPaths struct {
-	Abstract string `json:"abstract"`
-	CNC      string `json:"cnc"`
-	Kontext  string `json:"kontext"`
-}
-
 // CorporaSetup defines Frodo application configuration related
 // to a corpus
 type CorporaSetup struct {
 	RegistryDirPaths []string `json:"registryDirPaths"`
 	RegistryTmpDir   string   `json:"registryTmpDir"`
+	CorporaConfDir   string   `json:"confFilesDir"`
+	corpora          []corp.CorpusSetup
 }
 
 func (cs *CorporaSetup) GetFirstValidRegistry(corpusID, subDir string) string {
@@ -92,6 +62,82 @@ func (cs *CorporaSetup) GetFirstValidRegistry(corpusID, subDir string) string {
 		}
 	}
 	return ""
+}
+
+func (cs *CorporaSetup) Load() error {
+	files, err := os.ReadDir(cs.CorporaConfDir)
+	if err != nil {
+		return fmt.Errorf("failed to load corpora configs: %w", err)
+	}
+	for _, f := range files {
+		confPath := filepath.Join(cs.CorporaConfDir, f.Name())
+		tmp, err := os.ReadFile(confPath)
+		if err != nil {
+			log.Warn().
+				Err(err).
+				Str("file", confPath).
+				Msg("encountered invalid corpus configuration file, skipping")
+			continue
+		}
+		var conf corp.CorpusSetup
+		err = sonic.Unmarshal(tmp, &conf)
+		if err != nil {
+			log.Warn().
+				Err(err).
+				Str("file", confPath).
+				Msg("encountered invalid corpus configuration file, skipping")
+			continue
+		}
+		cs.corpora = append(cs.corpora, conf)
+		log.Info().Str("name", conf.ID).Msg("loaded corpus configuration file")
+	}
+	return nil
+}
+
+func (cs *CorporaSetup) Get(name string) corp.CorpusSetup {
+	for _, v := range cs.corpora {
+		if strings.Contains(v.ID, "*") {
+			ptrn := regexp.MustCompile(strings.ReplaceAll(v.ID, "*", ".*"))
+			if ptrn.MatchString(name) {
+				if v.Variants != nil {
+					variant, ok := v.Variants[name]
+					if ok {
+						// make a copy of CorpusSetup and replace values for specific variant
+						merged := v
+						merged.Variants = nil
+						merged.ID = variant.ID
+						if len(variant.FullName) > 0 {
+							merged.FullName = variant.FullName
+						}
+						if len(variant.Description) > 0 {
+							merged.Description = variant.Description
+						}
+						return merged
+					}
+				}
+			}
+
+		} else if v.ID == name {
+			return v
+		}
+	}
+	return corp.CorpusSetup{}
+}
+
+func (cs *CorporaSetup) GetAllCorpora() []corp.CorpusSetup {
+	ans := make([]corp.CorpusSetup, 0, len(cs.corpora)*3)
+	for _, v := range cs.corpora {
+		if len(v.Variants) > 0 {
+			for _, variant := range v.Variants {
+				item := cs.Get(variant.ID)
+				ans = append(ans, item)
+			}
+
+		} else {
+			ans = append(ans, v)
+		}
+	}
+	return ans
 }
 
 type DatabaseSetup struct {

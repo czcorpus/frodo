@@ -5,7 +5,8 @@ go 1.24.0
 toolchain go1.24.7
 
 require (
-	github.com/czcorpus/cnc-gokit v0.17.0
+	github.com/czcorpus/cnc-gokit v0.19.0
+	github.com/czcorpus/mquery-common v0.6.3
 	github.com/czcorpus/rexplorer v0.0.8
 	github.com/czcorpus/vert-tagextract/v3 v3.4.4
 	github.com/davecgh/go-spew v1.1.1

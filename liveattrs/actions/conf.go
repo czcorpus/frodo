@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 
 	"github.com/czcorpus/cnc-gokit/uniresp"
+	"github.com/czcorpus/mquery-common/corp"
 	vteCnf "github.com/czcorpus/vert-tagextract/v3/cnf"
 	"github.com/czcorpus/vert-tagextract/v3/db"
 	"github.com/gin-gonic/gin"
@@ -44,7 +45,7 @@ func (a *Actions) getPatchArgs(req *http.Request) (*laconf.PatchArgs, error) {
 		jsonArgs.TagsetAttr = &ta
 	}
 	if jsonArgs.GetTagsetName() == "" {
-		tn := corpus.TagsetCSCNC2020
+		tn := corp.TagsetCSCNC2020
 		log.Warn().Str("value", tn.String()).Msg("filling missing value of tagsetName in patchArgs")
 		jsonArgs.TagsetName = &tn
 	}
@@ -69,7 +70,7 @@ func (a *Actions) createConf(
 	if err != nil {
 		return nil, err
 	}
-	corpusDBInfo, err := a.cncDB.LoadInfo(srcCorpusID)
+	corpusDBInfo, err := a.corpusMeta.LoadInfo(srcCorpusID)
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +227,7 @@ func (a *Actions) PatchConfig(ctx *gin.Context) {
 
 	if inferNgramCols {
 		regPath := filepath.Join(a.conf.Corp.RegistryDirPaths[0], corpusID)
-		corpTagsets, err := a.cncDB.GetCorpusTagsets(corpusID)
+		corpTagsets, err := a.corpusMeta.GetCorpusTagsets(corpusID)
 		if err != nil {
 			uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 			return
@@ -291,7 +292,7 @@ func (a *Actions) PatchConfig(ctx *gin.Context) {
 func (a *Actions) QSDefaults(ctx *gin.Context) {
 	corpusID := ctx.Param("corpusId")
 	regPath := filepath.Join(a.conf.Corp.RegistryDirPaths[0], corpusID)
-	corpTagsets, err := a.cncDB.GetCorpusTagsets(corpusID)
+	corpTagsets, err := a.corpusMeta.GetCorpusTagsets(corpusID)
 	tagset := corpus.GetFirstSupportedTagset(corpTagsets)
 	if tagset == "" {
 		uniresp.RespondWithErrorJSON(ctx, fmt.Errorf("no supported tagset"), http.StatusUnprocessableEntity)

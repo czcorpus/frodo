@@ -148,7 +148,7 @@ func (a *Actions) MixSubcorpus(ctx *gin.Context) {
 			ctx.Writer, uniresp.NewActionError(baseErrTpl, args.Corpora[0], err), http.StatusInternalServerError)
 		return
 	}
-	corpusDBInfo, err := a.cncDB.LoadInfo(args.Corpora[0])
+	corpusDBInfo, err := a.corpusMeta.LoadInfo(args.Corpora[0])
 	if err != nil {
 		uniresp.WriteJSONErrorResponse(
 			ctx.Writer, uniresp.NewActionError(baseErrTpl, args.Corpora[0], err), http.StatusInternalServerError)

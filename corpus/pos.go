@@ -19,6 +19,7 @@ package corpus
 import (
 	"errors"
 
+	"github.com/czcorpus/mquery-common/corp"
 	vteCnf "github.com/czcorpus/vert-tagextract/v3/cnf"
 	"github.com/czcorpus/vert-tagextract/v3/ptcount/modders"
 )
@@ -27,7 +28,7 @@ var (
 	ErrorPosNotDefined = errors.New("PoS not defined")
 )
 
-func appendPosModder(prev string, curr SupportedTagset) string {
+func appendPosModder(prev string, curr corp.SupportedTagset) string {
 	if prev == "" {
 		return string(curr)
 	}
@@ -39,7 +40,7 @@ func appendPosModder(prev string, curr SupportedTagset) string {
 // vert-tagexract configuration.
 func posExtractorFactory(
 	currMods string,
-	tagsetName SupportedTagset,
+	tagsetName corp.SupportedTagset,
 ) (*modders.StringTransformerChain, string) {
 	modderSpecif := appendPosModder(currMods, tagsetName)
 	return modders.NewStringTransformerChain(modderSpecif), modderSpecif
@@ -54,7 +55,7 @@ func posExtractorFactory(
 func ApplyPosProperties(
 	conf *vteCnf.NgramConf,
 	posIdx int,
-	posTagset SupportedTagset,
+	posTagset corp.SupportedTagset,
 ) (*modders.StringTransformerChain, error) {
 	for i, col := range conf.VertColumns {
 		if posIdx == col.Idx {
@@ -67,7 +68,7 @@ func ApplyPosProperties(
 	return modders.NewStringTransformerChain(""), ErrorPosNotDefined
 }
 
-func GetFirstSupportedTagset(values []SupportedTagset) SupportedTagset {
+func GetFirstSupportedTagset(values []corp.SupportedTagset) corp.SupportedTagset {
 	for _, v := range values {
 		if v.Validate() == nil {
 			return v

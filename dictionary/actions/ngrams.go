@@ -34,6 +34,7 @@ import (
 	"github.com/czcorpus/cnc-gokit/strutil"
 	"github.com/czcorpus/cnc-gokit/unireq"
 	"github.com/czcorpus/cnc-gokit/uniresp"
+	"github.com/czcorpus/mquery-common/corp"
 	"github.com/czcorpus/vert-tagextract/v3/cnf"
 )
 
@@ -52,11 +53,11 @@ func ShowErrorChain(err error) string {
 }
 
 type NGramsReqArgs struct {
-	ColMapping            *corpus.QSAttributes   `json:"colMapping,omitempty"`
-	PosTagset             corpus.SupportedTagset `json:"posTagset"`
-	UsePartitionedTable   bool                   `json:"usePartitionedTable"`
-	MinFreq               int                    `json:"minFreq"`
-	SkipGroupedNameSearch bool                   `json:"skipGroupedNameSearch"`
+	ColMapping            *corpus.QSAttributes `json:"colMapping,omitempty"`
+	PosTagset             corp.SupportedTagset `json:"posTagset"`
+	UsePartitionedTable   bool                 `json:"usePartitionedTable"`
+	MinFreq               int                  `json:"minFreq"`
+	SkipGroupedNameSearch bool                 `json:"skipGroupedNameSearch"`
 }
 
 func (args NGramsReqArgs) Validate() error {
@@ -140,7 +141,7 @@ func (a *Actions) GenerateNgrams(ctx *gin.Context) {
 		return
 	}
 
-	var tagset corpus.SupportedTagset
+	var tagset corp.SupportedTagset
 
 	if args.ColMapping == nil {
 
@@ -166,14 +167,14 @@ func (a *Actions) GenerateNgrams(ctx *gin.Context) {
 
 			regPath := filepath.Join(a.corpConf.RegistryDirPaths[0], corpusID) // TODO the [0]
 
-			var corpTagsets []corpus.SupportedTagset
+			var corpTagsets []corp.SupportedTagset
 			var err error
 
 			if args.PosTagset != "" {
-				corpTagsets = []corpus.SupportedTagset{args.PosTagset}
+				corpTagsets = []corp.SupportedTagset{args.PosTagset}
 
 			} else {
-				corpTagsets, err = a.cncDB.GetCorpusTagsets(corpusID)
+				corpTagsets, err = a.corpusMeta.GetCorpusTagsets(corpusID)
 				if err != nil {
 					uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 					return
@@ -181,7 +182,7 @@ func (a *Actions) GenerateNgrams(ctx *gin.Context) {
 			}
 			tagset = corpus.GetFirstSupportedTagset(corpTagsets)
 			if tagset == "" {
-				avail := strutil.JoinAny(corpTagsets, func(v corpus.SupportedTagset) string { return v.String() }, ", ")
+				avail := strutil.JoinAny(corpTagsets, func(v corp.SupportedTagset) string { return v.String() }, ", ")
 				uniresp.RespondWithErrorJSON(
 					ctx, fmt.Errorf(
 						"cannot find a suitable default tagset for %s (found: %s)",
@@ -229,7 +230,7 @@ func (a *Actions) GenerateNgrams(ctx *gin.Context) {
 
 	groupedName := corpusID
 	if !args.SkipGroupedNameSearch {
-		corpusDBInfo, err := a.cncDB.LoadAliasedInfo(corpusID, aliasOf)
+		corpusDBInfo, err := a.corpusMeta.LoadAliasedInfo(corpusID, aliasOf)
 		if err != nil {
 			uniresp.RespondWithErrorJSON(
 				ctx,

@@ -45,8 +45,9 @@ type Actions struct {
 
 	laCustomNgramDataDirPath string
 
-	// cncDB is CNC's main database
-	cncDB *cncdb.CNCMySQLHandler
+	corpusMeta cncdb.Provider
+
+	corpusMetaW cncdb.SQLUpdater
 }
 
 // NewActions is the default factory for Actions
@@ -55,7 +56,8 @@ func NewActions(
 	corpConf *corpus.CorporaSetup,
 	jobStopChannel <-chan string,
 	jobActions *jobs.Actions,
-	cncDB *cncdb.CNCMySQLHandler,
+	corpusMeta cncdb.Provider,
+	corpusMetaW cncdb.SQLUpdater,
 	laDB *mysql.Adapter,
 	laCustomNgramDataDirPath string,
 	laConfRegistry *laconf.LiveAttrsBuildConfProvider,
@@ -67,7 +69,8 @@ func NewActions(
 		jobActions:               jobActions,
 		jobStopChannel:           jobStopChannel,
 		laConfCache:              laConfRegistry,
-		cncDB:                    cncDB,
+		corpusMeta:               corpusMeta,
+		corpusMetaW:              corpusMetaW,
 		laDB:                     laDB,
 		laCustomNgramDataDirPath: laCustomNgramDataDirPath,
 	}

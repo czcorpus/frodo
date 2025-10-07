@@ -26,10 +26,10 @@ import (
 	"time"
 
 	"github.com/czcorpus/cnc-gokit/logging"
+	"github.com/czcorpus/mquery-common/corp"
 	"github.com/rs/zerolog/log"
 
 	"frodo/cnf"
-	"frodo/corpus"
 	"frodo/db/mysql"
 	dictActions "frodo/dictionary/actions"
 	"frodo/liveattrs/laconf"
@@ -155,7 +155,7 @@ func run(configFilePath string) {
 	ngramsPath := fmt.Sprintf("dictionary/%s/ngrams", config.TempCorpname)
 	ngramsParams := fmt.Sprintf("append=0&ngramSize=%d&aliasOf=%s", config.NGramSize, config.Corpname)
 	ngramsArgs := dictActions.NGramsReqArgs{
-		PosTagset:             corpus.TagsetCSCNC2020,
+		PosTagset:             corp.TagsetCSCNC2020,
 		UsePartitionedTable:   false,
 		MinFreq:               1,
 		SkipGroupedNameSearch: true, // required so the ngrams job don't search for the corpus in the database
