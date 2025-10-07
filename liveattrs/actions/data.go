@@ -172,7 +172,7 @@ func (a *Actions) Create(ctx *gin.Context) {
 func (a *Actions) Delete(ctx *gin.Context) {
 	corpusID := ctx.Param("corpusId")
 	baseErrTpl := "failed to delete configuration for %s"
-	corpusDBInfo, err := a.cncDB.LoadInfo(corpusID)
+	corpusDBInfo, err := a.corpusMeta.LoadInfo(corpusID)
 	if err != nil {
 		uniresp.WriteJSONErrorResponse(
 			ctx.Writer, uniresp.NewActionError(baseErrTpl, corpusID, err), http.StatusInternalServerError)
@@ -190,13 +190,13 @@ func (a *Actions) Delete(ctx *gin.Context) {
 		tx0.Rollback()
 		return
 	}
-	tx1, err := a.cncDB.StartTx()
+	tx1, err := a.corpusMetaW.StartTx()
 	if err != nil {
 		uniresp.WriteJSONErrorResponse(
 			ctx.Writer, uniresp.NewActionError(baseErrTpl, corpusID, err), http.StatusInternalServerError)
 		return
 	}
-	err = a.cncDB.UnsetLiveAttrs(tx1, corpusID)
+	err = a.corpusMetaW.UnsetLiveAttrs(tx1, corpusID)
 	if err != nil {
 		tx1.Rollback()
 		uniresp.WriteJSONErrorResponse(
@@ -206,7 +206,8 @@ func (a *Actions) Delete(ctx *gin.Context) {
 	// Now we commit tx0 and tx1 deliberately before soft reset below as a failed operation of
 	// cache reset does no permanent damage.
 	// Also please note that the two independent transactions tx0, tx1 here cannot provide
-	// behavior of a single transaction which means the operation may end up in a
+	// behavior of a single transaction (our connections are single db, so we cannot do transactions
+	// across different databases) which means the operation may end up in a
 	// non-consistent state (if tx0 commits and tx1 fails).
 	err = tx0.Commit()
 	if err != nil {

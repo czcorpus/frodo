@@ -18,8 +18,10 @@ github.com/cloudwego/base64x v0.1.5/go.mod h1:0zlkT4Wn5C6NdauXdJRhSKRlJvmclQ1hhJ
 github.com/cloudwego/iasm v0.2.0/go.mod h1:8rXZaNYT2n95jn+zTI1sDr+IgcD2GVs0nlbbQPiEFhY=
 github.com/coreos/go-systemd/v22 v22.5.0/go.mod h1:Y58oyj3AT4RCenI/lSvhwexgC+NSVTIJ3seZv2GcEnc=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
-github.com/czcorpus/cnc-gokit v0.17.0 h1:KyoipuxbsIiYhKeQma7cVu/yGNN0btd/n7Unuh/RdIs=
-github.com/czcorpus/cnc-gokit v0.17.0/go.mod h1:4vHbyf+qV8kHHwvWnPhiccMo5pVGY3tnSSRCP0mr2xc=
+github.com/czcorpus/cnc-gokit v0.19.0 h1:fhhN5Niekn2lY4aVHR3ENNlt5G+9DLGmPIZHYKDrerQ=
+github.com/czcorpus/cnc-gokit v0.19.0/go.mod h1:4vHbyf+qV8kHHwvWnPhiccMo5pVGY3tnSSRCP0mr2xc=
+github.com/czcorpus/mquery-common v0.6.3 h1:TofGFqUW7472vD9QL4tAFvGdKKIBAqcr9RsKyHSOU4Q=
+github.com/czcorpus/mquery-common v0.6.3/go.mod h1:jm+a8TUScDmReS+wJGVQpYU2ZsF1c81eMeZVWRzA9iQ=
 github.com/czcorpus/rexplorer v0.0.8 h1:rxBivMmo10xGlCDaxzH9IeD23YzS8QM5cyTXiEFPllE=
 github.com/czcorpus/rexplorer v0.0.8/go.mod h1:9KwJWUp9tqn5gDjN3sS2jcsaaMWsfi3qPaqN5s9DY9Y=
 github.com/czcorpus/vert-tagextract/v3 v3.4.4 h1:RY8J0SYKO44s6FXMnIUEp/bTPk+9iVs5AG0yvE9igGM=

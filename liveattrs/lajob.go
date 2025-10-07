@@ -17,10 +17,10 @@
 package liveattrs
 
 import (
-	"frodo/corpus"
 	"frodo/jobs"
 	"time"
 
+	"github.com/czcorpus/mquery-common/corp"
 	vteCnf "github.com/czcorpus/vert-tagextract/v3/cnf"
 )
 
@@ -29,11 +29,11 @@ const (
 )
 
 type JobInfoArgs struct {
-	Append           bool                   `json:"append"`
-	VteConf          vteCnf.VTEConf         `json:"vteConf"`
-	NoCorpusDBUpdate bool                   `json:"noCorpusDbUpdate"`
-	TagsetAttr       string                 `json:"tagsetAttr"`
-	TagsetName       corpus.SupportedTagset `json:"tagsetName"`
+	Append           bool                 `json:"append"`
+	VteConf          vteCnf.VTEConf       `json:"vteConf"`
+	NoCorpusDBUpdate bool                 `json:"noCorpusDbUpdate"`
+	TagsetAttr       string               `json:"tagsetAttr"`
+	TagsetName       corp.SupportedTagset `json:"tagsetName"`
 }
 
 func (jargs JobInfoArgs) WithoutPasswords() JobInfoArgs {

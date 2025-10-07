@@ -100,7 +100,7 @@ func (a *Actions) SimilarARFWords(ctx *gin.Context) {
 		return
 	}
 
-	corpusInfo, err := a.cncDB.LoadInfo(corpusID)
+	corpusInfo, err := a.corpusMeta.LoadInfo(corpusID)
 	if err != nil {
 		uniresp.RespondWithErrorJSON(
 			ctx,

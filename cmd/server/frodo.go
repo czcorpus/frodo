@@ -97,6 +97,17 @@ func main() {
 	}
 	conf := cnf.LoadConfig(flag.Arg(1))
 	logging.SetupLogging(conf.Logging)
+	if conf.CNCDB == nil {
+		if err := conf.CorporaSetup.Load(); err != nil {
+			log.Fatal().
+				Err(err).
+				Str("targetDirectory", conf.CorporaSetup.CorporaConfDir).
+				Msg("failed to load corpora configs")
+		}
+
+	} else {
+		log.Info().Msg("CNCDB is configured, corpora info will be loaded from there")
+	}
 	log.Info().Msg("Starting FRODO")
 	cnf.ApplyDefaults(conf)
 
@@ -109,30 +120,43 @@ func main() {
 		stop()
 	}()
 
-	cTableName := "corpora"
-	if conf.CNCDB.OverrideCorporaTableName != "" {
-		log.Warn().Msgf(
-			"Overriding default corpora table name to '%s'", conf.CNCDB.OverrideCorporaTableName)
-		cTableName = conf.CNCDB.OverrideCorporaTableName
+	var corpusMeta cncdb.Provider
+	var corpusMetaW cncdb.SQLUpdater
+	var corpusMetaErr error
+
+	if conf.CNCDB != nil {
+		cTableName := "corpora"
+		if conf.CNCDB.OverrideCorporaTableName != "" {
+			log.Warn().Msgf(
+				"Overriding default corpora table name to '%s'", conf.CNCDB.OverrideCorporaTableName)
+			cTableName = conf.CNCDB.OverrideCorporaTableName
+		}
+		pcTableName := "parallel_corpus"
+		if conf.CNCDB.OverridePCTableName != "" {
+			log.Warn().Msgf(
+				"Overriding default parallel corpora table name to '%s'", conf.CNCDB.OverridePCTableName)
+			pcTableName = conf.CNCDB.OverridePCTableName
+		}
+
+		corpusMetaW, corpusMetaErr = cncdb.NewCNCMySQLHandler(
+			conf.CNCDB.Host,
+			conf.CNCDB.User,
+			conf.CNCDB.Passwd,
+			conf.CNCDB.Name,
+			cTableName,
+			pcTableName,
+		)
+		log.Info().Msgf("using CNC corpus info SQL database: %s@%s", conf.CNCDB.Name, conf.CNCDB.Host)
+
+	} else {
+		corpusMeta = &cncdb.StaticProvider{Corpora: conf.CorporaSetup.GetAllCorpora()}
+		corpusMetaW = &cncdb.NoOpWriter{}
+		log.Info().Msgf("using static corpora info from directory: %s", conf.CorporaSetup.CorporaConfDir)
 	}
-	pcTableName := "parallel_corpus"
-	if conf.CNCDB.OverridePCTableName != "" {
-		log.Warn().Msgf(
-			"Overriding default parallel corpora table name to '%s'", conf.CNCDB.OverridePCTableName)
-		pcTableName = conf.CNCDB.OverridePCTableName
+
+	if corpusMetaErr != nil {
+		log.Fatal().Err(corpusMetaErr)
 	}
-	cncDB, err := cncdb.NewCNCMySQLHandler(
-		conf.CNCDB.Host,
-		conf.CNCDB.User,
-		conf.CNCDB.Passwd,
-		conf.CNCDB.Name,
-		cTableName,
-		pcTableName,
-	)
-	if err != nil {
-		log.Fatal().Err(err)
-	}
-	log.Info().Msgf("CNC SQL database: %s@%s", conf.CNCDB.Name, conf.CNCDB.Host)
 
 	laDB, err := mysql.OpenDB(*conf.LiveAttrs.DB)
 	if err != nil {
@@ -177,7 +201,8 @@ func main() {
 		ctx,
 		jobStopChannel,
 		jobActions,
-		cncDB,
+		corpusMeta,
+		corpusMetaW,
 		laDB,
 		laConfRegistry,
 		version,
@@ -262,7 +287,8 @@ func main() {
 		conf.CorporaSetup,
 		jobStopChannel,
 		jobActions,
-		cncDB,
+		corpusMeta,
+		corpusMetaW,
 		laDB,
 		conf.LiveAttrs.CustomNgramTablesDataDir,
 		laConfRegistry,

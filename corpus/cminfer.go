@@ -21,10 +21,11 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/czcorpus/mquery-common/corp"
 	"github.com/czcorpus/rexplorer/parser"
 )
 
-func InferQSAttrMapping(regPath string, tagset SupportedTagset) (QSAttributes, error) {
+func InferQSAttrMapping(regPath string, tagset corp.SupportedTagset) (QSAttributes, error) {
 	ans := QSAttributes{
 		Word:     -1,
 		Sublemma: -1,

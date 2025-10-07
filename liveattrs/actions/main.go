@@ -94,8 +94,9 @@ type Actions struct {
 	// laDB is a live-attributes-specific database where Frodo needs full privileges
 	laDB *mysql.Adapter
 
-	// cncDB is CNC's main database
-	cncDB *cncdb.CNCMySQLHandler
+	corpusMeta cncdb.Provider
+
+	corpusMetaW cncdb.SQLUpdater
 
 	// eqCache stores results for live-attributes empty queries (= initial text types data)
 	eqCache *cache.EmptyQueryCache
@@ -262,38 +263,36 @@ func (a *Actions) generateData(initialStatus *liveattrs.LiveAttrsJobInfo) {
 				updateJobChan <- jobStatus.WithError(fmt.Errorf("only mysql liveattrs backend is supported in Frodo"))
 				return
 			}
-			if !jobStatus.Args.NoCorpusDBUpdate {
-				transact, err := a.cncDB.StartTx()
-				if err != nil {
-					updateJobChan <- jobStatus.WithError(err)
-					return
-				}
-				var bibIDStruct, bibIDAttr string
-				if jobStatus.Args.VteConf.BibView.IDAttr != "" {
-					bibIDStruct, bibIDAttr = jobStatus.Args.VteConf.BibView.IDAttrElements()
-				}
-				err = a.cncDB.SetLiveAttrs(
-					transact,
-					jobStatus.CorpusID,
-					bibIDStruct,
-					bibIDAttr,
-					jobStatus.Args.TagsetAttr,
-					jobStatus.Args.TagsetName,
-				)
-				if err != nil {
-					updateJobChan <- jobStatus.WithError(err)
-					transact.Rollback()
-					return
-				}
-				err = kontext.SendSoftReset(a.conf.KonText)
-				if err != nil {
-					updateJobChan <- jobStatus.WithError(err)
-					return
-				}
-				err = transact.Commit()
-				if err != nil {
-					updateJobChan <- jobStatus.WithError(err)
-				}
+			transact, err := a.corpusMetaW.StartTx()
+			if err != nil {
+				updateJobChan <- jobStatus.WithError(err)
+				return
+			}
+			var bibIDStruct, bibIDAttr string
+			if jobStatus.Args.VteConf.BibView.IDAttr != "" {
+				bibIDStruct, bibIDAttr = jobStatus.Args.VteConf.BibView.IDAttrElements()
+			}
+			err = a.corpusMetaW.SetLiveAttrs(
+				transact,
+				jobStatus.CorpusID,
+				bibIDStruct,
+				bibIDAttr,
+				jobStatus.Args.TagsetAttr,
+				jobStatus.Args.TagsetName,
+			)
+			if err != nil {
+				updateJobChan <- jobStatus.WithError(err)
+				transact.Rollback()
+				return
+			}
+			err = kontext.SendSoftReset(a.conf.KonText) // TODO !!!!!
+			if err != nil {
+				updateJobChan <- jobStatus.WithError(err)
+				return
+			}
+			err = transact.Commit()
+			if err != nil {
+				updateJobChan <- jobStatus.WithError(err)
 			}
 			updateJobChan <- jobStatus.AsFinished()
 		}()
@@ -332,7 +331,7 @@ func (a *Actions) Query(ctx *gin.Context) {
 		uniresp.WriteJSONErrorResponse(ctx.Writer, uniresp.NewActionError(baseErrTpl, corpusID, err), http.StatusBadRequest)
 		return
 	}
-	corpInfo, err := a.cncDB.LoadInfo(corpusID)
+	corpInfo, err := a.corpusMeta.LoadInfo(corpusID)
 	if err != nil {
 		uniresp.WriteJSONErrorResponse(ctx.Writer, uniresp.NewActionError(baseErrTpl, corpusID, err), http.StatusInternalServerError)
 		return
@@ -386,7 +385,7 @@ func (a *Actions) FillAttrs(ctx *gin.Context) {
 		uniresp.WriteJSONErrorResponse(ctx.Writer, uniresp.NewActionError(baseErrTpl, corpusID, err), http.StatusInternalServerError)
 		return
 	}
-	corpusDBInfo, err := a.cncDB.LoadInfo(corpusID)
+	corpusDBInfo, err := a.corpusMeta.LoadInfo(corpusID)
 	if err != nil {
 		uniresp.WriteJSONErrorResponse(ctx.Writer, uniresp.NewActionError(baseErrTpl, corpusID, err), http.StatusInternalServerError)
 		return
@@ -422,7 +421,7 @@ func (a *Actions) GetAdhocSubcSize(ctx *gin.Context) {
 		return
 	}
 	corpora := append([]string{corpusID}, qry.Aligned...)
-	corpusDBInfo, err := a.cncDB.LoadInfo(corpusID)
+	corpusDBInfo, err := a.corpusMeta.LoadInfo(corpusID)
 	if err != nil {
 		uniresp.WriteJSONErrorResponse(ctx.Writer, uniresp.NewActionError(baseErrTpl, corpusID, err), http.StatusInternalServerError)
 		return
@@ -453,7 +452,7 @@ func (a *Actions) AttrValAutocomplete(ctx *gin.Context) {
 		uniresp.WriteJSONErrorResponse(ctx.Writer, uniresp.NewActionError(baseErrTpl, corpusID, err), http.StatusBadRequest)
 		return
 	}
-	corpInfo, err := a.cncDB.LoadInfo(corpusID)
+	corpInfo, err := a.corpusMeta.LoadInfo(corpusID)
 	if err != nil {
 		uniresp.WriteJSONErrorResponse(ctx.Writer, uniresp.NewActionError(baseErrTpl, corpusID, err), http.StatusInternalServerError)
 		return
@@ -487,7 +486,7 @@ func (a *Actions) updateIndexesFromJobStatus(status *liveattrs.IdxUpdateJobInfo)
 	fn := func(updateJobChan chan<- jobs.GeneralJobInfo) {
 		defer close(updateJobChan)
 		finalStatus := *status
-		corpusDBInfo, err := a.cncDB.LoadInfo(status.CorpusID)
+		corpusDBInfo, err := a.corpusMeta.LoadInfo(status.CorpusID)
 		if err != nil {
 			finalStatus.Error = err
 		}
@@ -595,7 +594,8 @@ func NewActions(
 	ctx context.Context,
 	jobStopChannel <-chan string,
 	jobActions *jobs.Actions,
-	cncDB *cncdb.CNCMySQLHandler,
+	corpusMeta cncdb.Provider,
+	corpusMetaW cncdb.SQLUpdater,
 	laDB *mysql.Adapter,
 	laConfRegistry *laconf.LiveAttrsBuildConfProvider,
 	version general.VersionInfo,
@@ -607,7 +607,8 @@ func NewActions(
 		jobActions:      jobActions,
 		jobStopChannel:  jobStopChannel,
 		laConfCache:     laConfRegistry,
-		cncDB:           cncDB,
+		corpusMeta:      corpusMeta,
+		corpusMetaW:     corpusMetaW,
 		laDB:            laDB,
 		eqCache:         cache.NewEmptyQueryCache(),
 		structAttrStats: db.NewStructAttrUsage(laDB.DB(), usageChan),

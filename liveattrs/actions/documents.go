@@ -53,7 +53,7 @@ func (a *Actions) GetBibliography(ctx *gin.Context) {
 		uniresp.WriteJSONErrorResponse(ctx.Writer, uniresp.NewActionError(baseErrTpl, corpusID, err), http.StatusBadRequest)
 		return
 	}
-	corpInfo, err := a.cncDB.LoadInfo(corpusID)
+	corpInfo, err := a.corpusMeta.LoadInfo(corpusID)
 	if err != nil {
 		uniresp.WriteJSONErrorResponse(ctx.Writer, uniresp.NewActionError(baseErrTpl, corpusID, err), http.StatusInternalServerError)
 		return
@@ -93,7 +93,7 @@ func (a *Actions) FindBibTitles(ctx *gin.Context) {
 		uniresp.WriteJSONErrorResponse(ctx.Writer, uniresp.NewActionError(baseErrTpl, corpusID, err), http.StatusBadRequest)
 		return
 	}
-	corpInfo, err := a.cncDB.LoadInfo(corpusID)
+	corpInfo, err := a.corpusMeta.LoadInfo(corpusID)
 	if err != nil {
 		uniresp.WriteJSONErrorResponse(ctx.Writer, uniresp.NewActionError(baseErrTpl, corpusID, err), http.StatusInternalServerError)
 		return
@@ -133,7 +133,7 @@ func isValidAttr(a string) bool {
 func (a *Actions) DocumentList(ctx *gin.Context) {
 	corpusID := ctx.Param("corpusId")
 	baseErrTpl := "failed to download document list from %s: %w"
-	corpInfo, err := a.cncDB.LoadInfo(corpusID)
+	corpInfo, err := a.corpusMeta.LoadInfo(corpusID)
 	if err != nil {
 		uniresp.WriteJSONErrorResponse(
 			ctx.Writer,
@@ -240,7 +240,7 @@ func (a *Actions) DocumentList(ctx *gin.Context) {
 func (a *Actions) NumMatchingDocuments(ctx *gin.Context) {
 	corpusID := ctx.Param("corpusId")
 	baseErrTpl := "failed to count number of matching documents in %s: %w"
-	corpInfo, err := a.cncDB.LoadInfo(corpusID)
+	corpInfo, err := a.corpusMeta.LoadInfo(corpusID)
 	if err != nil {
 		uniresp.WriteJSONErrorResponse(
 			ctx.Writer,

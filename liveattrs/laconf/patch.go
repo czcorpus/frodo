@@ -18,9 +18,9 @@ package laconf
 
 import (
 	"fmt"
-	"frodo/corpus"
 	"regexp"
 
+	"github.com/czcorpus/mquery-common/corp"
 	vteCnf "github.com/czcorpus/vert-tagextract/v3/cnf"
 	vteDb "github.com/czcorpus/vert-tagextract/v3/db"
 )
@@ -45,16 +45,16 @@ var (
 //
 // Note: the most important self join functions are: "identity", "intecorp"
 type PatchArgs struct {
-	VerticalFiles           []string                `json:"verticalFiles"`
-	DateAttr                *string                 `json:"dateAttr"`
-	RemoveEntriesBeforeDate *string                 `json:"removeEntriesBeforeDate"`
-	MaxNumErrors            *int                    `json:"maxNumErrors"`
-	AtomStructure           *string                 `json:"atomStructure"`
-	SelfJoin                *vteDb.SelfJoinConf     `json:"selfJoin"`
-	BibView                 *vteDb.BibViewConf      `json:"bibView"`
-	Ngrams                  *vteCnf.NgramConf       `json:"ngrams"`
-	TagsetAttr              *string                 `json:"tagsetAttr"`
-	TagsetName              *corpus.SupportedTagset `json:"tagsetName"`
+	VerticalFiles           []string              `json:"verticalFiles"`
+	DateAttr                *string               `json:"dateAttr"`
+	RemoveEntriesBeforeDate *string               `json:"removeEntriesBeforeDate"`
+	MaxNumErrors            *int                  `json:"maxNumErrors"`
+	AtomStructure           *string               `json:"atomStructure"`
+	SelfJoin                *vteDb.SelfJoinConf   `json:"selfJoin"`
+	BibView                 *vteDb.BibViewConf    `json:"bibView"`
+	Ngrams                  *vteCnf.NgramConf     `json:"ngrams"`
+	TagsetAttr              *string               `json:"tagsetAttr"`
+	TagsetName              *corp.SupportedTagset `json:"tagsetName"`
 }
 
 func (la *PatchArgs) ValidateDataWindow() error {
@@ -118,7 +118,7 @@ func (la *PatchArgs) GetTagsetAttr() string {
 	return *la.TagsetAttr
 }
 
-func (la *PatchArgs) GetTagsetName() corpus.SupportedTagset {
+func (la *PatchArgs) GetTagsetName() corp.SupportedTagset {
 	if la.TagsetName == nil {
 		return ""
 	}
