@@ -18,12 +18,12 @@ package actions
 
 import (
 	"context"
-	"frodo/cncdb"
 	"frodo/corpus"
 	"frodo/db/mysql"
 	"frodo/general"
 	"frodo/jobs"
 	"frodo/liveattrs/laconf"
+	"frodo/metadb"
 )
 
 type Actions struct {
@@ -45,9 +45,9 @@ type Actions struct {
 
 	laCustomNgramDataDirPath string
 
-	corpusMeta cncdb.Provider
+	corpusMeta metadb.Provider
 
-	corpusMetaW cncdb.SQLUpdater
+	corpusMetaW metadb.SQLUpdater
 }
 
 // NewActions is the default factory for Actions
@@ -56,8 +56,8 @@ func NewActions(
 	corpConf *corpus.CorporaSetup,
 	jobStopChannel <-chan string,
 	jobActions *jobs.Actions,
-	corpusMeta cncdb.Provider,
-	corpusMetaW cncdb.SQLUpdater,
+	corpusMeta metadb.Provider,
+	corpusMetaW metadb.SQLUpdater,
 	laDB *mysql.Adapter,
 	laCustomNgramDataDirPath string,
 	laConfRegistry *laconf.LiveAttrsBuildConfProvider,

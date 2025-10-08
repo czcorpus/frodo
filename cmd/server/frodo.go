@@ -36,7 +36,6 @@ import (
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 
-	"frodo/cncdb"
 	"frodo/cnf"
 	"frodo/db/mysql"
 	"frodo/debug"
@@ -47,6 +46,7 @@ import (
 	"frodo/liveattrs"
 	laActions "frodo/liveattrs/actions"
 	"frodo/liveattrs/laconf"
+	"frodo/metadb"
 	"frodo/root"
 
 	_ "frodo/translations"
@@ -120,8 +120,8 @@ func main() {
 		stop()
 	}()
 
-	var corpusMeta cncdb.Provider
-	var corpusMetaW cncdb.SQLUpdater
+	var corpusMeta metadb.Provider
+	var corpusMetaW metadb.SQLUpdater
 	var corpusMetaErr error
 
 	if conf.CNCDB != nil {
@@ -138,7 +138,7 @@ func main() {
 			pcTableName = conf.CNCDB.OverridePCTableName
 		}
 
-		tmp, err := cncdb.NewCNCMySQLHandler(
+		tmp, err := metadb.NewCNCMySQLHandler(
 			conf.CNCDB.Host,
 			conf.CNCDB.User,
 			conf.CNCDB.Passwd,
@@ -156,8 +156,8 @@ func main() {
 		log.Info().Msgf("using CNC corpus info SQL database: %s@%s", conf.CNCDB.Name, conf.CNCDB.Host)
 
 	} else {
-		corpusMeta = &cncdb.StaticProvider{Corpora: conf.CorporaSetup.GetAllCorpora()}
-		corpusMetaW = &cncdb.NoOpWriter{}
+		corpusMeta = &metadb.StaticProvider{Corpora: conf.CorporaSetup.GetAllCorpora()}
+		corpusMetaW = &metadb.NoOpWriter{}
 		log.Info().Msgf("using static corpora info from directory: %s", conf.CorporaSetup.CorporaConfDir)
 	}
 
