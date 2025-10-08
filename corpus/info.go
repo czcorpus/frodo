@@ -177,6 +177,7 @@ func GetCorpusInfo(corpusID string, setup *CorporaSetup, tryLimited bool) (*Info
 	unparsedStructs := corp1.GetProperty("STRUCTLIST").String()
 	if unparsedStructs != "" {
 		structs := strings.Split(unparsedStructs, ",")
+		ans.IndexedStructs = make([]string, len(structs))
 		copy(ans.IndexedStructs, structs)
 	}
 

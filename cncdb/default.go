@@ -120,7 +120,8 @@ func (prov *StaticProvider) findEntry(corpusID string) corp.CorpusSetup {
 func (prov *StaticProvider) LoadInfo(corpusID string) (*corpus.DBInfo, error) {
 	info := prov.findEntry(corpusID)
 	if info.ID == "" {
-		return nil, nil
+		// TODO: Not a great type for error here but must be compatible with sql backend
+		return nil, sql.ErrNoRows
 	}
 	return &corpus.DBInfo{
 		Name:               info.ID,

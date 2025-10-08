@@ -138,7 +138,7 @@ func main() {
 			pcTableName = conf.CNCDB.OverridePCTableName
 		}
 
-		corpusMetaW, corpusMetaErr = cncdb.NewCNCMySQLHandler(
+		tmp, err := cncdb.NewCNCMySQLHandler(
 			conf.CNCDB.Host,
 			conf.CNCDB.User,
 			conf.CNCDB.Passwd,
@@ -146,6 +146,13 @@ func main() {
 			cTableName,
 			pcTableName,
 		)
+		if err != nil {
+			corpusMetaErr = err
+
+		} else {
+			corpusMeta = tmp
+			corpusMetaW = tmp
+		}
 		log.Info().Msgf("using CNC corpus info SQL database: %s@%s", conf.CNCDB.Name, conf.CNCDB.Host)
 
 	} else {
