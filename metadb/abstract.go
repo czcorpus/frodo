@@ -8,6 +8,10 @@ import (
 	"github.com/czcorpus/mquery-common/corp"
 )
 
+// Provider describes a type which can provide information about corpora.
+// For general installation, this is mostly covered by the `StaticProvider`
+// which reads data from JSON configuration files. In case of the CNC-specific
+// installation, the data are read from CNC's database.
 type Provider interface {
 	LoadInfo(corpusID string) (*corpus.DBInfo, error)
 
@@ -20,6 +24,9 @@ type Provider interface {
 	LoadAliasedInfo(corpusID, aliasOf string) (*corpus.DBInfo, error)
 }
 
+// -------
+
+// SQLTx is a wrapper for SQL transaction allowing for alternative implementations
 type SQLTx interface {
 	Exec(query string, args ...any) (sql.Result, error)
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
@@ -31,6 +38,12 @@ type SQLTx interface {
 	Rollback() error
 }
 
+// -------
+
+// SQLUpdater describes a metadata database backend with ability
+// to write changes. This is mostly to cover specific needs
+// of CNC's backend so general installations can easily stick with
+// "nil/NoOp" implementation.
 type SQLUpdater interface {
 	StartTx() (SQLTx, error)
 

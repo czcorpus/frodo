@@ -25,6 +25,9 @@ import (
 	"github.com/czcorpus/mquery-common/corp"
 )
 
+// NoOpResult is used in the default Frodo setup where
+// there is no need to write configuration changes into
+// an SQL database. It mimics sql package's query result type.
 type NoOpResult struct {
 }
 
@@ -38,6 +41,9 @@ func (res *NoOpResult) RowsAffected() (int64, error) {
 
 // ------------------
 
+// NoOpTx is used in the default Frodo setup where
+// there is no need to write configuration changes into
+// an SQL database.
 type NoOpTx struct {
 }
 
@@ -75,6 +81,9 @@ func (tx *NoOpTx) Rollback() error {
 
 // ----------
 
+// NoOpWriter fakes database writing operations
+// for the default installation. This is used only
+// during liveattrs and ngrams generation process.
 type NoOpWriter struct {
 }
 
@@ -104,6 +113,9 @@ func (w *NoOpWriter) IfMissingAddCorpusBibMetadata(
 
 // ------------------------------------
 
+// StaticProvider gives information about corpora based
+// on runtime data (which are obtained from JSON configuration
+// files by Frodo).
 type StaticProvider struct {
 	Corpora []corp.CorpusSetup
 }
