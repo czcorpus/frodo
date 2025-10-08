@@ -1,4 +1,4 @@
-package cncdb
+package metadb
 
 import (
 	"context"

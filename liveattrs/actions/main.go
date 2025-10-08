@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"frodo/cncdb"
 	"frodo/corpus"
 	"frodo/db/mysql"
 	"frodo/general"
@@ -35,6 +34,7 @@ import (
 	"frodo/liveattrs/request/fillattrs"
 	"frodo/liveattrs/request/query"
 	"frodo/liveattrs/request/response"
+	"frodo/metadb"
 	"net/http"
 	"strconv"
 	"time"
@@ -94,9 +94,9 @@ type Actions struct {
 	// laDB is a live-attributes-specific database where Frodo needs full privileges
 	laDB *mysql.Adapter
 
-	corpusMeta cncdb.Provider
+	corpusMeta metadb.Provider
 
-	corpusMetaW cncdb.SQLUpdater
+	corpusMetaW metadb.SQLUpdater
 
 	// eqCache stores results for live-attributes empty queries (= initial text types data)
 	eqCache *cache.EmptyQueryCache
@@ -594,8 +594,8 @@ func NewActions(
 	ctx context.Context,
 	jobStopChannel <-chan string,
 	jobActions *jobs.Actions,
-	corpusMeta cncdb.Provider,
-	corpusMetaW cncdb.SQLUpdater,
+	corpusMeta metadb.Provider,
+	corpusMetaW metadb.SQLUpdater,
 	laDB *mysql.Adapter,
 	laConfRegistry *laconf.LiveAttrsBuildConfProvider,
 	version general.VersionInfo,
