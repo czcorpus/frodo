@@ -65,7 +65,6 @@ func (a *Actions) createConf(
 	if aliasOf != "" {
 		srcCorpusID = aliasOf
 	}
-	fmt.Println("====== createconf: ", srcCorpusID, corpusID, aliasOf)
 	corpusInfo, err := corpus.GetCorpusInfo(srcCorpusID, a.conf.Corp, false)
 	if err != nil {
 		return nil, err
