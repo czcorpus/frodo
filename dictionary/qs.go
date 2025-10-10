@@ -262,6 +262,10 @@ func SearchWithNgramSize(size int) SearchOption {
 	}
 }
 
+func SearchWithNoOp() SearchOption {
+	return func(c *SearchOptions) {}
+}
+
 func Search(
 	ctx context.Context,
 	db *mysql.Adapter,

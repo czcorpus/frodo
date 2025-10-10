@@ -54,12 +54,19 @@ func (a *Actions) CreateQuerySuggestions(ctx *gin.Context) {
 func (a *Actions) GetQuerySuggestions(ctx *gin.Context) {
 	corpusID := ctx.Param("corpusId")
 	term := ctx.Param("term")
+	noMultivalues := ctx.Query("no-multivalues") == "1"
+
+	mvOpts := dictionary.SearchWithMultivalues()
+	if noMultivalues {
+		mvOpts = dictionary.SearchWithNoOp()
+	}
 
 	items, err := dictionary.Search(
 		ctx,
 		a.laDB,
 		corpusID,
 		dictionary.SearchWithAnyValue(term),
+		mvOpts,
 	)
 	if err != nil {
 		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
