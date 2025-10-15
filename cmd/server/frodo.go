@@ -201,9 +201,8 @@ func main() {
 
 	liveattrsActions := laActions.NewActions(
 		laActions.LAConf{
-			LA:      conf.LiveAttrs,
-			KonText: conf.Kontext,
-			Corp:    conf.CorporaSetup,
+			LA:   conf.LiveAttrs,
+			Corp: conf.CorporaSetup,
 		},
 		ctx,
 		jobStopChannel,

@@ -25,7 +25,6 @@ import (
 	"frodo/db/mysql"
 	"frodo/general"
 	"frodo/jobs"
-	"frodo/kontext"
 	"frodo/liveattrs"
 	"frodo/liveattrs/cache"
 	"frodo/liveattrs/db"
@@ -69,9 +68,8 @@ type CreateLiveAttrsReqBody struct {
 // --------------
 
 type LAConf struct {
-	LA      *liveattrs.Conf
-	KonText *kontext.Conf
-	Corp    *corpus.CorporaSetup
+	LA   *liveattrs.Conf
+	Corp *corpus.CorporaSetup
 }
 
 // ------------------------
@@ -283,11 +281,6 @@ func (a *Actions) generateData(initialStatus *liveattrs.LiveAttrsJobInfo) {
 			if err != nil {
 				updateJobChan <- jobStatus.WithError(err)
 				transact.Rollback()
-				return
-			}
-			err = kontext.SendSoftReset(a.conf.KonText) // TODO !!!!!
-			if err != nil {
-				updateJobChan <- jobStatus.WithError(err)
 				return
 			}
 			err = transact.Commit()

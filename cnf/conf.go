@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"frodo/corpus"
 	"frodo/jobs"
-	"frodo/kontext"
 	"frodo/liveattrs"
 	"os"
 	"path/filepath"
@@ -49,7 +48,6 @@ type Conf struct {
 	CNCDB                  *corpus.DatabaseSetup `json:"cncDb"`
 	LiveAttrs              *liveattrs.Conf       `json:"liveAttrs"`
 	Jobs                   *jobs.Conf            `json:"jobs"`
-	Kontext                *kontext.Conf         `json:"kontext"`
 	Language               string                `json:"language"`
 	srcPath                string
 }

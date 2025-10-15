@@ -19,7 +19,6 @@ package actions
 import (
 	"fmt"
 	"frodo/jobs"
-	"frodo/kontext"
 	"frodo/liveattrs"
 	"frodo/liveattrs/db"
 	_ "frodo/liveattrs/laconf"
@@ -220,12 +219,6 @@ func (a *Actions) Delete(ctx *gin.Context) {
 	if err != nil {
 		uniresp.WriteJSONErrorResponse(ctx.Writer, uniresp.NewActionError(
 			baseErrTpl, corpusID, err), http.StatusInternalServerError)
-		return
-	}
-	err = kontext.SendSoftReset(a.conf.KonText)
-	if err != nil {
-		uniresp.WriteJSONErrorResponse(
-			ctx.Writer, uniresp.NewActionError(baseErrTpl, corpusID, err), http.StatusInternalServerError)
 		return
 	}
 	uniresp.WriteJSONResponse(ctx.Writer, map[string]any{"ok": true})
