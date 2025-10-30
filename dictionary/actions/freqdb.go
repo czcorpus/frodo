@@ -48,6 +48,8 @@ func (a *Actions) CreateQuerySuggestions(ctx *gin.Context) {
 // @Produce      json
 // @Param        corpusId path string true "Used corpus"
 // @Param        term path string true "Search term"
+// @Param        no-multivalues query int false "Forbid multivalues" default(0)
+// @Param        pos query string false "Search part of speach"
 // @Success      200 {object} map[string]any
 // @Router       /dictionary/{corpusId}/querySuggestions/{term} [get]
 // @Router       /dictionary/{corpusId}/search/{term} [get]
@@ -61,12 +63,19 @@ func (a *Actions) GetQuerySuggestions(ctx *gin.Context) {
 		mvOpts = dictionary.SearchWithNoOp()
 	}
 
+	pos := ctx.Query("pos")
+	posOpts := dictionary.SearchWithNoOp()
+	if pos != "" {
+		posOpts = dictionary.SearchWithPoS(pos)
+	}
+
 	items, err := dictionary.Search(
 		ctx,
 		a.laDB,
 		corpusID,
 		dictionary.SearchWithAnyValue(term),
 		mvOpts,
+		posOpts,
 	)
 	if err != nil {
 		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
