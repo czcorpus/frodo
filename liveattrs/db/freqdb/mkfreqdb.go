@@ -277,7 +277,7 @@ func (nfg *NgramFreqGenerator) findTotalNumLines() (int, error) {
 				"FROM %s_colcounts "+
 				"WHERE %s <> ? AND ngram_size = ? ",
 			nfg.groupedName,
-			nfg.qsaAttrs.ExportCols("tag")[0],
+			nfg.qsaAttrs.ExportCol("tag"),
 		),
 		NonWordCSCNC2020Tag,
 		nfg.ngramSize,
@@ -307,7 +307,7 @@ func (nfg *NgramFreqGenerator) preloadCols(
 			"SELECT hash_id, %s, `count` AS abs, arf, initial_cap "+
 				"FROM %s_colcounts "+
 				"WHERE col%d <> ? AND ngram_size = ? ",
-			strings.Join(nfg.qsaAttrs.ExportCols("word", "sublemma", "lemma", "tag"), ", "),
+			strings.Join(nfg.qsaAttrs.ExportCols("word", "lemma", "sublemma", "tag"), ", "),
 			nfg.groupedName,
 			nfg.qsaAttrs.Tag,
 		),
