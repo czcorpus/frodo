@@ -52,6 +52,41 @@ func ShowErrorChain(err error) string {
 	return ans.String()
 }
 
+func mergeAliasedConfig(orig, aliased *cnf.VTEConf) *cnf.VTEConf {
+	ans := *orig
+	if aliased.AtomParentStructure != "" {
+		ans.AtomParentStructure = aliased.AtomParentStructure
+	}
+	if aliased.AtomStructure != "" {
+		ans.AtomStructure = aliased.AtomStructure
+	}
+	if len(aliased.IndexedCols) > 0 {
+		ans.IndexedCols = aliased.IndexedCols
+	}
+	if len(aliased.VerticalFiles) > 0 {
+		ans.VerticalFiles = aliased.VerticalFiles
+	}
+	if aliased.DateAttr != nil {
+		ans.DateAttr = aliased.DateAttr
+	}
+	if aliased.RemoveEntriesBeforeDate != nil {
+		ans.RemoveEntriesBeforeDate = aliased.RemoveEntriesBeforeDate
+	}
+	if aliased.MaxNumErrors > 0 {
+		ans.MaxNumErrors = aliased.MaxNumErrors
+	}
+	if aliased.SelfJoin.IsConfigured() {
+		ans.SelfJoin = aliased.SelfJoin
+	}
+	if aliased.BibView.IsConfigured() {
+		ans.BibView = aliased.BibView
+	}
+	if !aliased.Ngrams.IsZero() {
+		ans.Ngrams = aliased.Ngrams
+	}
+	return &ans
+}
+
 type NGramsReqArgs struct {
 	ColMapping            *corpus.QSAttributes `json:"colMapping,omitempty"`
 	PosTagset             corp.SupportedTagset `json:"posTagset"`
@@ -114,10 +149,23 @@ func (a *Actions) GenerateNgrams(ctx *gin.Context) {
 		laConf, err = a.laConfCache.Get(aliasOf)
 		laConf.Corpus = corpusID
 
+		// TODO this is kind of a debatable solution. When generating liveattrs,
+		// using 'aliasOf' along with 'reconfigure=1' will produce regular vte
+		// config file as for a normal db-backed config. But it still cannot
+		// be used to generate ngrams as is. It is still rather a patch for
+		// the original aliased corpus config. So here we try to load the alias
+		// and use it to rewrite relevant attributres.
+		// Possible solution: make the aliased config with a special attribute
+		// specifying that it is an alias and hide the merging in the loading
+		// process.
+		laAlias, err := a.laConfCache.Get(corpusID)
+		if err == nil {
+			laConf = mergeAliasedConfig(laConf, laAlias)
+		}
+
 	} else {
 		laConf, err = a.laConfCache.Get(corpusID)
 	}
-
 	if err == laconf.ErrorNoSuchConfig {
 		uniresp.RespondWithErrorJSON(
 			ctx,

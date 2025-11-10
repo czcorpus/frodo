@@ -51,7 +51,7 @@ import (
 // @Produce      json
 // @Param        corpusId path string true "Used corpus"
 // @Param 		 patchArgs body laconf.PatchArgs true "The input todo struct"
-// @Param 		 reconfigure query int false "Ignore the stored liveattrs config (if any) and generate a new one based on corpus properties and provided PatchArgs. The resulting new config will be stored replacing the previous one." default(1)
+// @Param 		 reconfigure query int false "Ignore the stored liveattrs config (if any) and generate a new one based on corpus properties and provided PatchArgs. The resulting new config will be stored replacing the previous one." default(0)
 // @Param 		 append query int false "Append mode" default(0)
 // @Success      200 {object} any
 // @Router       /liveAttributes/{corpusId}/data [post]
@@ -72,6 +72,7 @@ func (a *Actions) Create(ctx *gin.Context) {
 			conf, err = a.laConfCache.Get(corpusID)
 		}
 	}
+	//  else { ... "reconfigure" => create everything from scratch
 
 	jsonArgs, err := a.getPatchArgs(ctx.Request)
 
