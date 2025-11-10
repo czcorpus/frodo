@@ -74,7 +74,7 @@ func (a *Actions) createConf(
 		return nil, err
 	}
 
-	if aliasOf != "" {
+	if aliasOf != "" { // working with an alias => let's use it for config name
 		corpusInfo.ID = corpusID
 	}
 

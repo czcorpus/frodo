@@ -161,10 +161,10 @@ func GetCorpusInfo(corpusID string, setup *CorporaSetup, tryLimited bool) (*Info
 	// -------
 
 	// get encoding
-	ans.RegistryConf.Encoding = corp1.GetProperty("ENCODING").String()
+	ans.RegistryConf.Encoding = corp1.GetProperty("ENCODING").Value()
 
 	// parse SUBCORPATTRS
-	subcorpAttrsString := corp1.GetProperty("SUBCORPATTRS").String()
+	subcorpAttrsString := corp1.GetProperty("SUBCORPATTRS").Value()
 	if subcorpAttrsString != "" {
 		for _, attr1 := range strings.Split(subcorpAttrsString, "|") {
 			for _, attr2 := range strings.Split(attr1, ",") {
@@ -174,15 +174,15 @@ func GetCorpusInfo(corpusID string, setup *CorporaSetup, tryLimited bool) (*Info
 		}
 	}
 
-	unparsedStructs := corp1.GetProperty("STRUCTLIST").String()
+	unparsedStructs := corp1.GetProperty("STRUCTLIST").Value()
 	if unparsedStructs != "" {
-		structs := strings.Split(unparsedStructs, ",")
+		structs := strings.Split(strings.TrimSpace(unparsedStructs), ",")
 		ans.IndexedStructs = make([]string, len(structs))
 		copy(ans.IndexedStructs, structs)
 	}
 
 	// try registry's VERTICAL
-	regVertical := corp1.GetProperty("VERTICAL").String()
+	regVertical := corp1.GetProperty("VERTICAL").Value()
 	ans.RegistryConf.Vertical, err = bindValueToPath(regVertical, regVertical)
 	if err != nil {
 		return nil, InfoError{err}
