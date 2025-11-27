@@ -63,6 +63,7 @@ func FillAttrs(
 	} else if err != nil {
 		return map[string]map[string]string{}, err
 	}
+	defer rows.Close()
 	isEmpty := true
 	for rows.Next() {
 		isEmpty = isEmpty && false

@@ -127,6 +127,7 @@ func (di *DataIterator) Iterate(fn func(row ResultRow) error) error {
 	if err != nil {
 		return err
 	}
+	defer rows.Close()
 	for rows.Next() {
 		pcols := make([]any, len(colnames))
 		ansRow := ResultRow{

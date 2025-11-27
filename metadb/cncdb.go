@@ -367,6 +367,7 @@ func (c *CNCMySQLHandler) GetCorpusTagsets(corpusID string) ([]corp.SupportedTag
 	if err != nil {
 		return nil, fmt.Errorf("failed to get corpus tagsets: %w", err)
 	}
+	defer rows.Close()
 	ans := make([]corp.SupportedTagset, 0, 5)
 	var val string
 	for rows.Next() {
