@@ -120,6 +120,7 @@ func (mm *MetadataModel) getTextSizes() ([]int, map[string]int, error) {
 		return []int{}, map[string]int{}, err
 	}
 	i := 0
+	defer rows.Close()
 	for rows.Next() {
 		var minCount int
 		var docID string
@@ -190,6 +191,7 @@ func (mm *MetadataModel) initAB(node *CategoryTreeNode, usedIDs *collections.Set
 		if err != nil {
 			return err
 		}
+		defer rows.Close()
 		for rows.Next() {
 			var minCount int
 			var docID string

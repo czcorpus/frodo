@@ -115,7 +115,7 @@ func FindBibTitles(
 	} else if err != nil {
 		return map[string]string{}, err
 	}
-
+	defer rows.Close()
 	for rows.Next() {
 		var bibIdVal, bibLabelVal string
 		err = rows.Scan(&bibIdVal, &bibLabelVal)
@@ -320,6 +320,7 @@ func GetDocuments(
 	} else if err != nil {
 		return []*DocumentRow{}, err
 	}
+	defer rows.Close()
 	if page.MaxItems == 0 {
 		var err error
 		page.MaxItems, err = GetNumOfDocuments(db, corpusInfo, alignedCorpora, filterAttrs)
