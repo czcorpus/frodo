@@ -76,7 +76,7 @@ func (sau *StructAttrUsage) save(data RequestData) error {
 		return err
 	}
 	for attr := range data.Payload.Attrs {
-		_, err := context.Query(sql_template, data.CorpusID, utils.ImportKey(attr))
+		_, err := context.Exec(sql_template, data.CorpusID, utils.ImportKey(attr))
 		if err != nil {
 			return err
 		}
@@ -101,7 +101,7 @@ func LoadUsage(laDB *sql.DB, corpusId string) (map[string]int, error) {
 	} else if err != nil {
 		return nil, err
 	}
-
+	defer rows.Close()
 	for rows.Next() {
 		var structattrName string
 		var numUsed int
@@ -150,6 +150,7 @@ func UpdateIndexes(laDB *sql.DB, corpusInfo *corpus.DBInfo, maxColumns int) updI
 	if err != nil && err != sql.ErrNoRows {
 		return updIdxResult{Error: err}
 	}
+	defer rows.Close()
 	columns := make([]string, 0, maxColumns)
 	for rows.Next() {
 		var structattrName string
@@ -173,7 +174,7 @@ func UpdateIndexes(laDB *sql.DB, corpusInfo *corpus.DBInfo, maxColumns int) updI
 	}
 	for i, column := range columns {
 		usedIndexes[i] = fmt.Sprintf("%s_autoindex", column)
-		_, err := context.Query(fmt.Sprintf(sqlTemplate, usedIndexes[i], corpusInfo.GroupedName(), column))
+		_, err := context.Exec(fmt.Sprintf(sqlTemplate, usedIndexes[i], corpusInfo.GroupedName(), column))
 		if err != nil {
 			return updIdxResult{Error: err}
 		}
@@ -194,6 +195,7 @@ func UpdateIndexes(laDB *sql.DB, corpusInfo *corpus.DBInfo, maxColumns int) updI
 	if err != nil && err != sql.ErrNoRows {
 		return updIdxResult{Error: err}
 	}
+	defer rows.Close()
 	unusedIndexes := make([]string, 0, 10)
 	for rows.Next() {
 		var indexName string
@@ -210,7 +212,7 @@ func UpdateIndexes(laDB *sql.DB, corpusInfo *corpus.DBInfo, maxColumns int) updI
 		return updIdxResult{Error: err}
 	}
 	for _, index := range unusedIndexes {
-		_, err := context.Query(fmt.Sprintf(sqlTemplate, index, corpusInfo.GroupedName()))
+		_, err := context.Exec(fmt.Sprintf(sqlTemplate, index, corpusInfo.GroupedName()))
 		if err != nil {
 			return updIdxResult{Error: err}
 		}
