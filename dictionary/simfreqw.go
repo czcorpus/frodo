@@ -42,7 +42,7 @@ func SimilarARFWords(
 	searchRangeCoeff float64,
 	maxValues int,
 ) ([]Lemma, error) {
-	if lemma.NgramSize > 1 {
+	if !lemma.CanDoSimFreqScores() {
 		return []Lemma{}, nil
 	}
 	if searchRangeCoeff <= 0 || searchRangeCoeff >= 1 {
@@ -82,6 +82,7 @@ func SimilarARFWords(
 	if err != nil {
 		return []Lemma{}, fmt.Errorf("failed to get similar freq. words: %w", err)
 	}
+	defer rows.Close()
 	ans, err := processRowsSync(rows, false)
 	if err != nil {
 		return []Lemma{}, fmt.Errorf("failed to get similar freq. words: %w", err)

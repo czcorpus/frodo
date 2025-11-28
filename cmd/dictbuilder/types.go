@@ -17,7 +17,11 @@
 package main
 
 import (
+	"fmt"
+	"frodo/corpus"
+
 	"github.com/czcorpus/cnc-gokit/logging"
+	"github.com/czcorpus/vert-tagextract/v3/db"
 	vtedb "github.com/czcorpus/vert-tagextract/v3/db"
 )
 
@@ -32,8 +36,85 @@ type DictbuilderConfig struct {
 	NumOfLookbackDays int                 `json:"numOfLookbackDays"`
 	VerticalDir       string              `json:"verticalDir"`
 	Corpname          string              `json:"corpname"`
-	TempCorpname      string              `json:"tmpCorpname"`
-	NGramSize         int                 `json:"ngramSize"`
+	CalcARF           bool                `json:"calcArf"`
+
+	VertColumns *db.VertColumns `json:"vertColumns"`
+
+	// AliasName is a final name for the dataset in case we
+	// need a different name than the original corpus. This is typical
+	// e.g. for WaG dictionaries which are derived from a single corpus
+	// but have different properties (e.g. bigrams vs. unigrams etc.)
+	//
+	// Please note that if AliasName is non-zero, then TempCorpname
+	// must be either of the same value or empty as otherwise, Frodo
+	// would be confused what should be generated.
+	//
+	AliasName string `json:"aliasName"`
+
+	// TempCorpname is used for "atomic" table updates. Frodo will
+	// generate a dictionary to tables using TempCorpname and once
+	// everything is done, it will drop existing "normal" tables
+	// and renames temp ones to those dropped ones.
+	// In case the dataset is an "alias" (which means it does not
+	// represent the corpus directly, but it is rather derived for
+	// other purposes), the renaming is not performed and these
+	// "tmp" table names (= also AliasName tables, see AliasName)
+	// are actually the final ones.
+	TempCorpname string `json:"tmpCorpname"`
+
+	// NGramSize speicifies how long word sequences we want
+	// to include in our dictionary. For the cnc, this is typically
+	// 1 or 2.
+	NGramSize int `json:"ngramSize"`
+}
+
+func (dbconf *DictbuilderConfig) GetColMapping() *corpus.QSAttributes {
+	ans := &corpus.QSAttributes{}
+	var explicitPoS bool
+	for _, v := range *dbconf.VertColumns {
+		switch v.Role {
+		case "word":
+			ans.Word = v.Idx
+		case "lemma":
+			ans.Lemma = v.Idx
+		case "sublemma":
+			ans.Sublemma = v.Idx
+		case "tag":
+			ans.Tag = v.Idx
+		case "pos":
+			explicitPoS = true
+			ans.Pos = v.Idx
+		}
+	}
+	if !explicitPoS {
+		ans.Pos = ans.Tag
+	}
+	return ans
+}
+
+func (dbconf *DictbuilderConfig) Validate() error {
+	if dbconf.AliasName == "" && dbconf.TempCorpname == "" {
+		return fmt.Errorf("both aliasName and tempCorpname are empty")
+	}
+	if dbconf.AliasName != "" && dbconf.TempCorpname != "" && dbconf.AliasName != dbconf.TempCorpname {
+		return fmt.Errorf("aliasName and tempCorpname must be either same or the aliasName must be empty")
+	}
+	return nil
+}
+
+func (dbconf *DictbuilderConfig) IsAliasedDataset() bool {
+	return dbconf.AliasName != ""
+}
+
+// GetDatasetName provides actual name of the dataset,
+// no matter if it is a direct representation of a corpus
+// (e.g. "liveattrs for  SYN2020") or some derived dataset
+// (e.g. "a dictionary for some WaG instance").
+func (dbconf *DictbuilderConfig) GetDatasetName() string {
+	if dbconf.AliasName != "" {
+		return dbconf.AliasName
+	}
+	return dbconf.TempCorpname
 }
 
 type JobStatus struct {

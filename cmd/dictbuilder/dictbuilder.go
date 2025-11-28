@@ -20,11 +20,13 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
 	"time"
 
+	"github.com/czcorpus/cnc-gokit/fs"
 	"github.com/czcorpus/cnc-gokit/logging"
 	"github.com/czcorpus/mquery-common/corp"
 	"github.com/rs/zerolog/log"
@@ -133,13 +135,29 @@ func run(configFilePath string) {
 	now := time.Now()
 	for i := 1; i <= config.NumOfLookbackDays; i++ {
 		vertDate := now.AddDate(0, 0, -i)
-		verts = append(verts, path.Join(config.VerticalDir, fmt.Sprintf("%s.vrt", vertDate.Format("2006-01-02"))))
+		vertPath := path.Join(config.VerticalDir, fmt.Sprintf("%s.vrt", vertDate.Format("2006-01-02")))
+		if !fs.PathExists(vertPath) {
+			log.Error().Str("vertPath", vertPath).Msg("expected vertical file for requested date range does not exist, skipping")
+			continue
+		}
+		verts = append(verts, vertPath)
 	}
-	liveattrsPath := fmt.Sprintf("liveAttributes/%s/data", config.TempCorpname)
-	liveattrsParams := "aliasOf=" + config.Corpname // required so the liveattrs job don't search for the corpus in the database
+	if err := config.Validate(); err != nil {
+		log.Error().Err(err).Msg("failed to validate config")
+		return
+	}
+
+	liveattrsPath := fmt.Sprintf("liveAttributes/%s/data", config.GetDatasetName())
+	liveattrsParams := url.Values{
+		"aliasOf":     []string{config.Corpname},
+		"reconfigure": []string{"1"},
+	} // required so the liveattrs job don't search for the corpus in the database
 	liveAttrsArgs := laconf.PatchArgs{
 		VerticalFiles: verts,
-		Ngrams:        &vteCnf.NgramConf{},
+		Ngrams: &vteCnf.NgramConf{
+			VertColumns: *config.VertColumns,
+			CalcARF:     config.CalcARF,
+		},
 	}
 
 	for i := 1; i <= config.NGramSize; i++ {
@@ -152,9 +170,14 @@ func run(configFilePath string) {
 	}
 
 	// Run ngrams job
-	ngramsPath := fmt.Sprintf("dictionary/%s/ngrams", config.TempCorpname)
-	ngramsParams := fmt.Sprintf("append=0&ngramSize=%d&aliasOf=%s", config.NGramSize, config.Corpname)
+	ngramsPath := fmt.Sprintf("dictionary/%s/ngrams", config.GetDatasetName())
+	ngramsParams := url.Values{
+		"append":    []string{"0"},
+		"ngramSize": []string{fmt.Sprintf("%d", config.NGramSize)},
+		"aliasOf":   []string{config.Corpname},
+	}
 	ngramsArgs := dictActions.NGramsReqArgs{
+		ColMapping:            config.GetColMapping(),
 		PosTagset:             corp.TagsetCSCNC2020,
 		UsePartitionedTable:   false,
 		MinFreq:               1,
@@ -166,18 +189,23 @@ func run(configFilePath string) {
 		return
 	}
 
-	// Rename tables in database
-	db, err := mysql.OpenDB(*config.Database)
-	if err != nil {
-		log.Error().Err(err).Msg("Error opening database connection")
-		return
-	}
-	defer db.Close()
-	for _, tableSuffix := range []string{"colcounts", "liveattrs_entry", "term_search", "word"} {
-		log.Info().Msgf("Replacing table %s_%s -> %s_%s", config.TempCorpname, tableSuffix, config.Corpname, tableSuffix)
-		if err := replaceTable(db, config.Corpname, config.TempCorpname, tableSuffix); err != nil {
-			log.Error().Err(err).Msgf("Error replacing table %s_%s", config.Corpname, tableSuffix)
+	if config.IsAliasedDataset() {
+		log.Info().Str("datasetName", config.GetDatasetName()).Msg("The target dataset is configured as aliased - no table renaming.")
+
+	} else {
+		// Rename tables in database
+		db, err := mysql.OpenDB(*config.Database)
+		if err != nil {
+			log.Error().Err(err).Msg("Error opening database connection")
 			return
+		}
+		defer db.Close()
+		for _, tableSuffix := range []string{"colcounts", "liveattrs_entry", "term_search", "word"} {
+			log.Info().Msgf("Replacing table %s_%s -> %s_%s", config.TempCorpname, tableSuffix, config.Corpname, tableSuffix)
+			if err := replaceTable(db, config.Corpname, config.TempCorpname, tableSuffix); err != nil {
+				log.Error().Err(err).Msgf("Error replacing table %s_%s", config.Corpname, tableSuffix)
+				return
+			}
 		}
 	}
 	log.Info().Msg("Job done!")

@@ -161,6 +161,14 @@ func (a *Actions) GenerateNgrams(ctx *gin.Context) {
 		laAlias, err := a.laConfCache.Get(corpusID)
 		if err == nil {
 			laConf = mergeAliasedConfig(laConf, laAlias)
+
+		} else if err != laconf.ErrorNoSuchConfig {
+			uniresp.RespondWithErrorJSON(
+				ctx,
+				err,
+				http.StatusInternalServerError,
+			)
+			return
 		}
 
 	} else {

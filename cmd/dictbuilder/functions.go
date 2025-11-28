@@ -65,13 +65,13 @@ func refreshJobStatus(jobURL string, job *JobStatus) error {
 	return nil
 }
 
-func doJob(api string, jobPath string, jobParams string, jobArgs any) error {
+func doJob(api string, jobPath string, jobParams url.Values, jobArgs any) error {
 	jobURL, err := url.JoinPath(api, jobPath)
 	if err != nil {
 		return err
 	}
-	if jobParams != "" {
-		jobURL += "?" + jobParams
+	if len(jobParams) > 0 {
+		jobURL += "?" + jobParams.Encode()
 	}
 
 	args, err := json.Marshal(jobArgs)
