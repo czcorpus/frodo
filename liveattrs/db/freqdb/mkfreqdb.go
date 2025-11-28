@@ -180,6 +180,10 @@ func (nfg *NgramFreqGenerator) determineSimFreqsScore(words []*ngRecord) {
 	var prevLemmaStart int
 	var score float64
 	for i, word := range words {
+		if word.arf < 0 {
+			score = -1
+			continue
+		}
 		if word.lemma != currLemma || word.tag[:1] != currPos {
 			for j := prevLemmaStart; j < i; j++ {
 				words[j].simFreqsScore = score
@@ -209,7 +213,7 @@ func (nfg *NgramFreqGenerator) procLineGroup(
 	valPlaceholders := make([]string, len(words))
 	queryArgs := make([]any, 0, len(words)*9)
 
-	for i := 0; i < len(words); i++ {
+	for i := range len(words) {
 		valPlaceholders[i] = "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 		queryArgs = append(
 			queryArgs,

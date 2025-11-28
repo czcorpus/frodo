@@ -84,16 +84,32 @@ type Sublemma struct {
 }
 
 type Lemma struct {
-	ID           string     `json:"_id"`
-	Lemma        string     `json:"lemma"`
-	Forms        []Form     `json:"forms"`
-	Sublemmas    []Sublemma `json:"sublemmas"`
-	PoS          string     `json:"pos"`
-	IsPname      bool       `json:"is_pname"`
-	Count        int        `json:"count"`
-	IPM          float64    `json:"ipm"`
-	NgramSize    int        `json:"ngramSize"`
-	SimFreqScore float64    `json:"simFreqScore"`
+	ID        string     `json:"_id"`
+	Lemma     string     `json:"lemma"`
+	Forms     []Form     `json:"forms"`
+	Sublemmas []Sublemma `json:"sublemmas"`
+	PoS       string     `json:"pos"`
+	IsPname   bool       `json:"is_pname"`
+	Count     int        `json:"count"`
+	IPM       float64    `json:"ipm"`
+	NgramSize int        `json:"ngramSize"`
+
+	// SimFreqScore is an ARF-derived score for finding
+	// words with similar frequency. The value is basically
+	// a sum of ARF scores of all the words belonging
+	// to this lemma (as during liveattrs/ngrams processing,
+	// we calculate just word ARF, not the lemma one).
+	//
+	// In case the value is not available, it is set to -1.
+	SimFreqScore float64 `json:"simFreqScore"`
+}
+
+// CanDoSimFreqScores provides information if the instance
+// can be used for calculating similar word scores.
+// (This requires the lemma to have SimFreqScore (~ARF) calculated
+// and it must be also an unigram).
+func (lemma *Lemma) CanDoSimFreqScores() bool {
+	return lemma.SimFreqScore >= 0 && lemma.NgramSize == 1
 }
 
 func (lemma *Lemma) ToJSON() ([]byte, error) {

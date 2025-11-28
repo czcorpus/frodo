@@ -17,13 +17,13 @@
 package corpus
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 
-	"github.com/bytedance/sonic"
 	"github.com/czcorpus/cnc-gokit/fs"
 	"github.com/czcorpus/mquery-common/corp"
 	"github.com/rs/zerolog/log"
@@ -80,7 +80,7 @@ func (cs *CorporaSetup) Load() error {
 			continue
 		}
 		var conf corp.CorpusSetup
-		err = sonic.Unmarshal(tmp, &conf)
+		err = json.Unmarshal(tmp, &conf)
 		if err != nil {
 			log.Warn().
 				Err(err).
