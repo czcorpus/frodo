@@ -44,17 +44,18 @@ func (jargs JobInfoArgs) WithoutPasswords() JobInfoArgs {
 
 // LiveAttrsJobInfo collects information about corpus data synchronization job
 type LiveAttrsJobInfo struct {
-	ID             string        `json:"id"`
-	Type           string        `json:"type"`
-	CorpusID       string        `json:"corpusId"`
-	Start          jobs.JSONTime `json:"start"`
-	Update         jobs.JSONTime `json:"update"`
-	Finished       bool          `json:"finished"`
-	Error          error         `json:"error,omitempty"`
-	ProcessedAtoms int           `json:"processedAtoms"`
-	ProcessedLines int           `json:"processedLines"`
-	NumRestarts    int           `json:"numRestarts"`
-	Args           JobInfoArgs   `json:"args"`
+	ID              string        `json:"id"`
+	Type            string        `json:"type"`
+	CorpusID        string        `json:"corpusId"`
+	AliasedCorpusID string        `json:"aliasedCorpusId"`
+	Start           jobs.JSONTime `json:"start"`
+	Update          jobs.JSONTime `json:"update"`
+	Finished        bool          `json:"finished"`
+	Error           error         `json:"error,omitempty"`
+	ProcessedAtoms  int           `json:"processedAtoms"`
+	ProcessedLines  int           `json:"processedLines"`
+	NumRestarts     int           `json:"numRestarts"`
+	Args            JobInfoArgs   `json:"args"`
 }
 
 func (j LiveAttrsJobInfo) GetID() string {
@@ -74,6 +75,13 @@ func (j LiveAttrsJobInfo) GetNumRestarts() int {
 }
 
 func (j LiveAttrsJobInfo) GetCorpus() string {
+	if j.AliasedCorpusID == "" {
+		return j.CorpusID
+	}
+	return j.AliasedCorpusID
+}
+
+func (j LiveAttrsJobInfo) GetDatasetID() string {
 	return j.CorpusID
 }
 
@@ -139,14 +147,15 @@ func (j LiveAttrsJobInfo) GetError() error {
 // the Error property set to the value of 'err'.
 func (j LiveAttrsJobInfo) WithError(err error) jobs.GeneralJobInfo {
 	return LiveAttrsJobInfo{
-		ID:          j.ID,
-		Type:        JobType,
-		CorpusID:    j.CorpusID,
-		Start:       j.Start,
-		Update:      jobs.JSONTime(time.Now()),
-		Error:       err,
-		NumRestarts: j.NumRestarts,
-		Args:        j.Args,
-		Finished:    true,
+		ID:              j.ID,
+		Type:            JobType,
+		CorpusID:        j.CorpusID,
+		AliasedCorpusID: j.AliasedCorpusID,
+		Start:           j.Start,
+		Update:          jobs.JSONTime(time.Now()),
+		Error:           err,
+		NumRestarts:     j.NumRestarts,
+		Args:            j.Args,
+		Finished:        true,
 	}
 }

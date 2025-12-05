@@ -49,6 +49,8 @@ type GeneralJobInfo interface {
 	// GetCorpus provides a corpus name the job is related to
 	GetCorpus() string
 
+	GetDatasetID() string
+
 	// IsFinished returns true if the job has finished (either successfully or not)
 	IsFinished() bool
 

@@ -35,7 +35,6 @@ import (
 	"frodo/liveattrs/request/response"
 	"frodo/metadb"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -46,7 +45,6 @@ import (
 	"github.com/czcorpus/vert-tagextract/v3/fs"
 	vteLib "github.com/czcorpus/vert-tagextract/v3/library"
 	vteProc "github.com/czcorpus/vert-tagextract/v3/proc"
-	"github.com/google/uuid"
 
 	"github.com/czcorpus/cnc-gokit/uniresp"
 )
@@ -272,7 +270,7 @@ func (a *Actions) generateData(initialStatus *liveattrs.LiveAttrsJobInfo) {
 			}
 			err = a.corpusMetaW.SetLiveAttrs(
 				transact,
-				jobStatus.CorpusID,
+				jobStatus.GetCorpus(),
 				bibIDStruct,
 				bibIDAttr,
 				jobStatus.Args.TagsetAttr,
@@ -475,66 +473,6 @@ func (a *Actions) Stats(ctx *gin.Context) {
 	uniresp.WriteJSONResponse(ctx.Writer, &ans)
 }
 
-func (a *Actions) updateIndexesFromJobStatus(status *liveattrs.IdxUpdateJobInfo) {
-	fn := func(updateJobChan chan<- jobs.GeneralJobInfo) {
-		defer close(updateJobChan)
-		finalStatus := *status
-		corpusDBInfo, err := a.corpusMeta.LoadInfo(status.CorpusID)
-		if err != nil {
-			finalStatus.Error = err
-		}
-		ans := db.UpdateIndexes(a.laDB.DB(), corpusDBInfo, status.Args.MaxColumns)
-		if ans.Error != nil {
-			finalStatus.Error = ans.Error
-		}
-		finalStatus.Update = jobs.CurrentDatetime()
-		finalStatus.Finished = true
-		finalStatus.Result.RemovedIndexes = ans.RemovedIndexes
-		finalStatus.Result.UsedIndexes = ans.UsedIndexes
-		updateJobChan <- &finalStatus
-	}
-	a.jobActions.EnqueueJob(&fn, status)
-}
-
-// UpdateIndexes godoc
-// @Summary      Update indexes for specified corpus
-// @Produce      json
-// @Param        corpusId path string true "Used corpus"
-// @Param        maxColumns query int true "???"
-// @Success      200 {object} liveattrs.IdxUpdateJobInfo
-// @Router       /liveAttributes/{corpusId}/updateIndexes [post]
-func (a *Actions) UpdateIndexes(ctx *gin.Context) {
-	corpusID := ctx.Param("corpusId")
-	maxColumnsArg := ctx.Request.URL.Query().Get("maxColumns")
-	if maxColumnsArg == "" {
-		uniresp.WriteJSONErrorResponse(
-			ctx.Writer, uniresp.NewActionError("missing maxColumns argument"), http.StatusBadRequest)
-		return
-	}
-	maxColumns, err := strconv.Atoi(maxColumnsArg)
-	if err != nil {
-		uniresp.WriteJSONErrorResponse(
-			ctx.Writer, uniresp.NewActionError("failed to update indexes: %w", err), http.StatusUnprocessableEntity)
-		return
-	}
-	jobID, err := uuid.NewUUID()
-	if err != nil {
-		uniresp.WriteJSONErrorResponse(ctx.Writer, uniresp.NewActionError("Failed to start 'update indexes' job for '%s'", corpusID), http.StatusUnauthorized)
-		return
-	}
-	newStatus := liveattrs.IdxUpdateJobInfo{
-		ID:       jobID.String(),
-		Type:     "liveattrs-idx-update",
-		CorpusID: corpusID,
-		Start:    jobs.CurrentDatetime(),
-		Update:   jobs.CurrentDatetime(),
-		Finished: false,
-		Args:     liveattrs.IdxJobInfoArgs{MaxColumns: maxColumns},
-	}
-	a.updateIndexesFromJobStatus(&newStatus)
-	uniresp.WriteJSONResponseWithStatus(ctx.Writer, http.StatusCreated, &newStatus)
-}
-
 func (a *Actions) RestartLiveAttrsJob(ctx context.Context, jinfo *liveattrs.LiveAttrsJobInfo) error {
 	err := a.jobActions.TestAllowsJobRestart(jinfo)
 	if err != nil {
@@ -546,10 +484,6 @@ func (a *Actions) RestartLiveAttrsJob(ctx context.Context, jinfo *liveattrs.Live
 
 	a.generateData(jinfo)
 	log.Info().Msgf("Restarted liveAttributes job %s", jinfo.ID)
-	return nil
-}
-
-func (a *Actions) RestartIdxUpdateJob(jinfo *liveattrs.IdxUpdateJobInfo) error {
 	return nil
 }
 

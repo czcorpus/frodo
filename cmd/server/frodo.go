@@ -45,6 +45,7 @@ import (
 	"frodo/jobs"
 	"frodo/liveattrs"
 	laActions "frodo/liveattrs/actions"
+	"frodo/liveattrs/db/freqdb"
 	"frodo/liveattrs/laconf"
 	"frodo/metadb"
 	"frodo/root"
@@ -60,7 +61,7 @@ var (
 
 func init() {
 	gob.Register(&liveattrs.LiveAttrsJobInfo{})
-	gob.Register(&liveattrs.IdxUpdateJobInfo{})
+	gob.Register(&freqdb.NgramJobInfo{})
 }
 
 // @title           FRODO - Frequency Registry Of Dictionary Objects
@@ -225,12 +226,6 @@ func main() {
 				log.Error().Err(err).Msgf("Failed to restart job %s. The job will be removed.", tdj.ID)
 			}
 			jobActions.ClearDetachedJob(tdj.ID)
-		case *liveattrs.IdxUpdateJobInfo:
-			err := liveattrsActions.RestartIdxUpdateJob(tdj)
-			if err != nil {
-				log.Error().Err(err).Msgf("Failed to restart job %s. The job will be removed.", tdj.ID)
-			}
-			jobActions.ClearDetachedJob(tdj.ID)
 		default:
 			log.Error().Msg("unknown detached job type")
 		}
@@ -272,9 +267,6 @@ func main() {
 		liveattrsActions.FindBibTitles)
 	engine.GET(
 		"/liveAttributes/:corpusId/stats", liveattrsActions.Stats)
-	engine.POST(
-		"/liveAttributes/:corpusId/updateIndexes",
-		liveattrsActions.UpdateIndexes)
 	engine.POST(
 		"/liveAttributes/:corpusId/mixSubcorpus",
 		liveattrsActions.MixSubcorpus)

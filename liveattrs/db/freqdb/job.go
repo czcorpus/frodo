@@ -26,16 +26,17 @@ type NgramJobInfoArgs struct {
 
 // NgramJobInfo
 type NgramJobInfo struct {
-	ID          string           `json:"id"`
-	Type        string           `json:"type"`
-	CorpusID    string           `json:"corpusId"`
-	Start       jobs.JSONTime    `json:"start"`
-	Update      jobs.JSONTime    `json:"update"`
-	Finished    bool             `json:"finished"`
-	Error       error            `json:"error,omitempty"`
-	NumRestarts int              `json:"numRestarts"`
-	Args        NgramJobInfoArgs `json:"args"`
-	Result      genNgramsStatus  `json:"result"`
+	ID              string           `json:"id"`
+	Type            string           `json:"type"`
+	CorpusID        string           `json:"corpusId"`
+	AliasedCorpusID string           `json:"aliasedCorpusId"`
+	Start           jobs.JSONTime    `json:"start"`
+	Update          jobs.JSONTime    `json:"update"`
+	Finished        bool             `json:"finished"`
+	Error           error            `json:"error,omitempty"`
+	NumRestarts     int              `json:"numRestarts"`
+	Args            NgramJobInfoArgs `json:"args"`
+	Result          genNgramsStatus  `json:"result"`
 }
 
 func (j NgramJobInfo) GetID() string {
@@ -55,6 +56,13 @@ func (j NgramJobInfo) GetNumRestarts() int {
 }
 
 func (j NgramJobInfo) GetCorpus() string {
+	if j.AliasedCorpusID != "" {
+		return j.AliasedCorpusID
+	}
+	return j.CorpusID
+}
+
+func (j NgramJobInfo) GetDatasetID() string {
 	return j.CorpusID
 }
 
