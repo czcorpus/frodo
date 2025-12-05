@@ -26,15 +26,16 @@ type DummyJobResult struct {
 
 // DummyJobInfo collects information about corpus data synchronization job
 type DummyJobInfo struct {
-	ID          string          `json:"id"`
-	Type        string          `json:"type"`
-	CorpusID    string          `json:"corpusId"`
-	Start       JSONTime        `json:"start"`
-	Update      JSONTime        `json:"update"`
-	Finished    bool            `json:"finished"`
-	Error       error           `json:"error,omitempty"`
-	Result      *DummyJobResult `json:"result"`
-	NumRestarts int             `json:"numRestarts"`
+	ID              string          `json:"id"`
+	Type            string          `json:"type"`
+	CorpusID        string          `json:"corpusId"`
+	AliasedCorpusID string          `json:"aliasedCorpusId"`
+	Start           JSONTime        `json:"start"`
+	Update          JSONTime        `json:"update"`
+	Finished        bool            `json:"finished"`
+	Error           error           `json:"error,omitempty"`
+	Result          *DummyJobResult `json:"result"`
+	NumRestarts     int             `json:"numRestarts"`
 }
 
 func (j DummyJobInfo) GetID() string {
@@ -54,6 +55,13 @@ func (j DummyJobInfo) GetNumRestarts() int {
 }
 
 func (j DummyJobInfo) GetCorpus() string {
+	if j.AliasedCorpusID != "" {
+		return j.AliasedCorpusID
+	}
+	return j.CorpusID
+}
+
+func (j DummyJobInfo) GetDatasetID() string {
 	return j.CorpusID
 }
 

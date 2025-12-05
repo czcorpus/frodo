@@ -301,10 +301,10 @@ func (a *Actions) numOfUnfinishedJobs() int {
 	return ans
 }
 
-func (a *Actions) LastUnfinishedJobOfType(corpusID string, jobType string) (GeneralJobInfo, bool) {
+func (a *Actions) LastUnfinishedJobOfType(datasetID string, jobType string) (GeneralJobInfo, bool) {
 	var tmp GeneralJobInfo
 	for _, v := range a.jobList {
-		if v.GetCorpus() == corpusID && v.GetType() == jobType && !v.IsFinished() &&
+		if v.GetDatasetID() == datasetID && v.GetType() == jobType && !v.IsFinished() &&
 			(tmp == nil || reflect.ValueOf(tmp).IsNil() || v.GetStartDT().Before(tmp.GetStartDT())) {
 			tmp = v
 		}
