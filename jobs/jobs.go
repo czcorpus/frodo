@@ -165,13 +165,14 @@ func ClearFinishedJob(syncJobs map[string]GeneralJobInfo, jobID string) (General
 // JobInfoCompact is a simplified and unified version of
 // any specific job information
 type JobInfoCompact struct {
-	ID       string   `json:"id"`
-	CorpusID string   `json:"corpusId"`
-	Type     string   `json:"type"`
-	Start    JSONTime `json:"start"`
-	Update   JSONTime `json:"update"`
-	Finished bool     `json:"finished"`
-	OK       bool     `json:"ok"`
+	ID              string   `json:"id"`
+	CorpusID        string   `json:"corpusId"`
+	AliasedCorpusID string   `json:"aliasedCorpusId"`
+	Type            string   `json:"type"`
+	Start           JSONTime `json:"start"`
+	Update          JSONTime `json:"update"`
+	Finished        bool     `json:"finished"`
+	OK              bool     `json:"ok"`
 }
 
 // JobInfoListCompact represents a list of jobs for quick reviews

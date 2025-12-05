@@ -147,9 +147,10 @@ func (a *Actions) Create(ctx *gin.Context) {
 
 	append := ctx.Request.URL.Query().Get("append")
 	status := &liveattrs.LiveAttrsJobInfo{
-		ID:       jobID.String(),
-		CorpusID: corpusID,
-		Start:    jobs.CurrentDatetime(),
+		ID:              jobID.String(),
+		CorpusID:        corpusID,
+		AliasedCorpusID: aliasOf,
+		Start:           jobs.CurrentDatetime(),
 		Args: liveattrs.JobInfoArgs{
 			VteConf:          runtimeConf,
 			Append:           append == "1",
