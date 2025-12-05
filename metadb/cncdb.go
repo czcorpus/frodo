@@ -244,11 +244,11 @@ func (c *CNCMySQLHandler) SetLiveAttrs(
 	if bibIDAttr != "" && bibIDStruct != "" {
 		if err := c.IfMissingAddCorpusBibMetadata(
 			transact, corpus, bibIDStruct, bibIDAttr, tagAttr, tagsetName); err != nil {
-			return err
+			return fmt.Errorf("failed to set liveattrs for %s: %w", corpus, err)
 		}
 	}
 	if err := c.ifMissingAddCorpusTagset(transact, corpus, tagAttr, tagsetName); err != nil {
-		return err
+		return fmt.Errorf("failed to set liveattrs for %s: %w", corpus, err)
 	}
 
 	var err error
@@ -269,9 +269,11 @@ func (c *CNCMySQLHandler) SetLiveAttrs(
 					WHERE name = ?`, c.corporaTableName),
 			corpus,
 		)
-
 	}
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to set liveattrs for %s: %w", corpus, err)
+	}
+	return nil
 }
 
 func (c *CNCMySQLHandler) UnsetLiveAttrs(transact SQLTx, corpus string) error {

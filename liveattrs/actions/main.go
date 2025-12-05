@@ -228,13 +228,14 @@ func (a *Actions) generateData(initialStatus *liveattrs.LiveAttrsJobInfo) {
 				delete(a.vteJobCancel, initialStatus.ID)
 			}()
 			jobStatus := liveattrs.LiveAttrsJobInfo{
-				ID:          initialStatus.ID,
-				Type:        liveattrs.JobType,
-				CorpusID:    initialStatus.CorpusID,
-				Start:       initialStatus.Start,
-				Update:      jobs.CurrentDatetime(),
-				NumRestarts: initialStatus.NumRestarts,
-				Args:        initialStatus.Args,
+				ID:              initialStatus.ID,
+				Type:            liveattrs.JobType,
+				CorpusID:        initialStatus.CorpusID,
+				AliasedCorpusID: initialStatus.AliasedCorpusID,
+				Start:           initialStatus.Start,
+				Update:          jobs.CurrentDatetime(),
+				NumRestarts:     initialStatus.NumRestarts,
+				Args:            initialStatus.Args,
 			}
 
 			for upd := range procStatus {

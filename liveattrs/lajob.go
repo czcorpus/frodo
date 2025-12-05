@@ -97,18 +97,19 @@ func (j LiveAttrsJobInfo) IsFinished() bool {
 
 func (j LiveAttrsJobInfo) FullInfo() any {
 	return struct {
-		ID             string        `json:"id"`
-		Type           string        `json:"type"`
-		CorpusID       string        `json:"corpusId"`
-		Start          jobs.JSONTime `json:"start"`
-		Update         jobs.JSONTime `json:"update"`
-		Finished       bool          `json:"finished"`
-		Error          string        `json:"error,omitempty"`
-		OK             bool          `json:"ok"`
-		ProcessedAtoms int           `json:"processedAtoms"`
-		ProcessedLines int           `json:"processedLines"`
-		NumRestarts    int           `json:"numRestarts"`
-		Args           JobInfoArgs   `json:"args"`
+		ID              string        `json:"id"`
+		Type            string        `json:"type"`
+		CorpusID        string        `json:"corpusId"`
+		AliasedCorpusID string        `json:"aliasedCorpusId"`
+		Start           jobs.JSONTime `json:"start"`
+		Update          jobs.JSONTime `json:"update"`
+		Finished        bool          `json:"finished"`
+		Error           string        `json:"error,omitempty"`
+		OK              bool          `json:"ok"`
+		ProcessedAtoms  int           `json:"processedAtoms"`
+		ProcessedLines  int           `json:"processedLines"`
+		NumRestarts     int           `json:"numRestarts"`
+		Args            JobInfoArgs   `json:"args"`
 	}{
 		ID:             j.ID,
 		Type:           j.Type,
@@ -127,13 +128,14 @@ func (j LiveAttrsJobInfo) FullInfo() any {
 
 func (j LiveAttrsJobInfo) CompactVersion() jobs.JobInfoCompact {
 	item := jobs.JobInfoCompact{
-		ID:       j.ID,
-		Type:     j.Type,
-		CorpusID: j.CorpusID,
-		Start:    j.Start,
-		Update:   j.Update,
-		Finished: j.Finished,
-		OK:       true,
+		ID:              j.ID,
+		Type:            j.Type,
+		CorpusID:        j.CorpusID,
+		AliasedCorpusID: j.AliasedCorpusID,
+		Start:           j.Start,
+		Update:          j.Update,
+		Finished:        j.Finished,
+		OK:              true,
 	}
 	item.OK = j.Error == nil
 	return item
