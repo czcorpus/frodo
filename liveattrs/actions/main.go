@@ -248,11 +248,11 @@ func (a *Actions) generateData(initialStatus *liveattrs.LiveAttrsJobInfo) {
 				updateJobChan <- jobStatus
 
 				if upd.Error == vteProc.ErrorTooManyParsingErrors {
-					log.Error().Err(upd.Error).Msg("live attributes extraction failed")
+					log.Error().Str("corpusId", jobStatus.CorpusID).Err(upd.Error).Msg("live attributes extraction failed")
 					return
 
 				} else if upd.Error != nil {
-					log.Error().Err(upd.Error).Msg("(just registered)")
+					log.Error().Str("corpusId", jobStatus.CorpusID).Err(upd.Error).Msg("(just registered)")
 				}
 			}
 
@@ -345,12 +345,12 @@ func (a *Actions) Query(ctx *gin.Context) {
 	}
 	ans, err = a.getAttrValues(corpInfo, qry)
 	if err == laconf.ErrorNoSuchConfig {
-		log.Error().Err(err).Msgf("configuration not found for %s", corpusID)
+		log.Error().Str("corpusId", corpusID).Err(err).Msgf("configuration not found for %s", corpusID)
 		uniresp.WriteJSONErrorResponse(ctx.Writer, uniresp.NewActionError(baseErrTpl, corpusID, err), http.StatusNotFound)
 		return
 
 	} else if err != nil {
-		log.Error().Err(err).Msg("")
+		log.Error().Str("corpusId", corpusID).Err(err).Msg("failed to get attribute values")
 		uniresp.WriteJSONErrorResponse(ctx.Writer, uniresp.NewActionError(baseErrTpl, corpusID, err), http.StatusInternalServerError)
 		return
 	}
