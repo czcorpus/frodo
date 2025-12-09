@@ -200,6 +200,59 @@ func (nfg *NgramFreqGenerator) determineSimFreqsScore(words []*ngRecord) {
 	}
 }
 
+/**
+ * procLineGroupIgnoreErrors performs a per-line insert skipping inserts with errors.
+ * This should be used only if procLineGroup (which uses "bulk" insert) fails.
+ *
+ * note: returns last error
+ */
+func (nfg *NgramFreqGenerator) procLineGroupIgnoreErrors(
+	tx *sql.Tx,
+	words []*ngRecord,
+) (int, error) {
+	var lastErr error
+	var numInserted int
+	for i := range len(words) {
+		_, err := tx.Exec(
+			fmt.Sprintf(
+				`INSERT INTO %s_word (id, value, lemma, sublemma, pos, count, arf, initial_cap, ngram, sim_freqs_score)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				nfg.groupedName,
+			),
+			words[i].hashId,
+			words[i].word,
+			words[i].lemma,
+			words[i].sublemma,
+			strings.Join(
+				collections.SliceMap(
+					strings.Split(words[i].tag, " "),
+					func(v string, i int) string {
+						return nfg.posFn.Transform(v)
+					},
+				),
+				" ",
+			),
+			words[i].abs,
+			words[i].arf,
+			words[i].initialCap,
+			words[i].ngramSize,
+			words[i].simFreqsScore,
+		)
+		if err == nil {
+			numInserted++
+
+		} else {
+			lastErr = err
+			log.Error().Err(lastErr).
+				Str("hash", words[i].hashId).
+				Str("word", words[i].word).
+				Str("lemma", words[i].lemma).
+				Msg("failed to insert n-gram to table *_word")
+		}
+	}
+	return numInserted, lastErr
+}
+
 // procLineGroup processes provided list of ngRecord items (= vertical file line containing
 // a token data) with respect to currently processed currLemma and collected sublemmas.
 //
@@ -380,19 +433,40 @@ func (nfg *NgramFreqGenerator) procChunk(
 		return false
 	}
 
-	baseStatus.CurrAction = fmt.Sprintf("processing selected rows for the chunk")
+	baseStatus.CurrAction = "processing selected rows for the chunk"
 	statusCh <- baseStatus
 
 	rowBatch := make([]*ngRecord, 0, 100)
 
 	procRowBatch := func(rowNum int, batch []*ngRecord) bool {
-		if err := nfg.procLineGroup(tx, batch); err != nil {
+		err := nfg.procLineGroup(tx, batch)
+		if err != nil {
 			tx.Rollback()
-			baseStatus.Error = fmt.Errorf(
-				"failed to process db row %d for chunkID %d: %w", rowNum, baseStatus.ChunkID, err)
-			statusCh <- baseStatus
+			log.Error().Err(err).Msg("failed to batch insert records, rolling back and trying per-line insert")
+			tx, err = nfg.db.DB().Begin()
+			if err != nil {
+				tx.Rollback()
+				baseStatus.Error = fmt.Errorf("failed to process chunk: %w", err)
+				statusCh <- baseStatus
+				return false
+			}
+			numInserted, lastErr := nfg.procLineGroupIgnoreErrors(tx, batch)
+			if numInserted == 0 && len(batch) > 0 {
+				log.Error().AnErr("lastError", lastErr).Msg("failed to perform alternative per-line insert - no insert succeeded")
+				tx.Rollback()
+				baseStatus.Error = fmt.Errorf("failed to process chunk (per-line): %w", err)
+				statusCh <- baseStatus
+				return false
+
+			} else {
+				log.Warn().
+					Int("totalItems", len(batch)).
+					Int("numInserted", numInserted).
+					Msg("performed alternative per-line insert")
+			}
 			return false
 		}
+
 		procTime := time.Since(t0).Seconds()
 		if (baseStatus.ChunkID*procChunkSize+rowNum)%reportEachNthItem == 0 {
 			baseStatus.AvgSpeedItemsPerSec = int(math.RoundToEven(float64(baseStatus.ChunkID*procChunkSize+rowNum) / procTime))
