@@ -44,7 +44,8 @@ import (
 
 const (
 	reportEachNthItem   = 10000
-	procChunkSize       = 50000
+	procChunkSize       = 5000
+	sqlInsertBatchSize  = 100
 	duplicateRowErrNo   = 1062
 	NonWordCSCNC2020Tag = "X@-------------"
 )
@@ -264,8 +265,7 @@ func (nfg *NgramFreqGenerator) procLineGroup(
 	words []*ngRecord,
 ) error {
 	valPlaceholders := make([]string, len(words))
-	queryArgs := make([]any, 0, len(words)*9)
-
+	queryArgs := make([]any, 0, len(words)*10)
 	for i := range len(words) {
 		valPlaceholders[i] = "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 		queryArgs = append(
@@ -290,7 +290,6 @@ func (nfg *NgramFreqGenerator) procLineGroup(
 			words[i].simFreqsScore,
 		)
 	}
-
 	if _, err := tx.Exec(
 		fmt.Sprintf(
 			`INSERT INTO %s_word (id, value, lemma, sublemma, pos, count, arf, initial_cap, ngram, sim_freqs_score)
@@ -436,13 +435,13 @@ func (nfg *NgramFreqGenerator) procChunk(
 	baseStatus.CurrAction = "processing selected rows for the chunk"
 	statusCh <- baseStatus
 
-	rowBatch := make([]*ngRecord, 0, 100)
+	rowBatch := make([]*ngRecord, 0, sqlInsertBatchSize)
 
 	procRowBatch := func(rowNum int, batch []*ngRecord) bool {
 		err := nfg.procLineGroup(tx, batch)
 		if err != nil {
-			tx.Rollback()
-			log.Error().Err(err).Msg("failed to batch insert records, rolling back and trying per-line insert")
+			rerr := tx.Rollback()
+			log.Error().Err(err).AnErr("rollbackError", rerr).Msg("failed to batch insert records, rolling back and trying per-line insert")
 			tx, err = nfg.db.DB().Begin()
 			if err != nil {
 				tx.Rollback()
@@ -481,11 +480,11 @@ func (nfg *NgramFreqGenerator) procChunk(
 		rowNum = i + 1
 		rowBatch = append(rowBatch, rec)
 
-		if len(rowBatch) == 100 {
+		if len(rowBatch) == sqlInsertBatchSize {
 			if ok := procRowBatch(rowNum, rowBatch); !ok {
 				return false
 			}
-			rowBatch = make([]*ngRecord, 0, 100)
+			rowBatch = make([]*ngRecord, 0, sqlInsertBatchSize)
 		}
 		select {
 		case <-ctx.Done():
