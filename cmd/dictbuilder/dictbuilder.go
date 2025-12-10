@@ -172,7 +172,7 @@ func run(configFilePath string) {
 	// Run ngrams job
 	ngramsPath := fmt.Sprintf("dictionary/%s/ngrams", config.GetDatasetName())
 	ngramsParams := url.Values{
-		"append":    []string{"1"},
+		"append":    []string{"0"},
 		"ngramSize": []string{fmt.Sprintf("%d", config.NGramSize)},
 		"aliasOf":   []string{config.Corpname},
 	}
