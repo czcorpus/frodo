@@ -451,20 +451,11 @@ func (nfg *NgramFreqGenerator) procChunk(
 				return false
 			}
 			numInserted, lastErr := nfg.procLineGroupIgnoreErrors(tx, batch)
-			if numInserted == 0 && len(batch) > 0 {
-				log.Error().AnErr("lastError", lastErr).Msg("failed to perform alternative per-line insert - no insert succeeded")
-				tx.Rollback()
-				baseStatus.Error = fmt.Errorf("failed to process chunk (per-line): %w", err)
-				statusCh <- baseStatus
-				return false
-
-			} else {
-				log.Warn().
-					Int("totalItems", len(batch)).
-					Int("numInserted", numInserted).
-					Msg("performed alternative per-line insert")
-			}
-			return false
+			log.Warn().
+				Int("totalItems", len(batch)).
+				Int("numInserted", numInserted).
+				AnErr("lastError", lastErr).
+				Msg("performed alternative per-line insert")
 		}
 
 		procTime := time.Since(t0).Seconds()
