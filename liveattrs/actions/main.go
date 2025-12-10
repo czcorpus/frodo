@@ -126,7 +126,7 @@ func (a *Actions) applyPatchArgs(
 			targetConf.Ngrams.NgramSize = jsonArgs.Ngrams.NgramSize
 		}
 		if jsonArgs.Ngrams.CalcARF {
-			jsonArgs.Ngrams.CalcARF = true
+			targetConf.Ngrams.CalcARF = true
 		}
 	}
 
