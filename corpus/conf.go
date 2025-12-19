@@ -43,13 +43,41 @@ func (cv CorpusVariant) SubDir() string {
 	return string(cv)
 }
 
+type MonitoringDataset struct {
+	Ident          string `json:"id"`
+	SourceCorpusID string `json:"sourceCorpusId"`
+	VerticalsDir   string `json:"verticalsDir"`
+	Description    string `json:"description"`
+	WordColIdx     int    `json:"wordColIdx"`
+	LemmaColIdx    int    `json:"lemmaColIdx"`
+	TagColIdx      int    `json:"tagColIdx"`
+	NgramSize      int    `json:"ngramSize"`
+	SentenceStruct string `json:"sentenceStruct"`
+}
+
+func (md MonitoringDataset) IsZero() bool {
+	return md.Ident == ""
+}
+
+type MonitoringDatasets []MonitoringDataset
+
+func (md MonitoringDatasets) GetByID(id string) MonitoringDataset {
+	for _, v := range md {
+		if v.Ident == id {
+			return v
+		}
+	}
+	return MonitoringDataset{}
+}
+
 // CorporaSetup defines Frodo application configuration related
 // to a corpus
 type CorporaSetup struct {
-	RegistryDirPaths []string `json:"registryDirPaths"`
-	RegistryTmpDir   string   `json:"registryTmpDir"`
-	CorporaConfDir   string   `json:"confFilesDir"`
-	corpora          []corp.CorpusSetup
+	RegistryDirPaths   []string `json:"registryDirPaths"`
+	RegistryTmpDir     string   `json:"registryTmpDir"`
+	CorporaConfDir     string   `json:"confFilesDir"`
+	corpora            []corp.CorpusSetup
+	MonitoringDatasets MonitoringDatasets `json:"monitoringDatasets"`
 }
 
 func (cs *CorporaSetup) GetFirstValidRegistry(corpusID, subDir string) string {
