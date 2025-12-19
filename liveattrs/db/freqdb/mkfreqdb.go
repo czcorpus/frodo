@@ -641,6 +641,7 @@ func (nfg *NgramFreqGenerator) generateSync(
 
 	if err := nfg.updateTablesStats(); err != nil {
 		status.Error = err
+		statusChan <- status
 	}
 }
 
