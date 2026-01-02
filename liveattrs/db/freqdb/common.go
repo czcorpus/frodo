@@ -36,7 +36,6 @@ var (
 
 type genNgramsStatus struct {
 	CorpusID            string
-	TablesReady         bool
 	TotalLines          int
 	NumProcLines        int
 	NumStopWords        int
@@ -56,7 +55,6 @@ func (gns genNgramsStatus) MarshalJSON() ([]byte, error) {
 	return json.Marshal(
 		struct {
 			CorpusID            string  `json:"corpusId"`
-			TablesReady         bool    `json:"tablesReady"`
 			NumProcLines        int     `json:"numProcLines"`
 			NumStopWords        int     `json:"numStopWords"`
 			Progress            float64 `json:"progress"`
@@ -69,7 +67,6 @@ func (gns genNgramsStatus) MarshalJSON() ([]byte, error) {
 			ClientWarn          string  `json:"clientWarning,omitempty"`
 		}{
 			CorpusID:            gns.CorpusID,
-			TablesReady:         gns.TablesReady,
 			NumProcLines:        gns.NumProcLines,
 			NumStopWords:        gns.NumStopWords,
 			Progress:            progress,
