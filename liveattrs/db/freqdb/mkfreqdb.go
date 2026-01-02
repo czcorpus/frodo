@@ -518,9 +518,8 @@ func (nfg *NgramFreqGenerator) run(
 	statusChan chan<- genNgramsStatus,
 ) bool {
 	baseStatus := genNgramsStatus{
-		CorpusID:    nfg.corpusName,
-		TablesReady: true,
-		CurrAction:  "starting to process colcounts table for ngrams",
+		CorpusID:   nfg.corpusName,
+		CurrAction: "starting to process colcounts table for ngrams",
 	}
 	total, err := nfg.findTotalNumLines()
 	if err != nil {
@@ -561,7 +560,6 @@ func (nfg *NgramFreqGenerator) run(
 			CorpusID:           nfg.corpusName,
 			ChunkID:            i,
 			TotalLines:         total,
-			TablesReady:        true,
 			TimeEstimationSecs: estim,
 			NumProcLines:       i * procChunkSize,
 		}
@@ -622,7 +620,6 @@ func (nfg *NgramFreqGenerator) generateSync(
 		err = nfg.createTables(tx)
 	}
 
-	status.TablesReady = true
 	statusChan <- status
 	if err != nil {
 		tx.Rollback()

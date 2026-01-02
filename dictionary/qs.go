@@ -53,7 +53,6 @@ func mkID(x int) string {
 }
 
 type exporterStatus struct {
-	TablesReady  bool
 	NumProcLines int
 	Error        error
 }
@@ -61,11 +60,9 @@ type exporterStatus struct {
 func (es exporterStatus) MarshalJSON() ([]byte, error) {
 	return json.Marshal(
 		struct {
-			TablesReady  bool   `json:"tablesReady"`
 			NumProcLines int    `json:"numProcLines"`
 			Error        string `json:"error,omitempty"`
 		}{
-			TablesReady:  es.TablesReady,
 			NumProcLines: es.NumProcLines,
 			Error:        jobs.ErrorToString(es.Error),
 		},
@@ -282,6 +279,65 @@ func SearchWithNoOp() SearchOption {
 	return func(c *SearchOptions) {}
 }
 
+// --------
+
+type ttlSeachItem struct {
+	lemma string
+	pos   string
+}
+
+type ttlSearch struct {
+	items []ttlSeachItem
+	error error
+}
+
+func (srch *ttlSearch) toSQL(prefix string) (string, []any) {
+	exprTmp := make([]string, len(srch.items))
+	args := make([]any, 2*len(srch.items))
+	for i, item := range srch.items {
+		exprTmp[i] = fmt.Sprintf("(%s.lemma = ? AND %s.pos = ?)", prefix, prefix)
+		args[2*i] = item.lemma
+		args[2*i+1] = item.pos
+	}
+	return strings.Join(exprTmp, " OR "), args
+}
+
+// ---------
+
+func termToLemma(
+	ctx context.Context,
+	db *mysql.Adapter,
+	groupedName string,
+	term string,
+) (ans ttlSearch) {
+	rows, err := db.DB().QueryContext(
+		ctx,
+		fmt.Sprintf(
+			"SELECT DISTINCT w.lemma, w.pos "+
+				"FROM %s_term_search AS s "+
+				"JOIN %s_word AS w ON w.id = s.word_id "+
+				"WHERE s.value = ?",
+			groupedName,
+			groupedName,
+		),
+		term,
+	)
+	if err != nil {
+		ans.error = fmt.Errorf("failed to find term lemma: %w", err)
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var item ttlSeachItem
+		if err := rows.Scan(&item.lemma, &item.pos); err != nil {
+			ans.error = fmt.Errorf("failed to find term lemma: %w", err)
+			return
+		}
+		ans.items = append(ans.items, item)
+	}
+	return
+}
+
 func Search(
 	ctx context.Context,
 	db *mysql.Adapter,
@@ -289,8 +345,6 @@ func Search(
 	opts ...SearchOption,
 ) ([]Lemma, error) {
 
-	status := exporterStatus{}
-	status.TablesReady = true
 	whereSQL := make([]string, 0, 5)
 	whereArgs := make([]any, 0, 5)
 	whereSQL = append(whereSQL, "w.pos != ?")
@@ -300,6 +354,7 @@ func Search(
 	for _, opt := range opts {
 		opt(&srchOpts)
 	}
+	joinExpr := fmt.Sprintf("JOIN %s_term_search AS s ON s.word_id = w.id", groupedName)
 
 	ngramSize := srchOpts.InferNgramSize()
 	if ngramSize <= 0 {
@@ -320,9 +375,19 @@ func Search(
 		whereSQL = append(whereSQL, "w.value = ?")
 		whereArgs = append(whereArgs, srchOpts.Word)
 	}
+	// in case of search by any attribute (word, lemma, sublemma), we have to use
+	// two SQL queries:
+	// 1) identify matching lemma+pos entries
+	// 2) search all the variants matching (1)
 	if srchOpts.AnyValue != "" {
-		whereSQL = append(whereSQL, "s.value = ?")
-		whereArgs = append(whereArgs, srchOpts.AnyValue)
+		lemmaSrch := termToLemma(ctx, db, groupedName, srchOpts.AnyValue)
+		if lemmaSrch.error != nil {
+			return []Lemma{}, fmt.Errorf("failed to search dict. values: %w", lemmaSrch.error)
+		}
+		sql, args := lemmaSrch.toSQL("w")
+		whereSQL = append(whereSQL, sql)
+		whereArgs = append(whereArgs, args...)
+		joinExpr = ""
 	}
 	if srchOpts.PoS != "" {
 		whereSQL = append(whereSQL, "w.pos = ?")
@@ -341,12 +406,12 @@ func Search(
 			"SELECT w.value, w.lemma, w.sublemma, w.count, "+
 				"w.pos, w.arf, w.ngram, w.sim_freqs_score "+
 				"FROM %s_word AS w "+
-				"JOIN %s_term_search AS s ON s.word_id = w.id "+
+				" %s "+
 				"WHERE %s "+
 				"ORDER BY w.lemma, w.pos, w.sublemma, w.value "+
 				"%s",
 			groupedName,
-			groupedName,
+			joinExpr,
 			strings.Join(whereSQL, " AND "),
 			limitSQL,
 		),
