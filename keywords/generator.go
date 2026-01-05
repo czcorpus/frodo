@@ -21,40 +21,70 @@ func generateKeywordsSync(
 	wordDict := ptcount.NewWordDict()
 	wordDict.Add("")
 
+	parserConf := &vertigo.ParserConf{
+		StructAttrAccumulator: "nil",
+		Encoding:              "utf-8",
+		LogProgressEachNth:    1000000, // TODO
+	}
+
+	// count tokens in 1 (ref)
+
+	tc1 := &TokenCounter{}
 	vertScanner1, err := proc.NewMultiFileScanner(args.ReferenceVerticals...)
 	if err != nil {
 		status.Error = fmt.Errorf("failed to run TTExtractor: %w", err)
 		jobStatus <- status
 		return
 	}
-	defer vertScanner1.Close()
-
-	parserConf := &vertigo.ParserConf{
-		StructAttrAccumulator: "nil",
-		Encoding:              "utf-8",
-		LogProgressEachNth:    1000000, // TODO
+	if err := vertigo.ParseVerticalFromScanner(ctx, vertScanner1, parserConf, tc1); err != nil {
+		status.Error = err
+		jobStatus <- status
 	}
-	processor1 := NewNgramExtractor(ctx, args, wordDict, jobStatus)
+	vertScanner1.Close()
+
+	// find keywords in 1 (ref)
+
+	vertScanner1, err = proc.NewMultiFileScanner(args.ReferenceVerticals...)
+	if err != nil {
+		status.Error = fmt.Errorf("failed to run TTExtractor: %w", err)
+		jobStatus <- status
+		return
+	}
+	processor1 := NewNgramExtractor(ctx, args, wordDict, tc1.NumTokens, jobStatus)
 	if err := vertigo.ParseVerticalFromScanner(ctx, vertScanner1, parserConf, processor1); err != nil {
 		status.Error = err
 		jobStatus <- status
 	}
-	processor1.CalcARF()
+	vertScanner1.Close()
 	processor1.Preview()
 
+	// count tokens in 2 (foc)
+
+	tc2 := &TokenCounter{}
 	vertScanner2, err := proc.NewMultiFileScanner(args.FocusVerticals...)
 	if err != nil {
 		status.Error = fmt.Errorf("failed to run TTExtractor: %w", err)
 		jobStatus <- status
 		return
 	}
-	defer vertScanner2.Close()
-	processor2 := NewNgramExtractor(ctx, args, wordDict, jobStatus)
+	if err := vertigo.ParseVerticalFromScanner(ctx, vertScanner2, parserConf, tc2); err != nil {
+		status.Error = err
+		jobStatus <- status
+	}
+	vertScanner2.Close()
+
+	vertScanner2, err = proc.NewMultiFileScanner(args.FocusVerticals...)
+	if err != nil {
+		status.Error = fmt.Errorf("failed to run TTExtractor: %w", err)
+		jobStatus <- status
+		return
+	}
+	processor2 := NewNgramExtractor(ctx, args, wordDict, tc2.NumTokens, jobStatus)
 	if err := vertigo.ParseVerticalFromScanner(ctx, vertScanner2, parserConf, processor2); err != nil {
 		status.Error = err
 		jobStatus <- status
 	}
-	processor2.CalcARF()
+	vertScanner2.Close()
 	processor2.Preview()
 
 	ans := FindKeywords(processor1.colCounts2, processor2.colCounts2, wordDict, 2)

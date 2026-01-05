@@ -66,12 +66,12 @@ func effectSizeLogRatio(a, b, c, d float64) float64 {
 }
 
 func FindKeywords(
-	wordsRef map[string]*ngram,
-	wordsFocus map[string]*ngram,
+	wordsRef map[string]Ngram,
+	wordsFocus map[string]Ngram,
 	wordDict *ptcount.WordDict,
 	minARF float64,
 ) []Keyword {
-	results := make([]*ngram, 0, 1000)
+	results := make([]Ngram, 0, 1000)
 	minLL := 10.83 // ~ p < 0.001
 	var c, d float64
 	for _, ng := range wordsFocus {
@@ -83,6 +83,10 @@ func FindKeywords(
 	fmt.Printf("focus size : %d, ref size: %d\n", len(wordsFocus), len(wordsRef))
 	for _, ngram := range wordsFocus {
 		if ngram.ARF() < minARF {
+			continue
+		}
+		if _, ok := wordsRef[ngram.UniqueID()]; !ok {
+			// word not found in reference corpus
 			continue
 		}
 		/*
@@ -97,22 +101,22 @@ func FindKeywords(
 		d -= b
 		//fmt.Printf("a = %d, b = %d, c = %d, d = %d\n", a, b, c, d)
 		ll := logLikelihood(a, b, c, d)
-		if ngram.IsProperName {
+		if ngram.IsPropname() {
 			ll *= 1.3
 		}
 		if ll >= minLL {
-			ngram.EffectSize = effectSizeLogRatio(a, b, c, d)
+			ngram.SetEffectSize(effectSizeLogRatio(a, b, c, d))
 			// Only keep words overrepresented today (positive effect size)
-			if ngram.EffectSize > 0 {
+			if ngram.SafeEffectSize() > 0 {
 				results = append(results, ngram)
 			}
 		}
 	}
-	slices.SortFunc(results, func(n1, n2 *ngram) int {
-		if n1.EffectSize < n2.EffectSize {
+	slices.SortFunc(results, func(n1, n2 Ngram) int {
+		if n1.SafeEffectSize() < n2.SafeEffectSize() {
 			return 1
 		}
-		if n1.EffectSize > n2.EffectSize {
+		if n1.SafeEffectSize() > n2.SafeEffectSize() {
 			return -1
 		}
 		return 0
@@ -120,17 +124,18 @@ func FindKeywords(
 
 	ans := make([]Keyword, 15)
 	for i, v := range results[:15] {
-		if v.tokens[1].Word > 0 {
+		if v.Len() == 2 {
 			ans[i] = Keyword{
-				Lemma:      fmt.Sprintf("%s %s", wordDict.Get(v.tokens[0].Word), wordDict.Get(v.tokens[1].Word)),
-				EffectSize: v.EffectSize,
+				Lemma:      fmt.Sprintf("%s %s", wordDict.Get(v.TokenAt(0).Word), wordDict.Get(v.TokenAt(1).Word)),
+				EffectSize: v.SafeEffectSize(),
 			}
 		} else {
 			ans[i] = Keyword{
-				Lemma:      wordDict.Get(v.tokens[0].Word),
-				EffectSize: v.EffectSize,
+				Lemma:      wordDict.Get(v.TokenAt(0).Word),
+				EffectSize: v.SafeEffectSize(),
 			}
 		}
+
 	}
 	return ans
 }

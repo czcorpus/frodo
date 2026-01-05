@@ -47,75 +47,6 @@ func (tk *token) IsNominative() bool {
 
 // ----------------
 
-type ngram struct {
-	tokens       [2]token
-	Count        int
-	EffectSize   float64
-	IsProperName bool
-	LastPos      int
-	Distances    []int
-	arf          float64
-}
-
-func (ng *ngram) UniqueID() string {
-	return fmt.Sprintf("%d--%d", ng.tokens[0].Lemma, ng.tokens[1].Lemma)
-}
-
-func (ng *ngram) IncCount() {
-	ng.Count++
-}
-
-func (ng *ngram) SafeCount() int {
-	if ng == nil {
-		return 0
-	}
-	return ng.Count
-}
-
-func (ng *ngram) SafeEffectSize() float64 {
-	if ng == nil {
-		return 0
-	}
-	return ng.EffectSize
-}
-
-func (ng *ngram) AppendToken(tk token) {
-	for i := range len(ng.tokens) {
-		if ng.tokens[i].IsZero() {
-			ng.tokens[i] = tk
-			break
-		}
-	}
-}
-
-func (ng *ngram) SetDistance(currToken int) {
-	ng.Distances = append(ng.Distances, currToken-ng.LastPos)
-	ng.LastPos = currToken
-}
-
-func (ng *ngram) CalcArf(corpSize int) float64 {
-	avgDist := float64(corpSize) / float64(ng.Count)
-	tmp := 0.0
-	for _, v := range ng.Distances {
-		tmp += min(float64(v), avgDist)
-	}
-	ng.arf = tmp / avgDist
-	return ng.arf
-}
-
-func (ng *ngram) ARF() float64 {
-	if ng == nil {
-		return 0
-	}
-	return ng.arf
-}
-
-func newNgram() *ngram {
-	return &ngram{
-		Distances: make([]int, 0, 10),
-	}
-}
-
 // -----------------
 
 type NgramExtractor struct {
@@ -130,8 +61,9 @@ type NgramExtractor struct {
 	filter       proc.LineFilter
 	conf         KeywordsBuildArgs
 	statusChan   chan<- keywordsBuildStatus
-	colCounts2   map[string]*ngram
-	colCounts1   map[string]*ngram
+	colCounts2   map[string]Ngram
+	colCounts1   map[string]Ngram
+	corpusSize   int
 }
 
 func (tte *NgramExtractor) handleProcError(lineNum int, err error) error {
@@ -150,6 +82,19 @@ func (tte *NgramExtractor) handleProcError(lineNum int, err error) error {
 
 func (tte *NgramExtractor) procPrevSent() {
 
+}
+
+func (tte *NgramExtractor) newNgram(size int) Ngram {
+	switch size {
+	case 1:
+		return &Unigram{ngramBase: ngramBase{corpusSize: tte.corpusSize}}
+	case 2:
+		return &Bigram{ngramBase: ngramBase{corpusSize: tte.corpusSize}}
+	case 3:
+		return &Trigram{ngramBase: ngramBase{corpusSize: tte.corpusSize}}
+	default:
+		return nil
+	}
 }
 
 func (tte *NgramExtractor) ProcStruct(st *vertigo.Structure, line int, err error) error {
@@ -206,50 +151,40 @@ func (tte *NgramExtractor) ProcToken(tk *vertigo.Token, line int, err error) err
 
 		tte.currSentence = append(tte.currSentence, token2)
 		if len(tte.currSentence) >= tte.conf.NgramSize {
-			ngram2 := newNgram()
+			ngram2 := tte.newNgram(2)
 			startPos := len(tte.currSentence) - tte.conf.NgramSize
 			for i := startPos; i < len(tte.currSentence); i++ {
 				ngram2.AppendToken(tte.currSentence[i])
 			}
 			key := ngram2.UniqueID()
-			_, ok := tte.colCounts2[key]
-			if !ok {
-				tmp1 := []rune(tte.valueDict.Get(ngram2.tokens[0].Lemma))
-				tmp2 := []rune(tte.valueDict.Get(ngram2.tokens[1].Lemma))
-				ngram2.IsProperName = unicode.IsUpper(tmp1[0]) || unicode.IsUpper(tmp2[0])
-				tte.colCounts2[key] = ngram2
+			ngram2Curr, ok := tte.colCounts2[key]
+			if ok {
+				ngram2Curr.TestAndAdoptNominative(ngram2)
+				ngram2 = ngram2Curr
 
-			} else if !tte.colCounts2[key].tokens[0].IsNominative() && ngram2.tokens[0].IsNominative() {
-				tte.colCounts2[key].tokens[0].Word = ngram2.tokens[0].Word
-				tte.colCounts2[key].tokens[0].Case = ngram2.tokens[0].Case
-				tte.colCounts2[key].tokens[1].Word = ngram2.tokens[1].Word
-				tte.colCounts2[key].tokens[1].Case = ngram2.tokens[1].Case
+			} else {
+				ngram2.TestAndSetPropnameFlag(tte.valueDict)
 			}
-			tte.colCounts2[key].IncCount()
-			tte.colCounts2[key].SetDistance(tk.Idx)
+			ngram2.IncCount()
+			ngram2.SetDistance(tk.Idx)
+			tte.colCounts2[key] = ngram2
 		}
 		// unigrams
 		//
-		token1 := token{
-			Word:  tte.valueDict.Add(tk.PosAttrByIndex(tte.conf.WordColIdx)),
-			Lemma: tte.valueDict.Add(tk.PosAttrByIndex(tte.conf.LemmaColIdx)),
-			Case:  cse,
-		}
-		ngram1 := newNgram()
-		ngram1.AppendToken(token1)
+		ngram1 := tte.newNgram(1)
+		ngram1.AppendToken(token2)
 		key := ngram1.UniqueID()
-		_, ok := tte.colCounts1[key]
-		if !ok {
-			tmp1 := []rune(tte.valueDict.Get(ngram1.tokens[0].Lemma))
-			ngram1.IsProperName = unicode.IsUpper(tmp1[0])
-			tte.colCounts1[key] = ngram1
+		ngram1Curr, ok := tte.colCounts1[key]
+		if ok {
+			ngram1Curr.TestAndAdoptNominative(ngram1)
+			ngram1 = ngram1Curr
 
-		} else if !tte.colCounts1[key].tokens[0].IsNominative() && ngram1.tokens[0].IsNominative() {
-			tte.colCounts1[key].tokens[0].Word = ngram1.tokens[0].Word
-			tte.colCounts1[key].tokens[0].Case = ngram1.tokens[0].Case
+		} else {
+			ngram1.TestAndSetPropnameFlag(tte.valueDict)
 		}
-		tte.colCounts1[key].IncCount()
-		tte.colCounts1[key].SetDistance(tk.Idx)
+		ngram1.IncCount()
+		ngram1.SetDistance(tk.Idx)
+		tte.colCounts1[key] = ngram1
 	}
 
 	if line%100000 == 0 {
@@ -265,30 +200,13 @@ func (tte *NgramExtractor) TotalTokens() int {
 	return tte.tokenCounter
 }
 
-func (tte *NgramExtractor) CalcARF() {
-	for _, v := range tte.colCounts1 {
-		v.CalcArf(tte.tokenCounter)
-	}
-	for _, v := range tte.colCounts2 {
-		v.CalcArf(tte.tokenCounter)
-	}
-}
-
 func (tte *NgramExtractor) Preview() {
 	i := 0
 	for _, v := range tte.colCounts2 {
 		if i >= 10 {
 			break
 		}
-		fmt.Printf(
-			"w: %s %s, lm: %s %s, freq: %d, ARF: %.2f\n",
-			tte.valueDict.Get(v.tokens[0].Word),
-			tte.valueDict.Get(v.tokens[1].Word),
-			tte.valueDict.Get(v.tokens[0].Lemma),
-			tte.valueDict.Get(v.tokens[1].Lemma),
-			v.Count,
-			v.ARF(),
-		)
+		fmt.Println(v.Preview(tte.valueDict))
 		i++
 	}
 
@@ -298,6 +216,7 @@ func NewNgramExtractor(
 	ctx context.Context,
 	args KeywordsBuildArgs,
 	wordDict *ptcount.WordDict,
+	corpusSize int,
 	statusChan chan<- keywordsBuildStatus,
 ) *NgramExtractor {
 	return &NgramExtractor{
@@ -306,9 +225,10 @@ func NewNgramExtractor(
 		filter: &stopWordFilter{
 			tagColIdx: args.TagColIdx,
 		},
-		colCounts2: make(map[string]*ngram),
-		colCounts1: make(map[string]*ngram),
+		colCounts2: make(map[string]Ngram),
+		colCounts1: make(map[string]Ngram),
 		valueDict:  wordDict,
 		statusChan: statusChan,
+		corpusSize: corpusSize,
 	}
 }
