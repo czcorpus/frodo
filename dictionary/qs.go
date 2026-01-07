@@ -70,9 +70,10 @@ func (es exporterStatus) MarshalJSON() ([]byte, error) {
 }
 
 type Form struct {
-	Value string  `json:"word"`
-	Count int     `json:"count"`
-	ARF   float64 `json:"arf"`
+	Value    string  `json:"word"`
+	Sublemma string  `json:"sublemma"`
+	Count    int     `json:"count"`
+	ARF      float64 `json:"arf"`
 }
 
 type Sublemma struct {
@@ -181,12 +182,13 @@ func processRowsSync(rows *sql.Rows, enableMultivalues bool) ([]Lemma, error) {
 			currLemma.Forms = append(
 				currLemma.Forms,
 				Form{
-					Value: wordValue,
-					Count: wordCount,
-					ARF:   wordArf,
+					Value:    wordValue,
+					Count:    wordCount,
+					ARF:      wordArf,
+					Sublemma: sublemmaValue,
 				},
 			)
-			sublemmas[sublemmaValue]++
+			sublemmas[sublemmaValue] += wordCount
 
 		}
 		procRecords++
