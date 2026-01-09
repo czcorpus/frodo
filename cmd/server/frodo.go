@@ -43,6 +43,7 @@ import (
 	"frodo/docs"
 	"frodo/general"
 	"frodo/jobs"
+	"frodo/keywords"
 	"frodo/liveattrs"
 	laActions "frodo/liveattrs/actions"
 	"frodo/liveattrs/db/freqdb"
@@ -308,6 +309,23 @@ func main() {
 	engine.GET(
 		"/dictionary/:corpusId/similarARFWords/:term",
 		dictActionsHandler.SimilarARFWords)
+
+	keywordsHandler := keywords.NewActionHandler(laDB, conf.CorporaSetup.MonitoringDatasets, jobActions)
+
+	engine.POST(
+		"/keywordsOfPeriod/:datasetId",
+		keywordsHandler.Process,
+	)
+
+	engine.POST(
+		"/keywordsOfTheWeek/:datasetId",
+		keywordsHandler.ProcessKWOFWeek,
+	)
+
+	engine.GET(
+		"/keywordsOfTheWeek/:datasetId",
+		keywordsHandler.GetKWOFWeek,
+	)
 
 	engine.GET(
 		"/jobs", jobActions.JobList)

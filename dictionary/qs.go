@@ -304,6 +304,10 @@ func (srch *ttlSearch) toSQL(prefix string) (string, []any) {
 	return strings.Join(exprTmp, " OR "), args
 }
 
+func (srch *ttlSearch) IsEmpty() bool {
+	return len(srch.items) == 0
+}
+
 // ---------
 
 func termToLemma(
@@ -357,7 +361,6 @@ func Search(
 		opt(&srchOpts)
 	}
 	joinExpr := fmt.Sprintf("JOIN %s_term_search AS s ON s.word_id = w.id", groupedName)
-
 	ngramSize := srchOpts.InferNgramSize()
 	if ngramSize <= 0 {
 		return []Lemma{}, fmt.Errorf("failed to determine n-gram size in the query")
@@ -385,6 +388,9 @@ func Search(
 		lemmaSrch := termToLemma(ctx, db, groupedName, srchOpts.AnyValue)
 		if lemmaSrch.error != nil {
 			return []Lemma{}, fmt.Errorf("failed to search dict. values: %w", lemmaSrch.error)
+		}
+		if lemmaSrch.IsEmpty() {
+			return []Lemma{}, nil
 		}
 		sql, args := lemmaSrch.toSQL("w")
 		whereSQL = append(whereSQL, sql)
