@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"frodo/corpus"
+	"frodo/db/mysql"
 	"frodo/jobs"
 	"net/http"
 	"path/filepath"
@@ -91,6 +92,8 @@ type ActionHandler struct {
 
 	jobCancel map[string]context.CancelFunc
 
+	laDB *mysql.Adapter
+
 	datasets corpus.MonitoringDatasets
 }
 
@@ -106,7 +109,8 @@ func (handler *ActionHandler) ProcessKWOFWeek(ctx *gin.Context) {
 		return
 	}
 
-	currWeek, refDays := GetWeekAndReferenceVerticals(time.Now(), weeksBack, dataset.VerticalsDir)
+	now := time.Now() // TODO timezone
+	currWeek, refDays := GetWeekAndReferenceVerticals(now, weeksBack, dataset.VerticalsDir)
 	currWeek = filterNonExistingFiles(currWeek)
 	refDays = filterNonExistingFiles(refDays)
 	args := KeywordsBuildArgs{
@@ -117,18 +121,19 @@ func (handler *ActionHandler) ProcessKWOFWeek(ctx *gin.Context) {
 		TagColIdx:          dataset.TagColIdx,
 		NgramSize:          dataset.NgramSize,
 		SentenceStruct:     dataset.SentenceStruct,
+		Metadata: KeywordsMetadata{
+			DatasetID:   dataset.Ident,
+			FocusDays:   7,
+			LastDayDate: now.Format("2006-01-02"),
+		},
 	}
 
-	job, err := RunJob(dataset.Ident, args, handler.jobActions)
+	job, err := RunJob(handler.laDB, dataset.Ident, args, handler.jobActions)
 	if err != nil {
 		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 		return
 	}
 	uniresp.WriteJSONResponse(ctx.Writer, job)
-
-}
-
-func (handler *ActionHandler) GetKWOFWeek(ctx *gin.Context) {
 
 }
 
@@ -140,7 +145,7 @@ func (handler *ActionHandler) Process(ctx *gin.Context) {
 		return
 	}
 
-	job, err := RunJob(datasetID, args, handler.jobActions)
+	job, err := RunJob(handler.laDB, datasetID, args, handler.jobActions)
 	if err != nil {
 		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 		return
@@ -149,12 +154,21 @@ func (handler *ActionHandler) Process(ctx *gin.Context) {
 
 }
 
-func (handler *ActionHandler) Get(ctx *gin.Context) {
+func (handler *ActionHandler) GetKWOFWeek(ctx *gin.Context) {
+	datasetID := ctx.Param("datasetId")
+
+	kws, err := LoadKeywords(ctx, handler.laDB.DB(), datasetID)
+	if err != nil {
+		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError) // TODO
+		return
+	}
+	uniresp.WriteJSONResponse(ctx.Writer, kws)
 }
 
-func NewActionHandler(datasets corpus.MonitoringDatasets, jobActions *jobs.Actions) *ActionHandler {
+func NewActionHandler(laDB *mysql.Adapter, datasets corpus.MonitoringDatasets, jobActions *jobs.Actions) *ActionHandler {
 	return &ActionHandler{
 		jobActions: jobActions,
 		datasets:   datasets,
+		laDB:       laDB,
 	}
 }

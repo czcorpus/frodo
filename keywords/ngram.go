@@ -22,6 +22,7 @@ type Ngram interface {
 	ARF() float64
 	Len() int
 	String() string
+	WordAsVector() []int
 	Preview(wordDict *ptcount.WordDict) string
 }
 
@@ -143,6 +144,10 @@ func (ng *Unigram) Preview(wordDict *ptcount.WordDict) string {
 	)
 }
 
+func (ng *Unigram) WordAsVector() []int {
+	return []int{ng.tokens[0].Word}
+}
+
 func (ng *Unigram) String() string {
 	return fmt.Sprintf(
 		"[U]> w: %d, lm: %d, freq: %d, ARF: %.2f, ES: %.2f\n",
@@ -210,6 +215,17 @@ func (ng *Bigram) TestAndAdoptNominative(other Ngram) {
 	}
 }
 
+func (ng *Bigram) WordAsVector() []int {
+	ans := make([]int, 0, 2*len(ng.tokens))
+	for i, s := range ng.tokens {
+		if i > 0 && s.AuxWord > 0 {
+			ans = append(ans, s.AuxWord)
+		}
+		ans = append(ans, s.Word)
+	}
+	return ans
+}
+
 func (ng *Bigram) Preview(wordDict *ptcount.WordDict) string {
 	return fmt.Sprintf(
 		"[B]> w: %s %s, lm: %s %s, freq: %d, ARF: %.2f, ES: %.2f, CS: %d\n",
@@ -273,6 +289,17 @@ func (ng *Trigram) AppendToken(tk token) {
 			break
 		}
 	}
+}
+
+func (ng *Trigram) WordAsVector() []int {
+	ans := make([]int, 0, 2*len(ng.tokens))
+	for i, s := range ng.tokens {
+		if i > 0 && s.AuxWord > 0 {
+			ans = append(ans, s.AuxWord)
+		}
+		ans = append(ans, s.Word)
+	}
+	return ans
 }
 
 func (ng *Trigram) TestAndSetPropnameFlag(wordDict *ptcount.WordDict) {

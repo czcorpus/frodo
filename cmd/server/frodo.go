@@ -310,16 +310,11 @@ func main() {
 		"/dictionary/:corpusId/similarARFWords/:term",
 		dictActionsHandler.SimilarARFWords)
 
-	keywordsHandler := keywords.NewActionHandler(conf.CorporaSetup.MonitoringDatasets, jobActions)
+	keywordsHandler := keywords.NewActionHandler(laDB, conf.CorporaSetup.MonitoringDatasets, jobActions)
 
 	engine.POST(
 		"/keywordsOfPeriod/:datasetId",
 		keywordsHandler.Process,
-	)
-
-	engine.GET(
-		"/keywordsOfPeriod/:datasetId/:from/:to",
-		keywordsHandler.Get,
 	)
 
 	engine.POST(

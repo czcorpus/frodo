@@ -386,7 +386,6 @@ func Search(
 	// 2) search all the variants matching (1)
 	if srchOpts.AnyValue != "" {
 		lemmaSrch := termToLemma(ctx, db, groupedName, srchOpts.AnyValue)
-		fmt.Println(">>>> termToLemma ", srchOpts.AnyValue, " -> ", lemmaSrch)
 		if lemmaSrch.error != nil {
 			return []Lemma{}, fmt.Errorf("failed to search dict. values: %w", lemmaSrch.error)
 		}
@@ -426,20 +425,6 @@ func Search(
 		),
 		whereArgs...,
 	)
-	fmt.Println("------------ SQL -----")
-	fmt.Println(fmt.Sprintf(
-		"SELECT w.value, w.lemma, w.sublemma, w.count, "+
-			"w.pos, w.arf, w.ngram, w.sim_freqs_score "+
-			"FROM %s_word AS w "+
-			" %s "+
-			"WHERE %s "+
-			"ORDER BY w.lemma, w.pos, w.sublemma, w.value "+
-			"%s",
-		groupedName,
-		joinExpr,
-		strings.Join(whereSQL, " AND "),
-		limitSQL,
-	))
 	if err != nil {
 		return []Lemma{}, fmt.Errorf("failed to search dict. values: %w", err)
 	}

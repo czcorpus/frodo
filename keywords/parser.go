@@ -32,9 +32,10 @@ func (f *stopWordFilter) Apply(tk *vertigo.Token, attrAcc proc.AttrAccumulator) 
 // -----------------
 
 type token struct {
-	Word  int
-	Lemma int
-	Case  int
+	Word    int
+	Lemma   int
+	Case    int
+	AuxWord int
 }
 
 func (tk *token) IsZero() bool {
@@ -46,6 +47,11 @@ func (tk *token) IsNominative() bool {
 }
 
 // ----------------
+
+type auxWord struct {
+	Value    int
+	Position int
+}
 
 // -----------------
 
@@ -61,9 +67,11 @@ type NgramExtractor struct {
 	filter       proc.LineFilter
 	conf         KeywordsBuildArgs
 	statusChan   chan<- keywordsBuildStatus
+	colCounts3   map[string]Ngram
 	colCounts2   map[string]Ngram
 	colCounts1   map[string]Ngram
 	corpusSize   int
+	currAux      auxWord
 }
 
 func (tte *NgramExtractor) handleProcError(lineNum int, err error) error {
@@ -132,7 +140,13 @@ func (tte *NgramExtractor) ProcToken(tk *vertigo.Token, line int, err error) err
 		return tte.handleProcError(line, err)
 	}
 	tte.lineCounter = line
-	if tte.filter.Apply(tk, tte.attrAccum) {
+	if strings.HasPrefix(tk.PosAttrByIndex(tte.conf.TagColIdx), "J") ||
+		strings.HasPrefix(tk.PosAttrByIndex(tte.conf.TagColIdx), "R") {
+
+		val := tte.valueDict.Add(tk.PosAttrByIndex(tte.conf.WordColIdx))
+		tte.currAux = auxWord{Value: val, Position: line}
+
+	} else if tte.filter.Apply(tk, tte.attrAccum) {
 		tte.tokenCounter = tk.Idx
 		rawCase := tk.PosAttrByIndex(tte.conf.TagColIdx)[4:5]
 		cse := -1
@@ -148,11 +162,35 @@ func (tte *NgramExtractor) ProcToken(tk *vertigo.Token, line int, err error) err
 			Lemma: tte.valueDict.Add(tk.PosAttrByIndex(tte.conf.LemmaColIdx)),
 			Case:  cse,
 		}
-
+		if tte.currAux.Position+1 == line {
+			token2.AuxWord = tte.currAux.Value
+		}
+		tte.currAux = auxWord{}
 		tte.currSentence = append(tte.currSentence, token2)
-		if len(tte.currSentence) >= tte.conf.NgramSize {
+
+		if len(tte.currSentence) >= 3 {
+			ngram3 := tte.newNgram(3)
+			startPos := len(tte.currSentence) - 3
+			for i := startPos; i < len(tte.currSentence); i++ {
+				ngram3.AppendToken(tte.currSentence[i])
+			}
+			key := ngram3.UniqueID()
+			ngram3Curr, ok := tte.colCounts3[key]
+			if ok {
+				ngram3Curr.TestAndAdoptNominative(ngram3)
+				ngram3 = ngram3Curr
+
+			} else {
+				ngram3.TestAndSetPropnameFlag(tte.valueDict)
+			}
+			ngram3.IncCount()
+			ngram3.SetDistance(tk.Idx)
+			tte.colCounts3[key] = ngram3
+		}
+
+		if len(tte.currSentence) >= 2 {
 			ngram2 := tte.newNgram(2)
-			startPos := len(tte.currSentence) - tte.conf.NgramSize
+			startPos := len(tte.currSentence) - 2
 			for i := startPos; i < len(tte.currSentence); i++ {
 				ngram2.AppendToken(tte.currSentence[i])
 			}
@@ -225,6 +263,7 @@ func NewNgramExtractor(
 		filter: &stopWordFilter{
 			tagColIdx: args.TagColIdx,
 		},
+		colCounts3: make(map[string]Ngram),
 		colCounts2: make(map[string]Ngram),
 		colCounts1: make(map[string]Ngram),
 		valueDict:  wordDict,

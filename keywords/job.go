@@ -5,14 +5,21 @@ import (
 	"time"
 )
 
+type KeywordsMetadata struct {
+	DatasetID   string `json:"datasetId"`
+	FocusDays   int    `json:"focusDays"`
+	LastDayDate string `json:"lastDayDate"`
+}
+
 type KeywordsBuildArgs struct {
-	ReferenceVerticals []string `json:"referenceVerticals"`
-	FocusVerticals     []string `json:"focusVerticals"`
-	WordColIdx         int      `json:"wordColIdx"`
-	LemmaColIdx        int      `json:"lemmaColIdx"`
-	TagColIdx          int      `json:"tagColIdx"`
-	NgramSize          int      `json:"ngramSize"`
-	SentenceStruct     string   `json:"sentenceStruct"`
+	ReferenceVerticals []string         `json:"referenceVerticals"`
+	FocusVerticals     []string         `json:"focusVerticals"`
+	WordColIdx         int              `json:"wordColIdx"`
+	LemmaColIdx        int              `json:"lemmaColIdx"`
+	TagColIdx          int              `json:"tagColIdx"`
+	NgramSize          int              `json:"ngramSize"`
+	SentenceStruct     string           `json:"sentenceStruct"`
+	Metadata           KeywordsMetadata `json:"metadata"`
 }
 
 type keywordsBuildStatus struct {

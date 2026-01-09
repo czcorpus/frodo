@@ -4,13 +4,15 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"strings"
 
 	"github.com/czcorpus/vert-tagextract/v3/ptcount"
 )
 
 type Keyword struct {
-	Lemma      string
-	EffectSize float64
+	NgramSize  int     `json:"ngramSize"`
+	Lemma      string  `json:"value"`
+	EffectSize float64 `json:"score"`
 }
 
 // logLikelihood calculates log-likelihood (G²) for a 2x2 contingency table.
@@ -63,6 +65,18 @@ func effectSizeLogRatio(a, b, c, d float64) float64 {
 	freq2 += 0.5
 
 	return math.Log2(freq1 / freq2)
+}
+
+func wordVecToString(keys []int, wordDict *ptcount.WordDict) string {
+	var ans strings.Builder
+	for i, v := range keys {
+		if i > 0 {
+			ans.WriteByte(' ')
+		}
+		s := wordDict.Get(v)
+		ans.WriteString(s)
+	}
+	return ans.String()
 }
 
 func FindKeywords(
@@ -124,18 +138,23 @@ func FindKeywords(
 
 	ans := make([]Keyword, 15)
 	for i, v := range results[:15] {
-		if v.Len() == 2 {
+		switch v.Len() {
+		case 3:
 			ans[i] = Keyword{
-				Lemma:      fmt.Sprintf("%s %s", wordDict.Get(v.TokenAt(0).Word), wordDict.Get(v.TokenAt(1).Word)),
+				Lemma:      wordVecToString(v.WordAsVector(), wordDict),
 				EffectSize: v.SafeEffectSize(),
 			}
-		} else {
+		case 2:
 			ans[i] = Keyword{
-				Lemma:      wordDict.Get(v.TokenAt(0).Word),
+				Lemma:      wordVecToString(v.WordAsVector(), wordDict),
+				EffectSize: v.SafeEffectSize(),
+			}
+		case 1:
+			ans[i] = Keyword{
+				Lemma:      wordVecToString(v.WordAsVector(), wordDict),
 				EffectSize: v.SafeEffectSize(),
 			}
 		}
-
 	}
 	return ans
 }
