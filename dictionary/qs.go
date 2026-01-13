@@ -335,9 +335,9 @@ func termToLemma(
 				"FROM %s_term_search AS s "+
 				"JOIN %s_word AS w ON w.id = s.word_id "+
 				"WHERE s.%s = ?",
+			groupedName,
+			groupedName,
 			val_column,
-			groupedName,
-			groupedName,
 		),
 		term,
 	)
