@@ -128,6 +128,7 @@ func (nfg *NgramFreqGenerator) createTables(tx *sql.Tx) error {
 			id int auto_increment,
 			word_id varchar(40) NOT NULL,
 			value TEXT,
+			value_lc TEXT GENERATED ALWAYS AS (LOWER(value)) STORED,
 			PRIMARY KEY (id),
 			FOREIGN KEY (word_id) REFERENCES %s_word(id)
 		) COLLATE utf8mb4_bin %s`,
@@ -137,6 +138,12 @@ func (nfg *NgramFreqGenerator) createTables(tx *sql.Tx) error {
 
 	if _, err := tx.Exec(fmt.Sprintf(
 		`CREATE index %s_term_search_value_idx ON %s_term_search(value)`,
+		nfg.groupedName, nfg.groupedName,
+	)); err != nil {
+		return fmt.Errorf(errMsgTpl, err)
+	}
+	if _, err := tx.Exec(fmt.Sprintf(
+		`CREATE index %s_term_search_value_lc_idx ON %s_term_search(value_lc)`,
 		nfg.groupedName, nfg.groupedName,
 	)); err != nil {
 		return fmt.Errorf(errMsgTpl, err)
