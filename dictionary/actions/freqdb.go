@@ -43,7 +43,7 @@ func (a *Actions) CreateQuerySuggestions(ctx *gin.Context) {
 	uniresp.WriteJSONResponse(ctx.Writer, corpusID)
 }
 
-// CreateQuerySuggestions godoc
+// GetQuerySuggestions godoc
 // @Summary      Get query suggestions for a specified corpus
 // @Produce      json
 // @Param        corpusId path string true "Used corpus"
@@ -57,6 +57,7 @@ func (a *Actions) GetQuerySuggestions(ctx *gin.Context) {
 	corpusID := ctx.Param("corpusId")
 	term := ctx.Param("term")
 	noMultivalues := ctx.Query("no-multivalues") == "1"
+	caseSensitive := ctx.Query("case-sensitive") == "1"
 
 	mvOpts := dictionary.SearchWithMultivalues()
 	if noMultivalues {
@@ -74,6 +75,7 @@ func (a *Actions) GetQuerySuggestions(ctx *gin.Context) {
 		a.laDB,
 		corpusID,
 		dictionary.SearchWithAnyValue(term),
+		dictionary.SearchWithAnyValueCS(caseSensitive),
 		mvOpts,
 		posOpts,
 	)

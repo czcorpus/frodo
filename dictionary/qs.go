@@ -217,6 +217,7 @@ type SearchOptions struct {
 	Word             string
 	PoS              string
 	AnyValue         string
+	AnyValueCS       bool
 	AllowMultivalues bool
 	Limit            int
 	NgramSize        int
@@ -256,6 +257,12 @@ func SearchWithWord(v string) SearchOption {
 func SearchWithAnyValue(v string) SearchOption {
 	return func(c *SearchOptions) {
 		c.AnyValue = v
+	}
+}
+
+func SearchWithAnyValueCS(caseSensitive bool) SearchOption {
+	return func(c *SearchOptions) {
+		c.AnyValueCS = caseSensitive
 	}
 }
 
@@ -315,14 +322,20 @@ func termToLemma(
 	db *mysql.Adapter,
 	groupedName string,
 	term string,
+	caseSensitive bool,
 ) (ans ttlSearch) {
+	val_column := "value_lc"
+	if caseSensitive {
+		val_column = "value"
+	}
 	rows, err := db.DB().QueryContext(
 		ctx,
 		fmt.Sprintf(
 			"SELECT DISTINCT w.lemma, w.pos "+
 				"FROM %s_term_search AS s "+
 				"JOIN %s_word AS w ON w.id = s.word_id "+
-				"WHERE s.value = ?",
+				"WHERE s.%s = ?",
+			val_column,
 			groupedName,
 			groupedName,
 		),
@@ -385,7 +398,7 @@ func Search(
 	// 1) identify matching lemma+pos entries
 	// 2) search all the variants matching (1)
 	if srchOpts.AnyValue != "" {
-		lemmaSrch := termToLemma(ctx, db, groupedName, srchOpts.AnyValue)
+		lemmaSrch := termToLemma(ctx, db, groupedName, srchOpts.AnyValue, srchOpts.AnyValueCS)
 		if lemmaSrch.error != nil {
 			return []Lemma{}, fmt.Errorf("failed to search dict. values: %w", lemmaSrch.error)
 		}
