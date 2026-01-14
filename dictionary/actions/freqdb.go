@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"frodo/dictionary"
 	"net/http"
+	"strings"
 
 	"github.com/czcorpus/cnc-gokit/unireq"
 	"github.com/czcorpus/cnc-gokit/uniresp"
@@ -31,6 +32,11 @@ const (
 	defaultSimFreqMaxNumItems = 20
 )
 
+type searchedLemma struct {
+	dictionary.Lemma
+	FoundIn string `json:"found_in"`
+}
+
 // CreateQuerySuggestions godoc
 // @Summary      Create query suggestions for a specified corpus
 // @Produce      json
@@ -41,6 +47,49 @@ func (a *Actions) CreateQuerySuggestions(ctx *gin.Context) {
 	corpusID := ctx.Param("corpusId")
 	// TODO
 	uniresp.WriteJSONResponse(ctx.Writer, corpusID)
+}
+
+func (a *Actions) attachMatchTypes(term string, result []dictionary.Lemma, caseSens bool) []searchedLemma {
+	ans := make([]searchedLemma, len(result))
+	var lcMod func(string) string
+	if caseSens {
+		lcMod = func(s string) string { return s }
+
+	} else {
+		lcMod = func(s string) string { return strings.ToLower(s) }
+	}
+	term = lcMod(term)
+
+	for i, lemma := range result {
+		ans[i] = searchedLemma{
+			Lemma: dictionary.Lemma{
+				ID:        lemma.ID,
+				Lemma:     lemma.Lemma,
+				Forms:     lemma.Forms,
+				Sublemmas: lemma.Sublemmas,
+				PoS:       lemma.PoS,
+				IsPname:   lemma.IsPname,
+				Count:     lemma.Count,
+				IPM:       lemma.IPM,
+				NgramSize: lemma.NgramSize,
+			},
+		}
+		for _, form := range lemma.Forms {
+			if term == lcMod(form.Value) {
+				ans[i].FoundIn = "word"
+				break
+			}
+		}
+		if ans[i].FoundIn == "" {
+			for _, subl := range lemma.Sublemmas {
+				if term == lcMod(subl.Value) {
+					ans[i].FoundIn = "sublemma"
+					break
+				}
+			}
+		}
+	}
+	return ans
 }
 
 // GetQuerySuggestions godoc
@@ -84,7 +133,7 @@ func (a *Actions) GetQuerySuggestions(ctx *gin.Context) {
 		return
 	}
 	ans := map[string]any{
-		"matches": items,
+		"matches": a.attachMatchTypes(term, items, caseSensitive),
 	}
 	uniresp.WriteJSONResponse(ctx.Writer, ans)
 }
