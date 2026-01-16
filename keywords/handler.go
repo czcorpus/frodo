@@ -18,16 +18,16 @@ import (
 )
 
 // GetWeekAndReferenceVerticals returns two lists of date strings:
-// 1. Target period: 7 days ending at `now - daysBack`
+// 1. Target period: focusDays days ending at `now - daysBack - 1` (as the current day data are available the next day)
 // 2. Reference period: 30 days before the start of the target period
-func GetWeekAndReferenceVerticals(now time.Time, daysBack int, pathPrefix string) (targetWeek []string, reference []string) {
+func GetWeekAndReferenceVerticals(now time.Time, daysBack, focusDays int, pathPrefix string) (targetWeek []string, reference []string) {
 	// Calculate the end date of the target period
-	targetEnd := now.AddDate(0, 0, -daysBack)
+	targetEnd := now.AddDate(0, 0, -daysBack-1)
 
-	// Target period: 7 days ending at targetEnd (inclusive)
-	targetStart := targetEnd.AddDate(0, 0, -6) // 6 days back = 7 days total
+	// Target period: focusDays days ending at targetEnd (inclusive)
+	targetStart := targetEnd.AddDate(0, 0, -(focusDays - 1))
 
-	targetWeek = make([]string, 0, 7)
+	targetWeek = make([]string, 0, focusDays)
 	for d := targetStart; !d.After(targetEnd); d = d.AddDate(0, 0, 1) {
 		p := filepath.Join(pathPrefix, d.Format("2006-01-02")+".vrt")
 		targetWeek = append(targetWeek, p)
@@ -87,8 +87,13 @@ func (handler *ActionHandler) ProcessKWOFWeek(ctx *gin.Context) {
 		return
 	}
 
+	focusDays, ok := unireq.GetURLIntArgOrFail(ctx, "focusDays", 7)
+	if !ok {
+		return
+	}
+
 	now := time.Now() // TODO timezone
-	currWeek, refDays := GetWeekAndReferenceVerticals(now, daysBack, dataset.VerticalsDir)
+	currWeek, refDays := GetWeekAndReferenceVerticals(now, daysBack, focusDays, dataset.VerticalsDir)
 	currWeek = filterNonExistingFiles(currWeek)
 	refDays = filterNonExistingFiles(refDays)
 	args := KeywordsBuildArgs{
@@ -101,7 +106,7 @@ func (handler *ActionHandler) ProcessKWOFWeek(ctx *gin.Context) {
 		SentenceStruct:     dataset.SentenceStruct,
 		Metadata: KeywordsMetadata{
 			DatasetID:   dataset.Ident,
-			FocusDays:   7,
+			FocusDays:   focusDays,
 			LastDayDate: now.Format("2006-01-02"),
 		},
 	}
