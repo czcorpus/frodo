@@ -61,7 +61,7 @@ func StoreKeywords(ctx context.Context, db *sql.DB, args KeywordsBuildArgs, kws 
 	return nil
 }
 
-func LoadKeywords(ctx context.Context, db *sql.DB, datasetID string) ([]Keyword, error) {
+func LoadKeywords(ctx context.Context, db *sql.DB, datasetID string, maxItems int) ([]Keyword, error) {
 	now := time.Now()
 	rows, err := db.QueryContext(
 		ctx,
@@ -74,8 +74,9 @@ func LoadKeywords(ctx context.Context, db *sql.DB, datasetID string) ([]Keyword,
 			"  ORDER BY last_day DESC "+
 			"  LIMIT 1 "+
 			") "+
-			"ORDER BY score DESC LIMIT 15",
+			"ORDER BY score DESC LIMIT ?",
 		now.Format("2006-01-02"),
+		maxItems,
 	)
 	if err != nil {
 		return []Keyword{}, fmt.Errorf("failed to get keywords: %w", err)

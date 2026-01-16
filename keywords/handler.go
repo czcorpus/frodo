@@ -139,8 +139,12 @@ func (handler *ActionHandler) Process(ctx *gin.Context) {
 
 func (handler *ActionHandler) GetKWOFWeek(ctx *gin.Context) {
 	datasetID := ctx.Param("datasetId")
+	maxItems, ok := unireq.GetURLIntArgOrFail(ctx, "maxItems", 15)
+	if !ok {
+		return
+	}
 
-	kws, err := LoadKeywords(ctx, handler.laDB.DB(), datasetID)
+	kws, err := LoadKeywords(ctx, handler.laDB.DB(), datasetID, maxItems)
 	if err != nil {
 		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError) // TODO
 		return
