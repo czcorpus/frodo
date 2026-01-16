@@ -18,48 +18,26 @@ import (
 )
 
 // GetWeekAndReferenceVerticals returns two lists of date strings:
-// 1. Days of the current week (Monday through today, or full week if after Sunday)
-// 2. 30 days before the start of current week
-func GetWeekAndReferenceVerticals(now time.Time, weeksBack int, pathPrefix string) (targetWeek []string, reference []string) {
-	// Find the Monday of the current week
-	weekday := now.Weekday()
+// 1. Target period: 7 days ending at `now - daysBack`
+// 2. Reference period: 30 days before the start of the target period
+func GetWeekAndReferenceVerticals(now time.Time, daysBack int, pathPrefix string) (targetWeek []string, reference []string) {
+	// Calculate the end date of the target period
+	targetEnd := now.AddDate(0, 0, -daysBack)
 
-	// Convert Sunday (0) to 7 for easier calculation
-	daysFromMonday := int(weekday)
-	if weekday == time.Sunday {
-		daysFromMonday = 6
-	} else {
-		daysFromMonday = daysFromMonday - 1
+	// Target period: 7 days ending at targetEnd (inclusive)
+	targetStart := targetEnd.AddDate(0, 0, -6) // 6 days back = 7 days total
+
+	targetWeek = make([]string, 0, 7)
+	for d := targetStart; !d.After(targetEnd); d = d.AddDate(0, 0, 1) {
+		p := filepath.Join(pathPrefix, d.Format("2006-01-02")+".vrt")
+		targetWeek = append(targetWeek, p)
 	}
 
-	currentMonday := now.AddDate(0, 0, -daysFromMonday)
+	// Reference period: 30 days before target period
+	referenceEnd := targetStart.AddDate(0, 0, -1)     // day before target starts
+	referenceStart := referenceEnd.AddDate(0, 0, -29) // 29 days back = 30 days total
 
-	// Calculate the target week's Monday
-	targetMonday := currentMonday.AddDate(0, 0, -7*weeksBack)
-
-	// Generate target week dates
-	targetWeek = make([]string, 0)
-
-	if weeksBack == 0 {
-		// Current week: Monday through today
-		for d := targetMonday; !d.After(now); d = d.AddDate(0, 0, 1) {
-			p := filepath.Join(pathPrefix, d.Format("2006-01-02")+".vrt")
-			targetWeek = append(targetWeek, p)
-		}
-	} else {
-		// Past weeks: full week (Monday through Sunday)
-		sunday := targetMonday.AddDate(0, 0, 6)
-		for d := targetMonday; !d.After(sunday); d = d.AddDate(0, 0, 1) {
-			p := filepath.Join(pathPrefix, d.Format("2006-01-02")+".vrt")
-			targetWeek = append(targetWeek, p)
-		}
-	}
-
-	// Generate reference period: 30 days before target Monday
-	referenceStart := targetMonday.AddDate(0, 0, -30)
-	referenceEnd := targetMonday.AddDate(0, 0, -1) // day before Monday
-
-	reference = make([]string, 0)
+	reference = make([]string, 0, 30)
 	for d := referenceStart; !d.After(referenceEnd); d = d.AddDate(0, 0, 1) {
 		p := filepath.Join(pathPrefix, d.Format("2006-01-02")+".vrt")
 		reference = append(reference, p)
@@ -104,13 +82,13 @@ func (handler *ActionHandler) ProcessKWOFWeek(ctx *gin.Context) {
 		return
 	}
 
-	weeksBack, ok := unireq.GetURLIntArgOrFail(ctx, "weeksBack", 0)
+	daysBack, ok := unireq.GetURLIntArgOrFail(ctx, "daysBack", 0)
 	if !ok {
 		return
 	}
 
 	now := time.Now() // TODO timezone
-	currWeek, refDays := GetWeekAndReferenceVerticals(now, weeksBack, dataset.VerticalsDir)
+	currWeek, refDays := GetWeekAndReferenceVerticals(now, daysBack, dataset.VerticalsDir)
 	currWeek = filterNonExistingFiles(currWeek)
 	refDays = filterNonExistingFiles(refDays)
 	args := KeywordsBuildArgs{
