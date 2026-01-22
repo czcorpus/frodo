@@ -327,6 +327,9 @@ func termToLemma(
 	val_column := "value_lc"
 	if caseSensitive {
 		val_column = "value"
+
+	} else {
+		term = strings.ToLower(term)
 	}
 	rows, err := db.DB().QueryContext(
 		ctx,
