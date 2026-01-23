@@ -2,6 +2,8 @@
 
 (backronymed as Frequency Registry Of Dictionary Objects)
 
+![frodo](./frodo.png)
+
 FRODO is a frequency database for corpus metadata and word forms, exposed as an HTTP JSON API service.
 
 ## Key Features
