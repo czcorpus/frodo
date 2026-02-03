@@ -50,6 +50,7 @@ import (
 	"frodo/liveattrs/laconf"
 	"frodo/metadb"
 	"frodo/root"
+	"frodo/ujc"
 
 	_ "frodo/translations"
 )
@@ -294,12 +295,19 @@ func main() {
 		version,
 	)
 
+	ujcActionsHandler := ujc.NewHandler(laDB.DB())
+
 	engine.POST(
 		"/dictionary/:corpusId/ngrams",
 		dictActionsHandler.GenerateNgrams)
 	engine.POST(
 		"/dictionary/:corpusId/querySuggestions",
 		dictActionsHandler.CreateQuerySuggestions)
+
+	engine.GET(
+		"/dictionary/SSJC/search/:term",
+		ujcActionsHandler.SearchSSJC,
+	)
 	engine.GET(
 		"/dictionary/:corpusId/querySuggestions/:term",
 		dictActionsHandler.GetQuerySuggestions)
