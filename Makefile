@@ -5,27 +5,31 @@ LDFLAGS := -ldflags "-w -s -X main.version=$(VERSION) -X main.buildDate=$(BUILD)
 
 SERVER_BIN := frodo
 DICTBUILDER_BIN := mkdict
+SSJC_BIN := ssjc
 
 BIN_DIR := .
 DOCS_DIR := docs
 
-.PHONY: all build server devbuild server-dev dictbuilder dictbuilder-dev test swagger clean help
+.PHONY: all build server devbuild server-dev dictbuilder ssjc dictbuilder-dev test swagger clean help
 
 all: build test
 
-build: server dictbuilder
+build: server dictbuilder ssjc
 
 server:
 	@$(MAKE) swagger
 	go build $(LDFLAGS) -o $(BIN_DIR)/$(SERVER_BIN) ./cmd/server
 
-devbuild: server-dev dictbuilder-dev
+devbuild: server-dev dictbuilder-dev ssjc
 
 server-dev:
 	go build $(LDFLAGS) -o $(BIN_DIR)/$(SERVER_BIN) ./cmd/server
 
 dictbuilder:
 	go build $(LDFLAGS) -o $(BIN_DIR)/$(DICTBUILDER_BIN) ./cmd/dictbuilder
+
+ssjc:
+	go build $(LDFLAGS) -o $(BIN_DIR)/$(SSJC_BIN) ./cmd/ssjc
 
 dictbuilder-dev:
 	go build $(LDFLAGS) -o $(BIN_DIR)/$(DICTBUILDER_BIN) ./cmd/dictbuilder
@@ -43,6 +47,7 @@ clean:
 	@echo "Cleaning build artifacts..."
 	@rm -f $(BIN_DIR)/${SERVER_BIN}
 	@rm -f $(BIN_DIR)/${DICTBUILDER_BIN}
+	@rm -f $(BIN_DIR)/${SSJC_BIN}
 	@rm -rf $(DOCS_DIR)
 
 deps:
@@ -59,6 +64,7 @@ help:
 	@echo "  devbuild      - Build both binaries without Swagger docs (faster)"
 	@echo "  server        - Build server binary"
 	@echo "  dictbuilder   - Build dictbuilder binary"
+	@echo "  ssjc          - Build SSJC binary"
 	@echo "  test          - Run tests"
 	@echo "  test-coverage - Run tests with coverage"
 	@echo "  swagger       - Generate swagger documentation"

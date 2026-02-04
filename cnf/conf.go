@@ -21,6 +21,7 @@ import (
 	"frodo/corpus"
 	"frodo/jobs"
 	"frodo/liveattrs"
+	"frodo/ujc"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -48,6 +49,7 @@ type Conf struct {
 	CNCDB                  *corpus.DatabaseSetup `json:"cncDb"`
 	LiveAttrs              *liveattrs.Conf       `json:"liveAttrs"`
 	Jobs                   *jobs.Conf            `json:"jobs"`
+	UJC                    ujc.Conf              `json:"ujc"`
 	Language               string                `json:"language"`
 	srcPath                string
 }
@@ -111,10 +113,7 @@ func ApplyDefaults(conf *Conf) {
 		log.Warn().Msgf("language not specified, using default: %s", conf.Language)
 	}
 	if conf.Jobs.MaxNumConcurrentJobs == 0 {
-		v := dfltMaxNumConcurrentJobs
-		if v >= runtime.NumCPU() {
-			v = runtime.NumCPU()
-		}
+		v := min(dfltMaxNumConcurrentJobs, runtime.NumCPU())
 		conf.Jobs.MaxNumConcurrentJobs = v
 		log.Warn().Msgf("jobs.maxNumConcurrentJobs not specified, using default %d", v)
 	}

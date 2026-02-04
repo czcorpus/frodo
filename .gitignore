@@ -29,6 +29,7 @@ go.work.sum
 
 #
 frodo
-mkdict
+/mkdict
+/ssjc
 conf*.json
 docs/*
