@@ -18,7 +18,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"flag"
 	"fmt"
 	"frodo/cnf"
@@ -36,7 +35,6 @@ type cmdAction string
 const (
 	cmdActionImport cmdAction = "import"
 	cmdActionUpdate cmdAction = "update"
-	procChunkSize             = 100
 )
 
 // Import subcommand flags
@@ -62,27 +60,8 @@ type ssjcFileRow struct {
 	Aspect       string
 }
 
-func processData(ctx context.Context, tx *sql.Tx, data []ssjc.SSJCFileRow) {
-	chunkPos := 0
-	chunk := make([]ssjc.SSJCFileRow, procChunkSize)
-	for i, item := range data {
-		chunkPos = i % procChunkSize
-		if chunkPos == 0 && i > 0 {
-			if err := ssjc.InsertDictChunk(ctx, tx, chunk); err != nil {
-				log.Fatal().Err(err).Msg("failed to import data")
-			}
-		}
-		chunk[chunkPos] = item
-	}
-	if chunkPos > 0 {
-		if err := ssjc.InsertDictChunk(ctx, tx, chunk[:chunkPos]); err != nil {
-			log.Fatal().Err(err).Msg("failed to import data")
-		}
-	}
-}
-
 func runImport(args importArgs) {
-	fmt.Printf("Running import: inputFile=%s, dryRun=%v\n", args.inputFile, args.dryRun)
+	log.Info().Str("file", args.inputFile).Msgf("Running import")
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -98,26 +77,32 @@ func runImport(args importArgs) {
 		log.Fatal().Err(err).Msg("failed to import data")
 	}
 
-	data, err := ssjc.ReadTSV(args.inputFile)
+	data, err := ReadTSV(ctx, args.inputFile, recTypeParent)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to import data")
 	}
 
-	noParentData := make([]ssjc.SSJCFileRow, 0, len(data)/4)
-	withParentData := make([]ssjc.SSJCFileRow, 0, len(data))
-	for _, item := range data {
-		if item.ParentID == "" {
-			noParentData = append(noParentData, item)
-
-		} else {
-			withParentData = append(withParentData, item)
+	for chunk := range data {
+		if chunk.Error != nil {
+			log.Fatal().Err(chunk.Error).Msg("failed to import data")
+		}
+		if err := ssjc.InsertDictChunk(ctx, tx, chunk.Items); err != nil {
+			log.Fatal().Err(err).Msg("failed to import data")
 		}
 	}
-	fmt.Println("WITH PARENT LEN ", len(withParentData))
-	fmt.Printf("1st item: %#v\n", withParentData[1])
-	// TODO check for errors
-	processData(ctx, tx, noParentData)
-	processData(ctx, tx, withParentData)
+
+	data, err = ReadTSV(ctx, args.inputFile, recTypeChild)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to import data")
+	}
+	for chunk := range data {
+		if chunk.Error != nil {
+			log.Fatal().Err(chunk.Error).Msg("failed to import data")
+		}
+		if err := ssjc.InsertDictChunk(ctx, tx, chunk.Items); err != nil {
+			log.Fatal().Err(err).Msg("failed to import data")
+		}
+	}
 	tx.Commit()
 
 }

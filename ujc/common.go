@@ -16,35 +16,6 @@
 
 package ujc
 
-import (
-	"database/sql"
-	"fmt"
-	"frodo/ujc/ssjc"
-	"net/http"
-
-	"github.com/czcorpus/cnc-gokit/uniresp"
-	"github.com/gin-gonic/gin"
-)
-
-type Handler struct {
-	db *sql.DB
-}
-
-func (actions *Handler) SearchSSJC(ctx *gin.Context) {
-	ans, err := ssjc.SearchTerm(ctx, actions.db, ctx.Param("term"))
-	if err != nil {
-		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
-		return
-	}
-	if ans.IsZero() {
-		uniresp.RespondWithErrorJSON(ctx, fmt.Errorf("not found"), http.StatusNotFound)
-		return
-	}
-	uniresp.WriteJSONResponse(ctx.Writer, ans)
-}
-
-func NewHandler(db *sql.DB) *Handler {
-	return &Handler{
-		db: db,
-	}
+type Conf struct {
+	BoundDict string `json:"boundDict"`
 }

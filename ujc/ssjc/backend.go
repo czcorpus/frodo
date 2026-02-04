@@ -51,7 +51,7 @@ func CreateTables(ctx context.Context, db *sql.DB) (*sql.Tx, error) {
 	return tx, nil
 }
 
-func InsertDictChunk(ctx context.Context, tx *sql.Tx, data []SSJCFileRow) error {
+func InsertDictChunk(ctx context.Context, tx *sql.Tx, data []SrcFileRow) error {
 	var insTpl strings.Builder
 	dataArgs := make([]any, 0, len(data)*7)
 	for i, v := range data {
@@ -77,9 +77,7 @@ func InsertDictChunk(ctx context.Context, tx *sql.Tx, data []SSJCFileRow) error 
 			parent := sql.NullString{String: item.ParentID, Valid: item.ParentID != ""}
 			_, err := tx.ExecContext(
 				ctx,
-				fmt.Sprintf(
-					"INSERT INTO ssjc_headword (id, parent_id, headword, headword_type, pos, gender, aspect) VALUES (?, ?, ?, ?, ?, ?, ?) ",
-				),
+				"INSERT INTO ssjc_headword (id, parent_id, headword, headword_type, pos, gender, aspect) VALUES (?, ?, ?, ?, ?, ?, ?) ",
 				item.ID, parent, item.Headword, item.HeadwordType, item.Pos, item.Gender, item.Aspect,
 			)
 			if err != nil {
@@ -92,26 +90,6 @@ func InsertDictChunk(ctx context.Context, tx *sql.Tx, data []SSJCFileRow) error 
 	return nil
 }
 
-type SubHeadWord struct {
-	Headword string `json:"headword"`
-	Pos      string `json:"pos"`
-	Gender   string `json:"gender"`
-	Aspect   string `json:"aspect"`
-}
-
-type HeadWordEntry struct {
-	ID       string        `json:"id"`
-	Headword string        `json:"headword"`
-	Pos      string        `json:"pos"`
-	Gender   string        `json:"gender"`
-	Aspect   string        `json:"aspect"`
-	Children []SubHeadWord `json:"variants"`
-}
-
-func (e HeadWordEntry) IsZero() bool {
-	return e.ID == ""
-}
-
 func SearchTerm(ctx context.Context, db *sql.DB, term string) (HeadWordEntry, error) {
 	// find the head
 	row := db.QueryRowContext(
@@ -121,7 +99,7 @@ func SearchTerm(ctx context.Context, db *sql.DB, term string) (HeadWordEntry, er
 			"WHERE headword = ?",
 		term,
 	)
-	var srchItem SSJCFileRow
+	var srchItem SrcFileRow
 	var parentArg sql.NullString
 	if err := row.Scan(&srchItem.ID, &parentArg, &srchItem.Headword, &srchItem.HeadwordType, &srchItem.Pos, &srchItem.Gender, &srchItem.Aspect); err != nil {
 		if err == sql.ErrNoRows {

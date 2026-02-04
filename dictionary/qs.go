@@ -102,6 +102,10 @@ type Lemma struct {
 	SimFreqScore float64 `json:"simFreqScore"`
 }
 
+func (lemma *Lemma) IsZero() bool {
+	return lemma.Lemma == ""
+}
+
 // CanDoSimFreqScores provides information if the instance
 // can be used for calculating similar word scores.
 // (This requires the lemma to have SimFreqScore (~ARF) calculated

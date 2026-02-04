@@ -50,7 +50,7 @@ import (
 	"frodo/liveattrs/laconf"
 	"frodo/metadb"
 	"frodo/root"
-	"frodo/ujc"
+	"frodo/ujc/ssjc"
 
 	_ "frodo/translations"
 )
@@ -295,7 +295,7 @@ func main() {
 		version,
 	)
 
-	ujcActionsHandler := ujc.NewHandler(laDB.DB())
+	ujcActionsHandler := ssjc.NewHandler(laDB, conf.UJC)
 
 	engine.POST(
 		"/dictionary/:corpusId/ngrams",
