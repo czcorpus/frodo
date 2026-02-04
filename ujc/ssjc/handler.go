@@ -35,6 +35,9 @@ type Handler struct {
 
 // TODO: PoS support not implemented
 func (actions *Handler) findCorpusLemma(ctx context.Context, lemma, pos string) (dictionary.Lemma, error) {
+	if actions.conf.BoundDict == "" {
+		return dictionary.Lemma{}, nil
+	}
 	posArg := dictionary.SearchWithNoOp()
 	if pos != "" {
 		posArg = dictionary.SearchWithPoS(pos)
