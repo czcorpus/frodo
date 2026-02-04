@@ -20,7 +20,7 @@ server:
 	@$(MAKE) swagger
 	go build $(LDFLAGS) -o $(BIN_DIR)/$(SERVER_BIN) ./cmd/server
 
-devbuild: server-dev dictbuilder-dev
+devbuild: server-dev dictbuilder-dev ssjc
 
 server-dev:
 	go build $(LDFLAGS) -o $(BIN_DIR)/$(SERVER_BIN) ./cmd/server
