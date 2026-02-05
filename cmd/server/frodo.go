@@ -48,6 +48,7 @@ import (
 	laActions "frodo/liveattrs/actions"
 	"frodo/liveattrs/db/freqdb"
 	"frodo/liveattrs/laconf"
+	"frodo/ltsearch"
 	"frodo/metadb"
 	"frodo/root"
 	"frodo/ujc/ssjc"
@@ -317,6 +318,11 @@ func main() {
 	engine.GET(
 		"/dictionary/:corpusId/similarARFWords/:term",
 		dictActionsHandler.SimilarARFWords)
+
+	ltSearchActions := ltsearch.NewActions(laDB, laConfRegistry)
+
+	engine.POST(
+		"/liveTokens/:corpusId/query", ltSearchActions.Query)
 
 	keywordsHandler := keywords.NewActionHandler(laDB, conf.CorporaSetup.MonitoringDatasets, jobActions)
 
