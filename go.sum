@@ -22,8 +22,8 @@ github.com/czcorpus/mquery-common v0.6.3 h1:TofGFqUW7472vD9QL4tAFvGdKKIBAqcr9RsK
 github.com/czcorpus/mquery-common v0.6.3/go.mod h1:jm+a8TUScDmReS+wJGVQpYU2ZsF1c81eMeZVWRzA9iQ=
 github.com/czcorpus/rexplorer v0.0.8 h1:rxBivMmo10xGlCDaxzH9IeD23YzS8QM5cyTXiEFPllE=
 github.com/czcorpus/rexplorer v0.0.8/go.mod h1:9KwJWUp9tqn5gDjN3sS2jcsaaMWsfi3qPaqN5s9DY9Y=
-github.com/czcorpus/vert-tagextract/v3 v3.5.0 h1:Aa7KnIepCOy1axGXMzJOvesVJtSkt7zxTN+hoqbOJuI=
-github.com/czcorpus/vert-tagextract/v3 v3.5.0/go.mod h1:6qFPTdnln2vfcFhQrfs/JKOsitrAjkomjSv3ykXdDUE=
+github.com/czcorpus/vert-tagextract/v3 v3.6.1 h1:qluab5CsBs2fl1FC9ljJ6b3Cc/gmw/GZoSnygwZsoJE=
+github.com/czcorpus/vert-tagextract/v3 v3.6.1/go.mod h1:3mGKmqaCqhQszRF/sDhf0naQU8PbpqpgGdZUZlJn8Jk=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
