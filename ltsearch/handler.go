@@ -23,13 +23,12 @@ import (
 
 	"github.com/czcorpus/cnc-gokit/uniresp"
 	"github.com/czcorpus/vert-tagextract/v3/livetokens"
-	"github.com/czcorpus/vert-tagextract/v3/ud"
 	"github.com/gin-gonic/gin"
 )
 
 type inputArgs struct {
-	Attrs map[string]string `json:"attrs"`
-	Feats map[string]string `json:"feats"`
+	Attrs map[string][]string `json:"attrs"`
+	Feats map[string][]string `json:"udFeats"`
 }
 
 type Actions struct {
@@ -76,19 +75,24 @@ func (a *Actions) Query(ctx *gin.Context) {
 		attrs = append(
 			attrs,
 			livetokens.AttrAndVal{
-				Attr: livetokens.Attr{
-					Name: k,
-				},
-				Value: v,
+				Name:   k,
+				Values: v,
 			},
 		)
 	}
-	feats := make([]ud.Feat, 0, len(inputFilter.Feats))
+
+	feats := make([]livetokens.AttrAndVal, 0, len(inputFilter.Feats))
 	for k, v := range inputFilter.Feats {
-		feats = append(feats, ud.Feat{k, v})
+		feats = append(
+			feats,
+			livetokens.AttrAndVal{
+				Name:   k,
+				Values: v,
+			},
+		)
 	}
 
-	result, err := searcher.GetAvailableValues(ctx, corpusID, nil, feats)
+	result, err := searcher.GetAvailableValues(ctx, corpusID, attrs, feats)
 	if err != nil {
 		uniresp.RespondWithErrorJSON(
 			ctx,
@@ -97,7 +101,6 @@ func (a *Actions) Query(ctx *gin.Context) {
 		)
 		return
 	}
-
 	uniresp.WriteJSONResponse(ctx.Writer, result)
 }
 
