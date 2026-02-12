@@ -25,8 +25,22 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-var SSJC_table = `
-CREATE TABLE ssjc_headword (
+type TablePrefix string
+
+const (
+	TablePrefixSSJC TablePrefix = "ssjc"
+	TablePrefixSJC  TablePrefix = "sjc"
+)
+
+func (tf TablePrefix) Validate() error {
+	if tf != TablePrefixSSJC && tf != TablePrefixSJC {
+		return fmt.Errorf("unsupported value of TablePrefix variable")
+	}
+	return nil
+}
+
+var dictionaryTable = `
+CREATE TABLE %s_headword (
     id VARCHAR(100) COLLATE utf8mb4_bin PRIMARY KEY,
     parent_id VARCHAR(100) COLLATE utf8mb4_bin,
     headword VARCHAR(100) NOT NULL,
@@ -34,24 +48,24 @@ CREATE TABLE ssjc_headword (
     pos VARCHAR(20),
     gender VARCHAR(20),
     aspect VARCHAR(20),
-    FOREIGN KEY (parent_id) REFERENCES ssjc_headword(id)
+    FOREIGN KEY (parent_id) REFERENCES %s_headword(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_czech_ci`
 
-func CreateTables(ctx context.Context, db *sql.DB) (*sql.Tx, error) {
+func CreateTables(ctx context.Context, db *sql.DB, tablePrefix TablePrefix) (*sql.Tx, error) {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create ssjc tables: %w", err)
+		return nil, fmt.Errorf("failed to create s(s)jc tables: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx, "DROP TABLE IF EXISTS ssjc_headword"); err != nil {
-		return nil, fmt.Errorf("failed to create ssjc tables: %w", err)
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf("DROP TABLE IF EXISTS %s_headword", tablePrefix)); err != nil {
+		return nil, fmt.Errorf("failed to create s(s)jc tables: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx, SSJC_table); err != nil {
-		return nil, fmt.Errorf("failed to create ssjc tables: %w", err)
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf(dictionaryTable, tablePrefix, tablePrefix)); err != nil {
+		return nil, fmt.Errorf("failed to create s(s)jc tables: %w", err)
 	}
 	return tx, nil
 }
 
-func InsertDictChunk(ctx context.Context, tx *sql.Tx, data []SrcFileRow) error {
+func InsertDictChunk(ctx context.Context, tx *sql.Tx, tablePrefix TablePrefix, data []SrcFileRow) error {
 	var insTpl strings.Builder
 	dataArgs := make([]any, 0, len(data)*7)
 	for i, v := range data {
@@ -65,7 +79,8 @@ func InsertDictChunk(ctx context.Context, tx *sql.Tx, data []SrcFileRow) error {
 	_, err := tx.ExecContext(
 		ctx,
 		fmt.Sprintf(
-			"INSERT INTO ssjc_headword (id, parent_id, headword, headword_type, pos, gender, aspect) VALUES %s",
+			"INSERT INTO %s_headword (id, parent_id, headword, headword_type, pos, gender, aspect) VALUES %s",
+			tablePrefix,
 			insTpl.String(),
 		),
 		dataArgs...,
@@ -77,7 +92,10 @@ func InsertDictChunk(ctx context.Context, tx *sql.Tx, data []SrcFileRow) error {
 			parent := sql.NullString{String: item.ParentID, Valid: item.ParentID != ""}
 			_, err := tx.ExecContext(
 				ctx,
-				"INSERT INTO ssjc_headword (id, parent_id, headword, headword_type, pos, gender, aspect) VALUES (?, ?, ?, ?, ?, ?, ?) ",
+				fmt.Sprintf(
+					"INSERT INTO %s_headword (id, parent_id, headword, headword_type, pos, gender, aspect) VALUES (?, ?, ?, ?, ?, ?, ?) ",
+					tablePrefix,
+				),
 				item.ID, parent, item.Headword, item.HeadwordType, item.Pos, item.Gender, item.Aspect,
 			)
 			if err != nil {
@@ -90,12 +108,12 @@ func InsertDictChunk(ctx context.Context, tx *sql.Tx, data []SrcFileRow) error {
 	return nil
 }
 
-func SearchTerm(ctx context.Context, db *sql.DB, term string) (HeadWordEntry, error) {
+func SearchTerm(ctx context.Context, db *sql.DB, tablePrefix TablePrefix, term string) (HeadWordEntry, error) {
 	// find the head
 	row := db.QueryRowContext(
 		ctx,
 		"SELECT id, parent_id, headword, headword_type, pos, gender, aspect "+
-			"FROM ssjc_headword "+
+			fmt.Sprintf("FROM %s_headword ", tablePrefix)+
 			"WHERE headword = ?",
 		term,
 	)
@@ -118,7 +136,7 @@ func SearchTerm(ctx context.Context, db *sql.DB, term string) (HeadWordEntry, er
 	rows, err := db.QueryContext(
 		ctx,
 		"SELECT headword, pos, gender, aspect "+
-			"FROM ssjc_headword "+
+			fmt.Sprintf("FROM %s_headword ", tablePrefix)+
 			"WHERE parent_id = ?",
 		parent,
 	)

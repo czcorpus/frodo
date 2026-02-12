@@ -39,9 +39,10 @@ const (
 
 // Import subcommand flags
 type importArgs struct {
-	configPath string
-	inputFile  string
-	dryRun     bool
+	configPath  string
+	inputFile   string
+	dryRun      bool
+	tablePrefix ssjc.TablePrefix
 }
 
 // Update subcommand flags
@@ -72,7 +73,7 @@ func runImport(args importArgs) {
 		log.Fatal().Err(err).Msg("failed to import data")
 	}
 
-	tx, err := ssjc.CreateTables(ctx, db.DB())
+	tx, err := ssjc.CreateTables(ctx, db.DB(), args.tablePrefix)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to import data")
 	}
@@ -86,7 +87,7 @@ func runImport(args importArgs) {
 		if chunk.Error != nil {
 			log.Fatal().Err(chunk.Error).Msg("failed to import data")
 		}
-		if err := ssjc.InsertDictChunk(ctx, tx, chunk.Items); err != nil {
+		if err := ssjc.InsertDictChunk(ctx, tx, args.tablePrefix, chunk.Items); err != nil {
 			log.Fatal().Err(err).Msg("failed to import data")
 		}
 	}
@@ -99,7 +100,7 @@ func runImport(args importArgs) {
 		if chunk.Error != nil {
 			log.Fatal().Err(chunk.Error).Msg("failed to import data")
 		}
-		if err := ssjc.InsertDictChunk(ctx, tx, chunk.Items); err != nil {
+		if err := ssjc.InsertDictChunk(ctx, tx, args.tablePrefix, chunk.Items); err != nil {
 			log.Fatal().Err(err).Msg("failed to import data")
 		}
 	}
@@ -127,6 +128,7 @@ func main() {
 	// Define flags for import subcommand
 	var importOpts importArgs
 	importCmd.BoolVar(&importOpts.dryRun, "dry-run", false, "perform a dry run without making changes")
+	tablePrefix := importCmd.String("table-prefix", "ssjc", "select table prefix for data (ssjc, sjc)")
 
 	// Define flags for update subcommand
 	var updateOpts updateArgs
@@ -141,6 +143,11 @@ func main() {
 		}
 		importOpts.configPath = importCmd.Arg(0)
 		importOpts.inputFile = importCmd.Arg(1)
+		importOpts.tablePrefix = ssjc.TablePrefix(*tablePrefix)
+		if err := importOpts.tablePrefix.Validate(); err != nil {
+			log.Fatal().Err(err).Msg("failed to validate table prefix")
+			return
+		}
 		runImport(importOpts)
 
 	case cmdActionUpdate:

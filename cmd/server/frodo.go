@@ -310,6 +310,10 @@ func main() {
 		ujcActionsHandler.SearchSSJC,
 	)
 	engine.GET(
+		"/dictionary/SJC/search/:term",
+		ujcActionsHandler.SearchSJC,
+	)
+	engine.GET(
 		"/dictionary/:corpusId/querySuggestions/:term",
 		dictActionsHandler.GetQuerySuggestions)
 	engine.GET(

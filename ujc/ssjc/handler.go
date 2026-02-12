@@ -59,7 +59,36 @@ func (actions *Handler) findCorpusLemma(ctx context.Context, lemma, pos string) 
 }
 
 func (actions *Handler) SearchSSJC(ctx *gin.Context) {
-	ans, err := SearchTerm(ctx, actions.db.DB(), ctx.Param("term"))
+	ans, err := SearchTerm(ctx, actions.db.DB(), TablePrefixSSJC, ctx.Param("term"))
+	if err != nil {
+		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
+		return
+	}
+	if ans.IsZero() {
+		uniresp.RespondWithErrorJSON(ctx, fmt.Errorf("not found"), http.StatusNotFound)
+		return
+	}
+	// TODO posOpts := dictionary.SearchWithPos
+	corpLemma, err := actions.findCorpusLemma(ctx, ans.Headword, ans.Pos)
+	if err != nil {
+		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
+		return
+	}
+	ans.CorpusEntry = corpLemma
+	for i, child := range ans.Children {
+		corpLemma, err := actions.findCorpusLemma(ctx, child.Headword, child.Pos)
+		if err != nil {
+			uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
+			return
+		}
+		child.CorpusEntry = corpLemma
+		ans.Children[i] = child
+	}
+	uniresp.WriteJSONResponse(ctx.Writer, ans)
+}
+
+func (actions *Handler) SearchSJC(ctx *gin.Context) {
+	ans, err := SearchTerm(ctx, actions.db.DB(), TablePrefixSJC, ctx.Param("term"))
 	if err != nil {
 		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 		return
