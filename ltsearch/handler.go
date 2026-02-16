@@ -17,6 +17,7 @@
 package ltsearch
 
 import (
+	"errors"
 	"frodo/db/mysql"
 	"frodo/liveattrs/laconf"
 	"net/http"
@@ -36,6 +37,8 @@ type Actions struct {
 	laConfCache *laconf.LiveAttrsBuildConfProvider
 }
 
+// Query provides the core "live tokens" functionality for filtering
+// token attribute values based on their subset selection.
 func (a *Actions) Query(ctx *gin.Context) {
 	corpusID := ctx.Param("corpusId")
 	var inputFilter inputArgs
@@ -104,6 +107,33 @@ func (a *Actions) Query(ctx *gin.Context) {
 	uniresp.WriteJSONResponse(ctx.Writer, result)
 }
 
+type confResp struct {
+	Conf  livetokens.AttrList `json:"conf"`
+	Error error               `json:"error,omitempty"`
+}
+
+// Conf returns a configuration for corpus' live tokens.
+// It can be used to test whether the functionality is available
+// for a specific corpus.
+func (a *Actions) Conf(ctx *gin.Context) {
+	corpusID := ctx.Param("corpusId")
+	conf, err := a.laConfCache.Get(corpusID)
+	if err == laconf.ErrorNoSuchConfig {
+		uniresp.RespondWithErrorJSON(ctx, err, http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
+		return
+	}
+	if len(conf.LiveTokens) > 0 {
+		uniresp.WriteJSONResponse(ctx.Writer, confResp{Conf: conf.LiveTokens})
+		return
+	}
+	uniresp.RespondWithErrorJSON(ctx, errors.New("live tokens not available"), http.StatusNotFound)
+}
+
+// NewActions creates an http action handler for the "live tokens" endpoint.
 func NewActions(db *mysql.Adapter, laConfCache *laconf.LiveAttrsBuildConfProvider) *Actions {
 	return &Actions{
 		db:          db,

@@ -328,6 +328,9 @@ func main() {
 	engine.POST(
 		"/liveTokens/:corpusId/query", ltSearchActions.Query)
 
+	engine.GET(
+		"/liveTokens/:corpusId/conf", ltSearchActions.Conf)
+
 	keywordsHandler := keywords.NewActionHandler(laDB, conf.CorporaSetup.MonitoringDatasets, jobActions)
 
 	engine.POST(
