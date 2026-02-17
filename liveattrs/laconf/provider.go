@@ -25,6 +25,7 @@ import (
 	"frodo/liveattrs/utils"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/rs/zerolog/log"
@@ -226,12 +227,12 @@ func (lcache *LiveAttrsBuildConfProvider) GetUncachedWithoutPasswords(corpname s
 func (lcache *LiveAttrsBuildConfProvider) Save(data *vteconf.VTEConf) error {
 	rawData, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to save vte conf file: %w", err)
 	}
-	confPath := path.Join(lcache.confDirPath, data.Corpus+".json")
+	confPath := filepath.Join(lcache.confDirPath, data.Corpus+".json")
 	err = os.WriteFile(confPath, rawData, 0777)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to save vte conf file: %w", err)
 	}
 	lcache.data[data.Corpus] = data
 	if data.DB.Type == "mysql" {

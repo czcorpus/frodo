@@ -323,13 +323,19 @@ func main() {
 		"/dictionary/:corpusId/similarARFWords/:term",
 		dictActionsHandler.SimilarARFWords)
 
-	ltSearchActions := ltsearch.NewActions(laDB, laConfRegistry)
+	ltSearchActions := ltsearch.NewActions(laDB, laConfRegistry, conf.CorporaSetup.RegistryDirPaths[0])
 
 	engine.POST(
 		"/liveTokens/:corpusId/query", ltSearchActions.Query)
 
 	engine.GET(
 		"/liveTokens/:corpusId/conf", ltSearchActions.Conf)
+
+	engine.POST(
+		"liveTokens/:corpusId/autoconf", ltSearchActions.AutoConf)
+
+	engine.POST(
+		"liveTokens/autoconf/:profileId", ltSearchActions.AutoConfWithProfile)
 
 	keywordsHandler := keywords.NewActionHandler(laDB, conf.CorporaSetup.MonitoringDatasets, jobActions)
 
