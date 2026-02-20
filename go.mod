@@ -8,7 +8,7 @@ require (
 	github.com/czcorpus/cnc-gokit v0.21.0
 	github.com/czcorpus/mquery-common v0.6.3
 	github.com/czcorpus/rexplorer v0.0.8
-	github.com/czcorpus/vert-tagextract/v3 v3.6.4
+	github.com/czcorpus/vert-tagextract/v3 v3.6.10
 	github.com/davecgh/go-spew v1.1.1
 	github.com/gin-gonic/gin v1.11.0
 	github.com/go-sql-driver/mysql v1.9.3
@@ -18,7 +18,7 @@ require (
 	github.com/swaggo/files v1.0.1
 	github.com/swaggo/gin-swagger v1.6.1
 	github.com/swaggo/swag v1.16.6
-	github.com/tomachalek/vertigo/v6 v6.2.1
+	github.com/tomachalek/vertigo/v6 v6.2.2
 	golang.org/x/exp v0.0.0-20250911091902-df9299821621
 	golang.org/x/text v0.29.0
 )
