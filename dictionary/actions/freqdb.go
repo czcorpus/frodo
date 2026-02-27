@@ -17,6 +17,7 @@
 package actions
 
 import (
+	"database/sql"
 	"fmt"
 	"frodo/dictionary"
 	"net/http"
@@ -138,6 +139,23 @@ func (a *Actions) GetQuerySuggestions(ctx *gin.Context) {
 	uniresp.WriteJSONResponse(ctx.Writer, ans)
 }
 
+func (a *Actions) GetDatasetSize(datasetName string) (int64, error) {
+	row := a.laDB.DB().QueryRow("SELECT size FROM dataset_sizes WHERE name = ?", datasetName)
+	var result int64
+	err := row.Scan(&result)
+	if err == sql.ErrNoRows {
+		corpusInfo, err := a.corpusMeta.LoadInfo(datasetName)
+		if err == sql.ErrNoRows {
+			return result, fmt.Errorf("failed to get dataset size - %s not found", datasetName)
+		}
+		if err != nil {
+			return result, fmt.Errorf("failed to get dataset %s size: %w", datasetName, err)
+		}
+		result = corpusInfo.Size
+	}
+	return result, nil
+}
+
 // SimilarARFWords godoc
 // @Summary      Get similar arf words
 // @Produce      json
@@ -167,28 +185,6 @@ func (a *Actions) SimilarARFWords(ctx *gin.Context) {
 		return
 	}
 
-	corpusInfo, err := a.corpusMeta.LoadInfo(corpusID)
-	if err != nil {
-		uniresp.RespondWithErrorJSON(
-			ctx,
-			fmt.Errorf("failed to get info about corpus %s: %w", corpusID, err),
-			http.StatusBadRequest,
-		)
-		return
-	}
-
-	if corpusInfo.Size <= 0 {
-		uniresp.RespondWithErrorJSON(
-			ctx,
-			fmt.Errorf(
-				"cannot calculate list of words, reported corpus size for %s is zero (invalid record in db?)",
-				corpusID,
-			),
-			http.StatusBadRequest,
-		)
-		return
-	}
-
 	termSrch, err := dictionary.Search(
 		ctx,
 		a.laDB,
@@ -211,12 +207,13 @@ func (a *Actions) SimilarARFWords(ctx *gin.Context) {
 			rangeCoeff,
 			maxNumItems,
 		)
-		for i := range items {
-			items[i].IPM = float64(items[i].Count) / float64(corpusInfo.Size)
-		}
+		datasetSize, err := a.GetDatasetSize(corpusID)
 		if err != nil {
 			uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 			return
+		}
+		for i := range items {
+			items[i].IPM = float64(items[i].Count) / float64(datasetSize) * 1000000
 		}
 		ans := map[string]any{
 			"matches": items,

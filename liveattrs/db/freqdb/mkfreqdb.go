@@ -43,11 +43,12 @@ import (
 )
 
 const (
-	reportEachNthItem   = 10000
-	procChunkSize       = 5000
-	sqlInsertBatchSize  = 100
-	duplicateRowErrNo   = 1062
-	NonWordCSCNC2020Tag = "X@-------------"
+	reportEachNthItem        = 10000
+	procChunkSize            = 5000
+	sqlInsertBatchSize       = 100
+	duplicateRowErrNo        = 1062
+	NonWordCSCNC2020Tag      = "X@-------------"
+	maxNonOptimizedNgramsLen = 1500000
 )
 
 type NgramFreqGenerator struct {
@@ -76,13 +77,65 @@ func (nfg *NgramFreqGenerator) updateTablesStats() error {
 	return nil
 }
 
-func (nfg *NgramFreqGenerator) createTables(tx *sql.Tx) error {
-	errMsgTpl := "failed to create tables: %w"
+// BuildLemmaStats creates (or recreates) the auxiliary {groupedName}_lemma_stats table
+// and fills it with aggregated data from {groupedName}_word. This should be called
+// once the initial import into _word is complete.
+func (nfg *NgramFreqGenerator) BuildLemmaStats(ctx context.Context) error {
+	if _, err := nfg.db.DB().ExecContext(
+		ctx,
+		fmt.Sprintf("DROP TABLE IF EXISTS %s_lemma_stats", nfg.groupedName),
+	); err != nil {
+		return fmt.Errorf("failed to build lemma stats: %w", err)
+	}
+	if _, err := nfg.db.DB().ExecContext(
+		ctx,
+		fmt.Sprintf(
+			`CREATE TABLE %s_lemma_stats (
+				`+"`lemma`"+` varchar(500) NOT NULL,
+				`+"`pos`"+` varchar(20) DEFAULT NULL,
+				`+"`ngram`"+` tinyint(4) NOT NULL,
+				`+"`sum_count`"+` bigint DEFAULT NULL,
+				`+"`avg_sim_freqs_score`"+` float DEFAULT NULL,
+				`+"`sublemma`"+` text DEFAULT NULL,
+				PRIMARY KEY (lemma, ngram, pos),
+				KEY %s_lemma_stats_score_idx (ngram, avg_sim_freqs_score)
+			) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`,
+			nfg.groupedName,
+			nfg.groupedName,
+		),
+	); err != nil {
+		return fmt.Errorf("failed to build lemma stats: %w", err)
+	}
+	if _, err := nfg.db.DB().ExecContext(
+		ctx,
+		fmt.Sprintf(
+			`INSERT INTO %s_lemma_stats
+			SELECT lemma, pos, ngram, SUM(count), AVG(sim_freqs_score), MIN(sublemma)
+			FROM %s_word
+			GROUP BY lemma, pos, ngram`,
+			nfg.groupedName,
+			nfg.groupedName,
+		),
+	); err != nil {
+		return fmt.Errorf("failed to build lemma stats: %w", err)
+	}
+	if _, err := nfg.db.DB().ExecContext(
+		ctx,
+		fmt.Sprintf("ANALYZE TABLE %s_lemma_stats", nfg.groupedName),
+	); err != nil {
+		return fmt.Errorf("failed to build lemma stats: %w", err)
+	}
+	return nil
+}
 
-	if _, err := tx.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s_term_search", nfg.groupedName)); err != nil {
+func (nfg *NgramFreqGenerator) createTables() error {
+	errMsgTpl := "failed to create tables: %w"
+	db := nfg.db.DB()
+
+	if _, err := db.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s_term_search", nfg.groupedName)); err != nil {
 		return fmt.Errorf(errMsgTpl, err)
 	}
-	if _, err := tx.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s_word", nfg.groupedName)); err != nil {
+	if _, err := db.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s_word", nfg.groupedName)); err != nil {
 		return fmt.Errorf(errMsgTpl, err)
 	}
 	dataDirSQL := util.Ternary(
@@ -100,7 +153,7 @@ func (nfg *NgramFreqGenerator) createTables(tx *sql.Tx) error {
 		"PARTITION BY KEY (ngram) PARTITIONS 2",
 		"",
 	)
-	if _, err := tx.Exec(
+	if _, err := db.Exec(
 		fmt.Sprintf(
 			`CREATE TABLE %s_word (
 			id varchar(40),
@@ -123,7 +176,7 @@ func (nfg *NgramFreqGenerator) createTables(tx *sql.Tx) error {
 	); err != nil {
 		return fmt.Errorf(errMsgTpl, err)
 	}
-	if _, err := tx.Exec(fmt.Sprintf(
+	if _, err := db.Exec(fmt.Sprintf(
 		`CREATE TABLE %s_term_search (
 			id int auto_increment,
 			word_id varchar(40) NOT NULL,
@@ -136,20 +189,20 @@ func (nfg *NgramFreqGenerator) createTables(tx *sql.Tx) error {
 		return fmt.Errorf(errMsgTpl, err)
 	}
 
-	if _, err := tx.Exec(fmt.Sprintf(
+	if _, err := db.Exec(fmt.Sprintf(
 		`CREATE index %s_term_search_value_idx ON %s_term_search(value)`,
 		nfg.groupedName, nfg.groupedName,
 	)); err != nil {
 		return fmt.Errorf(errMsgTpl, err)
 	}
-	if _, err := tx.Exec(fmt.Sprintf(
+	if _, err := db.Exec(fmt.Sprintf(
 		`CREATE index %s_term_search_value_lc_idx ON %s_term_search(value_lc)`,
 		nfg.groupedName, nfg.groupedName,
 	)); err != nil {
 		return fmt.Errorf(errMsgTpl, err)
 	}
 	if nfg.useTablePartitioning { // in this case, foreign keys are off as is the default index
-		if _, err := tx.Exec(fmt.Sprintf(
+		if _, err := db.Exec(fmt.Sprintf(
 			`create index %s_term_search_word_id_idx ON %s_term_search(word_id)`,
 			nfg.groupedName, nfg.groupedName,
 		)); err != nil {
@@ -157,19 +210,19 @@ func (nfg *NgramFreqGenerator) createTables(tx *sql.Tx) error {
 		}
 	}
 
-	if _, err := tx.Exec(fmt.Sprintf(
+	if _, err := db.Exec(fmt.Sprintf(
 		`CREATE index %s_word_pos_idx ON %s_word(pos)`,
 		nfg.groupedName, nfg.groupedName,
 	)); err != nil {
 		return fmt.Errorf(errMsgTpl, err)
 	}
-	if _, err := tx.Exec(fmt.Sprintf(
+	if _, err := db.Exec(fmt.Sprintf(
 		`create index %s_word_sim_freqs_score_idx on %s_word(sim_freqs_score, ngram)`,
 		nfg.groupedName, nfg.groupedName,
 	)); err != nil {
 		return fmt.Errorf(errMsgTpl, err)
 	}
-	if _, err := tx.Exec(fmt.Sprintf(
+	if _, err := db.Exec(fmt.Sprintf(
 		`create index %s_word_lemma_idx on %s_word(lemma)`,
 		nfg.groupedName, nfg.groupedName,
 	)); err != nil {
@@ -255,6 +308,7 @@ func (nfg *NgramFreqGenerator) procLineGroupIgnoreErrors(
 				Str("hash", words[i].hashId).
 				Str("word", words[i].word).
 				Str("lemma", words[i].lemma).
+				Str("pos", words[i].tag).
 				Msg("failed to insert n-gram to table *_word")
 		}
 	}
@@ -520,10 +574,13 @@ func (nfg *NgramFreqGenerator) procChunk(
 // An existing database transaction must be provided along with current calculation status (which is
 // progressively updated) and a status channel where the status is sent each time some significant
 // update is encountered (typically - a chunk of items is finished or an error occurs)
+//
+// The method returns number of ngrams and boolean status (true = ok, false = problem). Possible errors
+// are passed via statusChan.
 func (nfg *NgramFreqGenerator) run(
 	ctx context.Context,
 	statusChan chan<- genNgramsStatus,
-) bool {
+) (int, bool) {
 	baseStatus := genNgramsStatus{
 		CorpusID:   nfg.corpusName,
 		CurrAction: "starting to process colcounts table for ngrams",
@@ -532,7 +589,7 @@ func (nfg *NgramFreqGenerator) run(
 	if err != nil {
 		baseStatus.Error = fmt.Errorf("failed to run n-gram generator: %w", err)
 		statusChan <- baseStatus
-		return false
+		return 0, false
 	}
 	baseStatus.TotalLines = total
 	estim, err := db.EstimateProcTimeSecs(nfg.db.DB(), "ngrams", total)
@@ -544,7 +601,7 @@ func (nfg *NgramFreqGenerator) run(
 	} else if err != nil {
 		baseStatus.Error = fmt.Errorf("failed to run n-gram generator: %w", err)
 		statusChan <- baseStatus
-		return false
+		return 0, false
 	}
 	if estim > 0 {
 		baseStatus.TimeEstimationSecs = estim
@@ -558,7 +615,7 @@ func (nfg *NgramFreqGenerator) run(
 
 	ngrams := nfg.preloadCols(ctx, int64(total), baseStatus, statusChan)
 	if len(ngrams) == 0 {
-		return false
+		return 0, false
 	}
 
 	numChunks := int(math.Ceil(float64(len(ngrams)) / float64(procChunkSize)))
@@ -577,10 +634,10 @@ func (nfg *NgramFreqGenerator) run(
 			t0,
 			statusChan,
 		); !ok {
-			return false
+			return len(ngrams), false
 		}
 	}
-	return true
+	return len(ngrams), true
 }
 
 func (nfg *NgramFreqGenerator) tablesExist() (bool, error) {
@@ -604,13 +661,6 @@ func (nfg *NgramFreqGenerator) generateSync(
 	statusChan chan<- genNgramsStatus,
 ) {
 	var status genNgramsStatus
-	tx, err := nfg.db.DB().Begin()
-	if err != nil {
-		tx.Rollback()
-		status.Error = err
-		statusChan <- status
-		return
-	}
 
 	tblEx, err := nfg.tablesExist()
 	if err != nil {
@@ -624,24 +674,25 @@ func (nfg *NgramFreqGenerator) generateSync(
 		return
 	}
 	if !nfg.appendExisting {
-		err = nfg.createTables(tx)
+		if err := nfg.createTables(); err != nil {
+			status.Error = err
+			statusChan <- status
+			return
+		}
 	}
 
 	statusChan <- status
-	if err != nil {
-		tx.Rollback()
-		status.Error = err
-		statusChan <- status
+	numNgrams, ok := nfg.run(ctx, statusChan)
+	if !ok {
 		return
 	}
-	err = tx.Commit()
-	if err != nil {
-		tx.Rollback()
-		status.Error = err
-		statusChan <- status
-		return
+	if numNgrams > maxNonOptimizedNgramsLen {
+		if err := nfg.BuildLemmaStats(ctx); err != nil {
+			status.Error = err
+			statusChan <- status
+			return
+		}
 	}
-	nfg.run(ctx, statusChan)
 
 	if err := nfg.updateTablesStats(); err != nil {
 		status.Error = err

@@ -25,7 +25,6 @@ import (
 	"frodo/common"
 	"frodo/db/mysql"
 	"frodo/jobs"
-	"frodo/liveattrs/db/freqdb"
 	"regexp"
 	"strings"
 )
@@ -373,8 +372,6 @@ func Search(
 
 	whereSQL := make([]string, 0, 5)
 	whereArgs := make([]any, 0, 5)
-	whereSQL = append(whereSQL, "w.pos != ?")
-	whereArgs = append(whereArgs, freqdb.NonWordCSCNC2020Tag)
 	limitSQL := ""
 	var srchOpts SearchOptions
 	for _, opt := range opts {
