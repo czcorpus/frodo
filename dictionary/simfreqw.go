@@ -75,20 +75,29 @@ func SimilarARFWords(
 
 	var rows *sql.Rows
 
+	halfl := maxValues / 2
 	if hasStatsTable {
 		rows, err = db.DB().QueryContext(
 			ctx,
 			fmt.Sprintf(
-				"SELECT '-', lemma, '-', sum_count, pos, 0, 1, avg_sim_freqs_score "+
+				"(SELECT '-', lemma, '-', sum_count, pos, 0, 1, avg_sim_freqs_score "+
 					"FROM %s_lemma_stats "+
 					"WHERE ngram = 1 AND avg_sim_freqs_score BETWEEN ? AND ? "+
-					"ORDER BY lemma, pos",
+					"ORDER BY avg_sim_freqs_score ASC "+
+					"LIMIT ?) "+
+					"UNION "+
+					"(SELECT '-', lemma, '-', sum_count, pos, 0, 1, avg_sim_freqs_score "+
+					"FROM %s_lemma_stats "+
+					"WHERE ngram = 1 AND avg_sim_freqs_score BETWEEN ? AND ? "+
+					"ORDER BY avg_sim_freqs_score DESC "+
+					"LIMIT ?)",
+				groupedName,
 				groupedName,
 			),
-			lowerScoreLim, upperScoreLim,
+			lemma.SimFreqScore, upperScoreLim, halfl,
+			lowerScoreLim, lemma.SimFreqScore, halfl,
 		)
 	} else {
-		halfl := maxValues / 2
 		// SQL note: even if it is not optimal in regards to getting the closest N values,
 		// we need to provide forced ranges (lower_bound...lemma_freq and lemma_freq...upper_bound)
 		// where to search as otherwise the query runs for too long
