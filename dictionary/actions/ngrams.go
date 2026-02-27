@@ -147,6 +147,14 @@ func (a *Actions) GenerateNgrams(ctx *gin.Context) {
 	var err error
 	if aliasOf != "" {
 		laConf, err = a.laConfCache.Get(aliasOf)
+		if err == laconf.ErrorNoSuchConfig {
+			uniresp.RespondWithErrorJSON(ctx, fmt.Errorf("aliased corpus not found"), http.StatusNotFound)
+			return
+
+		} else if err != nil {
+			uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
+			return
+		}
 		laConf.Corpus = corpusID
 
 		// TODO this is kind of a debatable solution. When generating liveattrs,
@@ -221,13 +229,26 @@ func (a *Actions) GenerateNgrams(ctx *gin.Context) {
 
 		} else {
 
-			regPath := filepath.Join(a.corpConf.RegistryDirPaths[0], corpusID) // TODO the [0]
+			var regPath string
+			if aliasOf != "" {
+				regPath = filepath.Join(a.corpConf.RegistryDirPaths[0], aliasOf) // TODO the [0]
+
+			} else {
+				regPath = filepath.Join(a.corpConf.RegistryDirPaths[0], corpusID) // TODO the [0]
+			}
 
 			var corpTagsets []corp.SupportedTagset
 			var err error
 
 			if args.PosTagset != "" {
 				corpTagsets = []corp.SupportedTagset{args.PosTagset}
+
+			} else if aliasOf != "" {
+				corpTagsets, err = a.corpusMeta.GetCorpusTagsets(aliasOf)
+				if err != nil {
+					uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
+					return
+				}
 
 			} else {
 				corpTagsets, err = a.corpusMeta.GetCorpusTagsets(corpusID)
