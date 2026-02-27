@@ -1,5 +1,5 @@
-filippo.io/edwards25519 v1.1.0 h1:FNf4tywRC1HmFuKW5xopWpigGjJKiJSV0Cqo0cJWDaA=
-filippo.io/edwards25519 v1.1.0/go.mod h1:BxyFTGdWcka3PhytdK4V28tE5sGfRvvvRV7EaN4VDT4=
+filippo.io/edwards25519 v1.1.1 h1:YpjwWWlNmGIDyXOn8zLzqiD+9TyIlPhGFG96P39uBpw=
+filippo.io/edwards25519 v1.1.1/go.mod h1:BxyFTGdWcka3PhytdK4V28tE5sGfRvvvRV7EaN4VDT4=
 github.com/BurntSushi/toml v1.5.0 h1:W5quZX/G/csjUnuI8SUYlsHs9M38FC7znL0lIO+DvMg=
 github.com/BurntSushi/toml v1.5.0/go.mod h1:ukJfTF/6rtPPRCnwkur4qwRxa8vTRFBF0uk2lLoLwho=
 github.com/KyleBanks/depth v1.2.1 h1:5h8fQADFrWtarTdtDudMmGsC7GPbOAu6RVB3ffsVFHc=
@@ -22,8 +22,8 @@ github.com/czcorpus/mquery-common v0.6.3 h1:TofGFqUW7472vD9QL4tAFvGdKKIBAqcr9RsK
 github.com/czcorpus/mquery-common v0.6.3/go.mod h1:jm+a8TUScDmReS+wJGVQpYU2ZsF1c81eMeZVWRzA9iQ=
 github.com/czcorpus/rexplorer v0.0.8 h1:rxBivMmo10xGlCDaxzH9IeD23YzS8QM5cyTXiEFPllE=
 github.com/czcorpus/rexplorer v0.0.8/go.mod h1:9KwJWUp9tqn5gDjN3sS2jcsaaMWsfi3qPaqN5s9DY9Y=
-github.com/czcorpus/vert-tagextract/v3 v3.6.10 h1:6FniVSfwtiCUujLJb2eDLjbyqcJX2WsXkGxIfyUJ0yQ=
-github.com/czcorpus/vert-tagextract/v3 v3.6.10/go.mod h1:wlhChRFK4GSysNvUzYozU0q8XoM8i42bUytqqkpJMTM=
+github.com/czcorpus/vert-tagextract/v3 v3.6.12 h1:D2AvdBbhXMOR9WtJagC2d16+SxRYT492GpUDWufee4s=
+github.com/czcorpus/vert-tagextract/v3 v3.6.12/go.mod h1:cHEBLUJ7sBR7+ULeKM5rE8hSy2L7dUPXi3nyT8hjAGE=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
@@ -128,8 +128,8 @@ github.com/swaggo/gin-swagger v1.6.1 h1:Ri06G4gc9N4t4k8hekMigJ9zKTFSlqj/9paAQCQs
 github.com/swaggo/gin-swagger v1.6.1/go.mod h1:LQ+hJStHakCWRiK/YNYtJOu4mR2FP+pxLnILT/qNiTw=
 github.com/swaggo/swag v1.16.6 h1:qBNcx53ZaX+M5dxVyTrgQ0PJ/ACK+NzhwcbieTt+9yI=
 github.com/swaggo/swag v1.16.6/go.mod h1:ngP2etMK5a0P3QBizic5MEwpRmluJZPHjXcMoj4Xesg=
-github.com/tomachalek/vertigo/v6 v6.2.2 h1:DNvInQmvh5zTvaLTBRzq1SNsbd6Cod/nfN+wx8lToRg=
-github.com/tomachalek/vertigo/v6 v6.2.2/go.mod h1:OfRPl0KQTnVQLF7NSBWpTwXO3sGpYwpRq2P8s0Pq6iI=
+github.com/tomachalek/vertigo/v6 v6.3.0 h1:PHzw8WfASfG+4/mUw98HNk1PqjKx0YhGdgIovLfQA7M=
+github.com/tomachalek/vertigo/v6 v6.3.0/go.mod h1:OfRPl0KQTnVQLF7NSBWpTwXO3sGpYwpRq2P8s0Pq6iI=
 github.com/twitchyliquid64/golang-asm v0.15.1 h1:SU5vSMR7hnwNxj24w34ZyCi/FmDZTkS4MhqMhdFk5YI=
 github.com/twitchyliquid64/golang-asm v0.15.1/go.mod h1:a1lVb/DtPvCB8fslRZhAngC2+aY1QWCk3Cedj/Gdt08=
 github.com/ugorji/go/codec v1.3.0 h1:Qd2W2sQawAfG8XSvzwhBeoGq71zXOC/Q1E9y/wUcsUA=
