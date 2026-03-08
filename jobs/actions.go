@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -53,7 +54,7 @@ type Actions struct {
 	ctx              context.Context
 	conf             *Conf
 	jobList          map[string]GeneralJobInfo
-	jobListLock      sync.Mutex
+	jobListLock      sync.RWMutex
 	detachedJobs     map[string]GeneralJobInfo
 	detachedJobsLock sync.Mutex
 	jobQueue         *JobQueue
@@ -77,6 +78,8 @@ func (a *Actions) TestAllowsJobRestart(jinfo GeneralJobInfo) error {
 }
 
 func (a *Actions) createJobList(unfinishedOnly bool) JobInfoList {
+	a.jobListLock.RLock()
+	defer a.jobListLock.RUnlock()
 	ans := make(JobInfoList, 0, len(a.jobList))
 	for _, v := range a.jobList {
 		if !unfinishedOnly || !v.IsFinished() {
@@ -175,6 +178,7 @@ func (a *Actions) registerJob(j GeneralJobInfo) chan GeneralJobInfo {
 func (a *Actions) JobList(ctx *gin.Context) {
 	unOnly := ctx.Request.URL.Query().Get("unfinishedOnly") == "1"
 	if ctx.Request.URL.Query().Get("compact") == "1" {
+		a.jobListLock.RLock()
 		ans := make(JobInfoListCompact, 0, len(a.jobList))
 		for _, v := range a.jobList {
 			if !unOnly || !v.IsFinished() {
@@ -182,6 +186,7 @@ func (a *Actions) JobList(ctx *gin.Context) {
 				ans = append(ans, &item)
 			}
 		}
+		a.jobListLock.RUnlock()
 		sort.Sort(sort.Reverse(ans))
 		uniresp.WriteJSONResponse(ctx.Writer, ans)
 
@@ -204,7 +209,9 @@ func (a *Actions) JobList(ctx *gin.Context) {
 // @Success      200 {object} any
 // @Router       /jobs/{jobId} [get]
 func (a *Actions) JobInfo(ctx *gin.Context) {
+	a.jobListLock.RLock()
 	job := FindJob(a.jobList, ctx.Param("jobId"))
+	a.jobListLock.RUnlock()
 	if job != nil {
 		if ctx.Request.URL.Query().Get("compact") == "1" {
 			uniresp.WriteJSONResponse(ctx.Writer, job.CompactVersion())
@@ -227,7 +234,9 @@ func (a *Actions) JobInfo(ctx *gin.Context) {
 // @Failure      404 {object} uniresp.ActionError
 // @Router       /jobs/{jobId} [delete]
 func (a *Actions) Delete(ctx *gin.Context) {
+	a.jobListLock.RLock()
 	job := FindJob(a.jobList, ctx.Param("jobId"))
+	a.jobListLock.RUnlock()
 	if job != nil {
 		a.jobStop <- job.GetID()
 		uniresp.WriteJSONResponse(ctx.Writer, job)
@@ -245,7 +254,9 @@ func (a *Actions) Delete(ctx *gin.Context) {
 // @Failure      404 {object} uniresp.ActionError
 // @Router       /jobs/{jobId}/clearIfFinished [get]
 func (a *Actions) ClearIfFinished(ctx *gin.Context) {
+	a.jobListLock.Lock()
 	job, removed := ClearFinishedJob(a.jobList, ctx.Param("jobId"))
+	a.jobListLock.Unlock()
 	if job != nil {
 		uniresp.WriteJSONResponse(ctx.Writer, map[string]any{"removed": removed, "jobInfo": job})
 
@@ -291,18 +302,20 @@ func (a *Actions) ClearDetachedJob(jobID string) bool {
 
 func (a *Actions) numOfUnfinishedJobs() int {
 	ans := 0
-	a.jobListLock.Lock()
+	a.jobListLock.RLock()
 	for _, v := range a.jobList {
 		if !v.IsFinished() {
 			ans++
 		}
 	}
-	a.jobListLock.Unlock()
+	a.jobListLock.RUnlock()
 	return ans
 }
 
 func (a *Actions) LastUnfinishedJobOfType(datasetID string, jobType string) (GeneralJobInfo, bool) {
 	var tmp GeneralJobInfo
+	a.jobListLock.RLock()
+	defer a.jobListLock.RUnlock()
 	for _, v := range a.jobList {
 		if v.GetDatasetID() == datasetID && v.GetType() == jobType && !v.IsFinished() &&
 			(tmp == nil || reflect.ValueOf(tmp).IsNil() || v.GetStartDT().Before(tmp.GetStartDT())) {
@@ -313,6 +326,8 @@ func (a *Actions) LastUnfinishedJobOfType(datasetID string, jobType string) (Gen
 }
 
 func (a *Actions) GetJob(jobID string) (GeneralJobInfo, bool) {
+	a.jobListLock.RLock()
+	defer a.jobListLock.RUnlock()
 	v, ok := a.jobList[jobID]
 	return v, ok
 }
@@ -327,7 +342,9 @@ func (a *Actions) GetJob(jobID string) (GeneralJobInfo, bool) {
 // @Router       /jobs/{jobId}/emailNotification/{address} [put]
 func (a *Actions) AddNotification(ctx *gin.Context) {
 	jobID := ctx.Param("jobId")
+	a.jobListLock.RLock()
 	job := FindJob(a.jobList, jobID)
+	a.jobListLock.RUnlock()
 	if job != nil {
 		recipients, ok := a.notificationRecipients[jobID]
 		if !ok {
@@ -366,7 +383,9 @@ func (a *Actions) AddNotification(ctx *gin.Context) {
 // @Router       /jobs/{jobId}/emailNotification [get]
 func (a *Actions) GetNotifications(ctx *gin.Context) {
 	jobID := ctx.Param("jobId")
+	a.jobListLock.RLock()
 	job := FindJob(a.jobList, jobID)
+	a.jobListLock.RUnlock()
 	if job != nil {
 		recipients, ok := a.notificationRecipients[job.GetID()]
 		resp := struct {
@@ -394,17 +413,14 @@ func (a *Actions) GetNotifications(ctx *gin.Context) {
 // @Router       /jobs/{jobId}/emailNotification/{address} [get]
 func (a *Actions) CheckNotification(ctx *gin.Context) {
 	jobID := ctx.Param("jobId")
+	a.jobListLock.RLock()
 	job := FindJob(a.jobList, jobID)
+	a.jobListLock.RUnlock()
 	if job != nil {
 		registered := false
 		recipients, ok := a.notificationRecipients[jobID]
 		if ok {
-			for _, addr := range recipients {
-				if addr == ctx.Param("address") {
-					registered = true
-					break
-				}
-			}
+			registered = slices.Contains(recipients, ctx.Param("address"))
 		}
 
 		resp := struct {
@@ -434,7 +450,9 @@ func (a *Actions) CheckNotification(ctx *gin.Context) {
 // @Router       /jobs/{jobId}/emailNotification/{address} [delete]
 func (a *Actions) RemoveNotification(ctx *gin.Context) {
 	jobID := ctx.Param("jobId")
+	a.jobListLock.RLock()
 	job := FindJob(a.jobList, jobID)
+	a.jobListLock.RUnlock()
 	if job != nil {
 		recipients, ok := a.notificationRecipients[jobID]
 		if ok {
