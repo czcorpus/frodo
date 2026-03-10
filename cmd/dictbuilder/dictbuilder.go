@@ -221,7 +221,7 @@ func run(ctx context.Context, configFilePath string) {
 		return
 	}
 
-	db, err := mysql.OpenDB(*config.Database)
+	db, err := mysql.OpenImportTunedDB(*config.Database)
 	if err != nil {
 		log.Error().Err(err).Msg("Error opening database connection")
 		return
