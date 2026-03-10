@@ -140,8 +140,11 @@ func (a *Actions) GetQuerySuggestions(ctx *gin.Context) {
 }
 
 func (a *Actions) GetDatasetSize(datasetName string) (int64, error) {
+	result, ok := a.getDatasetSize(datasetName)
+	if ok {
+		return result, nil
+	}
 	row := a.laDB.DB().QueryRow("SELECT size FROM dataset_sizes WHERE name = ?", datasetName)
-	var result int64
 	err := row.Scan(&result)
 	if err == sql.ErrNoRows {
 		corpusInfo, err := a.corpusMeta.LoadInfo(datasetName)
@@ -152,6 +155,9 @@ func (a *Actions) GetDatasetSize(datasetName string) (int64, error) {
 			return result, fmt.Errorf("failed to get dataset %s size: %w", datasetName, err)
 		}
 		result = corpusInfo.Size
+
+	} else {
+		a.setDatasetSize(datasetName, result)
 	}
 	return result, nil
 }

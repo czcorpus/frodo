@@ -17,13 +17,16 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"net/url"
 	"os"
+	"os/signal"
 	"path"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/czcorpus/cnc-gokit/fs"
@@ -34,6 +37,7 @@ import (
 	"frodo/cnf"
 	"frodo/db/mysql"
 	dictActions "frodo/dictionary/actions"
+	"frodo/liveattrs/db/freqdb"
 	"frodo/liveattrs/laconf"
 
 	vteCnf "github.com/czcorpus/vert-tagextract/v3/cnf"
@@ -69,7 +73,8 @@ func main() {
 	}
 
 	generalUsage := func() {
-		fmt.Fprintf(os.Stderr, "mkdict - create a dictionary out of monitoring corpus verticals\n\n")
+		fmt.Fprintf(os.Stderr, "mkdict - create a dictionary out of monitoring corpus verticals\n")
+		fmt.Fprintf(os.Stderr, "version: Frodo/mkdict %s, build date: %s, last commit: %s\n\n", version, buildDate, gitCommit)
 		fmt.Fprintf(os.Stderr, "Usage:\t%s [options] run\n", filepath.Base(os.Args[0]))
 		fmt.Fprintf(os.Stderr, "\t%s [options] confgen [server config.json] [corpname]\n", filepath.Base(os.Args[0]))
 		fmt.Fprintf(os.Stderr, "\t%s help [command]\n", filepath.Base(os.Args[0]))
@@ -85,7 +90,9 @@ func main() {
 	switch action {
 	case "run":
 		runCmd.Parse(os.Args[2:])
-		run(runCmd.Arg(0))
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		run(ctx, runCmd.Arg(0))
 	case "confgen":
 		confgenCmd.Parse(os.Args[2:])
 		generateConf(confgenCmd.Arg(0), confgenCmd.Arg(1))
@@ -113,7 +120,7 @@ func main() {
 	}
 }
 
-func run(configFilePath string) {
+func run(ctx context.Context, configFilePath string) {
 
 	// Load configuration from JSON file
 	configRaw, err := os.Open(configFilePath)
@@ -142,7 +149,7 @@ func run(configFilePath string) {
 		}
 		verts = append(verts, vertPath)
 	}
-	if err := config.Validate(); err != nil {
+	if err := config.ValidateAndDefaults(); err != nil {
 		log.Error().Err(err).Msg("failed to validate config")
 		return
 	}
@@ -163,7 +170,15 @@ func run(configFilePath string) {
 	for i := 1; i <= config.NGramSize; i++ {
 		log.Info().Msgf("Running live attributes job with ngrams of size %d", i)
 		liveAttrsArgs.Ngrams.NgramSize = i
-		if err := doJob(config.API.BaseURL, liveattrsPath, liveattrsParams, liveAttrsArgs); err != nil {
+		if err := doJob(
+			ctx,
+			config.API.BaseURL,
+			liveattrsPath,
+			liveattrsParams,
+			liveAttrsArgs,
+			time.Duration(config.DataFetchJobTimeoutSecs)*time.Second,
+			nil,
+		); err != nil {
 			log.Error().Err(err).Msg("Error running live attributes job")
 			return
 		}
@@ -184,9 +199,45 @@ func run(configFilePath string) {
 		SkipGroupedNameSearch: true, // required so the ngrams job don't search for the corpus in the database
 	}
 	log.Info().Msg("Running ngrams job")
-	if err := doJob(config.API.BaseURL, ngramsPath, ngramsParams, ngramsArgs); err != nil {
+	var datasetSize int64
+	fetchDatasetSize := func(jobInfo []byte) error {
+		var status freqdb.NgramJobInfo
+		if err := json.Unmarshal(jobInfo, &status); err != nil {
+			return err
+		}
+		datasetSize = int64(status.Result.TotalLines)
+		return nil
+	}
+	if err := doJob(
+		ctx,
+		config.API.BaseURL,
+		ngramsPath,
+		ngramsParams,
+		ngramsArgs,
+		time.Duration(config.DictBuildJobTimeoutSecs)*time.Second,
+		fetchDatasetSize,
+	); err != nil {
 		log.Error().Err(err).Msg("Error running live attributes job")
 		return
+	}
+
+	db, err := mysql.OpenDB(*config.Database)
+	if err != nil {
+		log.Error().Err(err).Msg("Error opening database connection")
+		return
+	}
+	defer db.Close()
+
+	if datasetSize > 0 {
+		if _, err := db.DB().ExecContext(
+			ctx,
+			"INSERT INTO dataset_sizes (name, size) VALUES (?, ?) ON DUPLICATE KEY UPDATE size = ?",
+			config.GetDatasetName(),
+			datasetSize,
+		); err != nil {
+			log.Error().Err(err).Msg("Error inserting/updating dataset size")
+			return
+		}
 	}
 
 	if config.IsAliasedDataset() {
@@ -194,12 +245,6 @@ func run(configFilePath string) {
 
 	} else {
 		// Rename tables in database
-		db, err := mysql.OpenDB(*config.Database)
-		if err != nil {
-			log.Error().Err(err).Msg("Error opening database connection")
-			return
-		}
-		defer db.Close()
 		for _, tableSuffix := range []string{"colcounts", "liveattrs_entry", "term_search", "word"} {
 			log.Info().Msgf("Replacing table %s_%s -> %s_%s", config.TempCorpname, tableSuffix, config.Corpname, tableSuffix)
 			if err := replaceTable(db, config.Corpname, config.TempCorpname, tableSuffix); err != nil {
