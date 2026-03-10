@@ -234,6 +234,7 @@ func run(ctx context.Context, configFilePath string) {
 			"INSERT INTO dataset_sizes (name, size) VALUES (?, ?) ON DUPLICATE KEY UPDATE size = ?",
 			config.GetDatasetName(),
 			datasetSize,
+			datasetSize,
 		); err != nil {
 			log.Error().Err(err).Msg("Error inserting/updating dataset size")
 			return
