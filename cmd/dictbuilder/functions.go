@@ -18,6 +18,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -46,26 +47,37 @@ func replaceTable(db *mysql.Adapter, corpusName string, tmpCorpusName string, su
 	return nil
 }
 
-func refreshJobStatus(jobURL string, job *JobStatus) error {
+// refreshJobStatus asks for job status via http and updates provided job object
+// (which is a simplified subset of all possible job statuses we can encounter here).
+// The function also returns raw job info response for later processing.
+func refreshJobStatus(jobURL string, job *JobStatus) ([]byte, error) {
 	resp, err := http.Get(jobURL)
 	if err != nil {
-		return err
+		return []byte{}, err
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		return []byte{}, err
 	}
 
 	if err := json.Unmarshal(body, job); err != nil {
-		return err
+		return []byte{}, err
 	}
 
-	return nil
+	return body, nil
 }
 
-func doJob(api string, jobPath string, jobParams url.Values, jobArgs any) error {
+func doJob(
+	ctx context.Context,
+	api string,
+	jobPath string,
+	jobParams url.Values,
+	jobArgs any,
+	maxProcTime time.Duration,
+	onFinalStatus func(response []byte) error,
+) error {
 	jobURL, err := url.JoinPath(api, jobPath)
 	if err != nil {
 		return err
@@ -103,16 +115,34 @@ func doJob(api string, jobPath string, jobParams url.Values, jobArgs any) error 
 		return err
 	}
 	log.Info().Msgf("Job started with ID: %s", job.ID)
-	for !job.Finished {
-		time.Sleep(5 * time.Second)
-		if err := refreshJobStatus(refreshURL, &job); err != nil {
+	var rawJobStatus []byte
+	t0 := time.Now()
+	for !job.Finished && time.Since(t0) < maxProcTime {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(5 * time.Second):
+		}
+		respData, err := refreshJobStatus(refreshURL, &job)
+		if err != nil {
 			return err
 		}
+		rawJobStatus = respData
 	}
 
+	if !job.Finished {
+		return fmt.Errorf("job timeout - took %.2f seconds", time.Since(t0).Seconds())
+	}
 	if !job.OK {
 		return errors.New(job.Error)
 	}
+
+	if onFinalStatus != nil {
+		if err := onFinalStatus(rawJobStatus); err != nil {
+			return fmt.Errorf("job's onFinalStatus failed: %w", err)
+		}
+	}
+
 	log.Info().Msg("Job finished successfully")
 	return nil
 }

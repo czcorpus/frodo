@@ -23,6 +23,12 @@ import (
 	"github.com/czcorpus/cnc-gokit/logging"
 	"github.com/czcorpus/vert-tagextract/v3/db"
 	vtedb "github.com/czcorpus/vert-tagextract/v3/db"
+	"github.com/rs/zerolog/log"
+)
+
+const (
+	LAJobDefaultTimeout     = 120
+	MKDictJobDefaultTimeout = 180
 )
 
 type apiConf struct {
@@ -66,6 +72,10 @@ type DictbuilderConfig struct {
 	// to include in our dictionary. For the cnc, this is typically
 	// 1 or 2.
 	NGramSize int `json:"ngramSize"`
+
+	DataFetchJobTimeoutSecs int `json:"dataFetchJobTimeoutSecs"`
+
+	DictBuildJobTimeoutSecs int `json:"dictBuildJobTimeoutSecs"`
 }
 
 func (dbconf *DictbuilderConfig) GetColMapping() *corpus.QSAttributes {
@@ -92,12 +102,20 @@ func (dbconf *DictbuilderConfig) GetColMapping() *corpus.QSAttributes {
 	return ans
 }
 
-func (dbconf *DictbuilderConfig) Validate() error {
+func (dbconf *DictbuilderConfig) ValidateAndDefaults() error {
 	if dbconf.AliasName == "" && dbconf.TempCorpname == "" {
 		return fmt.Errorf("both aliasName and tempCorpname are empty")
 	}
 	if dbconf.AliasName != "" && dbconf.TempCorpname != "" && dbconf.AliasName != dbconf.TempCorpname {
 		return fmt.Errorf("aliasName and tempCorpname must be either same or the aliasName must be empty")
+	}
+	if dbconf.DataFetchJobTimeoutSecs == 0 {
+		dbconf.DataFetchJobTimeoutSecs = LAJobDefaultTimeout
+		log.Warn().Int("timeout", dbconf.DataFetchJobTimeoutSecs).Msgf("dataFetchJobTimeoutSecs not set, using default")
+	}
+	if dbconf.DictBuildJobTimeoutSecs == 0 {
+		dbconf.DictBuildJobTimeoutSecs = MKDictJobDefaultTimeout
+		log.Warn().Int("timeout", dbconf.DictBuildJobTimeoutSecs).Msgf("dictBuildJobTimeoutSecs not set, using default")
 	}
 	return nil
 }

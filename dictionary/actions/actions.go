@@ -24,6 +24,7 @@ import (
 	"frodo/jobs"
 	"frodo/liveattrs/laconf"
 	"frodo/metadb"
+	"sync"
 )
 
 type Actions struct {
@@ -48,6 +49,29 @@ type Actions struct {
 	corpusMeta metadb.Provider
 
 	corpusMetaW metadb.SQLUpdater
+
+	datasetSizesCache map[string]int64
+
+	datasetSizesCacheLock sync.RWMutex
+}
+
+func (a *Actions) getDatasetSize(name string) (int64, bool) {
+	a.datasetSizesCacheLock.RLock()
+	defer a.datasetSizesCacheLock.RUnlock()
+	v, ok := a.datasetSizesCache[name]
+	return v, ok
+}
+
+func (a *Actions) setDatasetSize(name string, value int64) {
+	a.datasetSizesCacheLock.Lock()
+	defer a.datasetSizesCacheLock.Unlock()
+	a.datasetSizesCache[name] = value
+}
+
+func (a *Actions) clearDatasetSizes() {
+	a.datasetSizesCacheLock.Lock()
+	defer a.datasetSizesCacheLock.Unlock()
+	a.datasetSizesCache = make(map[string]int64)
 }
 
 // NewActions is the default factory for Actions
@@ -73,6 +97,7 @@ func NewActions(
 		corpusMetaW:              corpusMetaW,
 		laDB:                     laDB,
 		laCustomNgramDataDirPath: laCustomNgramDataDirPath,
+		datasetSizesCache:        make(map[string]int64),
 	}
 	return actions
 }
