@@ -32,6 +32,23 @@ func (t JSONTime) MarshalJSON() ([]byte, error) {
 	return []byte("\"" + time.Time(t).Format(time.RFC3339) + "\""), nil
 }
 
+func (t *JSONTime) UnmarshalJSON(data []byte) error {
+	var s *string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+	if s == nil {
+		*t = JSONTime{}
+		return nil
+	}
+	parsed, err := time.Parse(time.RFC3339, *s)
+	if err != nil {
+		return err
+	}
+	*t = JSONTime(parsed)
+	return nil
+}
+
 func (t JSONTime) Before(t2 JSONTime) bool {
 	return time.Time(t).Before(time.Time(t2))
 }
