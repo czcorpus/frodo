@@ -169,6 +169,10 @@ func processRowsSync(rows *sql.Rows, datasetSizeForIPM int, enableMultivalues bo
 					for _, v := range currLemma.Forms {
 						currLemma.Count += v.Count
 					}
+					if datasetSizeForIPM > 0 {
+						currLemma.DatasetSize = datasetSizeForIPM
+						currLemma.IPM = float64(currLemma.Count) / float64(datasetSizeForIPM) * 1e6
+					}
 					matchingLemmas = append(matchingLemmas, *currLemma)
 				}
 				sublemmas = make(map[string]int)
