@@ -244,6 +244,7 @@ func (a *Actions) generateData(initialStatus *liveattrs.LiveAttrsJobInfo) {
 				}
 				jobStatus.ProcessedAtoms = upd.ProcessedAtoms
 				jobStatus.ProcessedLines = upd.ProcessedLines
+				jobStatus.ProcessedTokens = upd.ProcessedTokens
 				updateJobChan <- jobStatus
 
 				if upd.Error == vteProc.ErrorTooManyParsingErrors {

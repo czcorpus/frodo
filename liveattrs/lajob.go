@@ -54,6 +54,7 @@ type LiveAttrsJobInfo struct {
 	Error           error         `json:"error,omitempty"`
 	ProcessedAtoms  int           `json:"processedAtoms"`
 	ProcessedLines  int           `json:"processedLines"`
+	ProcessedTokens int           `json:"processedTokens"`
 	NumRestarts     int           `json:"numRestarts"`
 	Args            JobInfoArgs   `json:"args"`
 }
@@ -108,21 +109,23 @@ func (j LiveAttrsJobInfo) FullInfo() any {
 		OK              bool          `json:"ok"`
 		ProcessedAtoms  int           `json:"processedAtoms"`
 		ProcessedLines  int           `json:"processedLines"`
+		ProcessedTokens int           `json:"processedTokens"`
 		NumRestarts     int           `json:"numRestarts"`
 		Args            JobInfoArgs   `json:"args"`
 	}{
-		ID:             j.ID,
-		Type:           j.Type,
-		CorpusID:       j.CorpusID,
-		Start:          j.Start,
-		Update:         j.Update,
-		Finished:       j.Finished,
-		Error:          jobs.ErrorToString(j.Error),
-		OK:             j.Error == nil,
-		ProcessedAtoms: j.ProcessedAtoms,
-		ProcessedLines: j.ProcessedLines,
-		NumRestarts:    j.NumRestarts,
-		Args:           j.Args.WithoutPasswords(),
+		ID:              j.ID,
+		Type:            j.Type,
+		CorpusID:        j.CorpusID,
+		Start:           j.Start,
+		Update:          j.Update,
+		Finished:        j.Finished,
+		Error:           jobs.ErrorToString(j.Error),
+		OK:              j.Error == nil,
+		ProcessedAtoms:  j.ProcessedAtoms,
+		ProcessedLines:  j.ProcessedLines,
+		ProcessedTokens: j.ProcessedTokens,
+		NumRestarts:     j.NumRestarts,
+		Args:            j.Args.WithoutPasswords(),
 	}
 }
 
