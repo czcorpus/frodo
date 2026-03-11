@@ -37,7 +37,7 @@ import (
 	"frodo/cnf"
 	"frodo/db/mysql"
 	dictActions "frodo/dictionary/actions"
-	"frodo/liveattrs/db/freqdb"
+	"frodo/liveattrs"
 	"frodo/liveattrs/laconf"
 
 	vteCnf "github.com/czcorpus/vert-tagextract/v3/cnf"
@@ -166,10 +166,20 @@ func run(ctx context.Context, configFilePath string) {
 			CalcARF:     config.CalcARF,
 		},
 	}
-
+	var datasetSize int64
 	for i := 1; i <= config.NGramSize; i++ {
 		log.Info().Msgf("Running live attributes job with ngrams of size %d", i)
 		liveAttrsArgs.Ngrams.NgramSize = i
+		fetchDatasetSize := func(jobInfo []byte) error {
+			if i == 1 {
+				var status liveattrs.LiveAttrsJobInfo
+				if err := json.Unmarshal(jobInfo, &status); err != nil {
+					return err
+				}
+				datasetSize = int64(status.ProcessedTokens)
+			}
+			return nil
+		}
 		if err := doJob(
 			ctx,
 			config.API.BaseURL,
@@ -177,7 +187,7 @@ func run(ctx context.Context, configFilePath string) {
 			liveattrsParams,
 			liveAttrsArgs,
 			time.Duration(config.DataFetchJobTimeoutSecs)*time.Second,
-			nil,
+			fetchDatasetSize,
 		); err != nil {
 			log.Error().Err(err).Msg("Error running live attributes job")
 			return
@@ -199,13 +209,8 @@ func run(ctx context.Context, configFilePath string) {
 		SkipGroupedNameSearch: true, // required so the ngrams job don't search for the corpus in the database
 	}
 	log.Info().Msg("Running ngrams job")
-	var datasetSize int64
+
 	fetchDatasetSize := func(jobInfo []byte) error {
-		var status freqdb.NgramJobInfo
-		if err := json.Unmarshal(jobInfo, &status); err != nil {
-			return err
-		}
-		datasetSize = int64(status.Result.TotalLines)
 		return nil
 	}
 	if err := doJob(
