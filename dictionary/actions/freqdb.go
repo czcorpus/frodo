@@ -64,15 +64,16 @@ func (a *Actions) attachMatchTypes(term string, result []dictionary.Lemma, caseS
 	for i, lemma := range result {
 		ans[i] = searchedLemma{
 			Lemma: dictionary.Lemma{
-				ID:        lemma.ID,
-				Lemma:     lemma.Lemma,
-				Forms:     lemma.Forms,
-				Sublemmas: lemma.Sublemmas,
-				PoS:       lemma.PoS,
-				IsPname:   lemma.IsPname,
-				Count:     lemma.Count,
-				IPM:       lemma.IPM,
-				NgramSize: lemma.NgramSize,
+				ID:          lemma.ID,
+				Lemma:       lemma.Lemma,
+				Forms:       lemma.Forms,
+				Sublemmas:   lemma.Sublemmas,
+				PoS:         lemma.PoS,
+				IsPname:     lemma.IsPname,
+				Count:       lemma.Count,
+				IPM:         lemma.IPM,
+				NgramSize:   lemma.NgramSize,
+				DatasetSize: lemma.DatasetSize,
 			},
 		}
 		for _, form := range lemma.Forms {
@@ -136,6 +137,7 @@ func (a *Actions) GetQuerySuggestions(ctx *gin.Context) {
 		mvOpts,
 		posOpts,
 	)
+
 	if err != nil {
 		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 		return
