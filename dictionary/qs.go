@@ -99,6 +99,10 @@ type Lemma struct {
 	//
 	// In case the value is not available, it is set to -1.
 	SimFreqScore float64 `json:"simFreqScore"`
+
+	// DatasetSize shows dataset/corpus size so a consumer
+	// can calculate relative values etc.
+	DatasetSize int `json:"datasetSize"`
 }
 
 func (lemma *Lemma) IsZero() bool {
@@ -210,6 +214,7 @@ func processRowsSync(rows *sql.Rows, datasetSizeForIPM int, enableMultivalues bo
 			currLemma.Count += v.Count
 		}
 		if datasetSizeForIPM > 0 {
+			currLemma.DatasetSize = datasetSizeForIPM
 			currLemma.IPM = float64(currLemma.Count) / float64(datasetSizeForIPM) * 1e6
 		}
 		matchingLemmas = append(matchingLemmas, *currLemma)
