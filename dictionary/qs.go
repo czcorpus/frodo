@@ -132,7 +132,7 @@ func isValidWord(w string, enableMultivalues bool) bool {
 	return validWordRegexp.MatchString(w)
 }
 
-func processRowsSync(rows *sql.Rows, enableMultivalues bool) ([]Lemma, error) {
+func processRowsSync(rows *sql.Rows, datasetSizeForIPM int, enableMultivalues bool) ([]Lemma, error) {
 
 	var idBase, procRecords int
 	matchingLemmas := make([]Lemma, 0, maxExpectedNumMatchingLemmas)
@@ -209,21 +209,25 @@ func processRowsSync(rows *sql.Rows, enableMultivalues bool) ([]Lemma, error) {
 		for _, v := range currLemma.Forms {
 			currLemma.Count += v.Count
 		}
+		if datasetSizeForIPM > 0 {
+			currLemma.IPM = float64(currLemma.Count) / float64(datasetSizeForIPM) * 1e6
+		}
 		matchingLemmas = append(matchingLemmas, *currLemma)
 	}
 	return matchingLemmas, nil
 }
 
 type SearchOptions struct {
-	Lemma            string
-	Sublemma         string
-	Word             string
-	PoS              string
-	AnyValue         string
-	AnyValueCS       bool
-	AllowMultivalues bool
-	Limit            int
-	NgramSize        int
+	Lemma                       string
+	Sublemma                    string
+	Word                        string
+	PoS                         string
+	AnyValue                    string
+	AnyValueCS                  bool
+	AllowMultivalues            bool
+	Limit                       int
+	NgramSize                   int
+	SearchWithDatasetSizeForIPM int
 }
 
 func (so SearchOptions) InferNgramSize() int {
@@ -289,6 +293,12 @@ func SearchWithNgramSize(size int) SearchOption {
 
 func SearchWithNoOp() SearchOption {
 	return func(c *SearchOptions) {}
+}
+
+func SearchWithDatasetSizeForIPM(size int) SearchOption {
+	return func(c *SearchOptions) {
+		c.SearchWithDatasetSizeForIPM = size
+	}
 }
 
 // --------
@@ -445,5 +455,5 @@ func Search(
 	if err != nil {
 		return []Lemma{}, fmt.Errorf("failed to search dict. values: %w", err)
 	}
-	return processRowsSync(rows, srchOpts.AllowMultivalues)
+	return processRowsSync(rows, srchOpts.SearchWithDatasetSizeForIPM, srchOpts.AllowMultivalues)
 }

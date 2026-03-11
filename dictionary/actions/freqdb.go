@@ -120,12 +120,19 @@ func (a *Actions) GetQuerySuggestions(ctx *gin.Context) {
 		posOpts = dictionary.SearchWithPoS(pos)
 	}
 
+	datasetSize, err := a.GetDatasetSize(corpusID)
+	if err != nil {
+		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
+		return
+	}
+
 	items, err := dictionary.Search(
 		ctx,
 		a.laDB,
 		corpusID,
 		dictionary.SearchWithAnyValue(term),
 		dictionary.SearchWithAnyValueCS(caseSensitive),
+		dictionary.SearchWithDatasetSizeForIPM(int(datasetSize)),
 		mvOpts,
 		posOpts,
 	)

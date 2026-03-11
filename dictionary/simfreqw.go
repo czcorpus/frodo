@@ -131,7 +131,7 @@ func SimilarARFWords(
 		return []Lemma{}, fmt.Errorf("failed to get similar freq. words: %w", err)
 	}
 	defer rows.Close()
-	ans, err := processRowsSync(rows, false)
+	ans, err := processRowsSync(rows, 0, false)
 	if err != nil {
 		return []Lemma{}, fmt.Errorf("failed to get similar freq. words: %w", err)
 	}
