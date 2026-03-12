@@ -177,6 +177,11 @@ func run(ctx context.Context, configFilePath string) {
 					return err
 				}
 				datasetSize = int64(status.ProcessedTokens)
+
+				fmt.Printf("liveattrs job finished:")
+				fmt.Printf("processed lines: %d", status.ProcessedLines)
+				fmt.Printf("processed atom structures: %d", status.ProcessedAtoms)
+				fmt.Printf("processed tokens: %d", status.ProcessedTokens)
 			}
 			return nil
 		}
@@ -192,38 +197,6 @@ func run(ctx context.Context, configFilePath string) {
 			log.Error().Err(err).Msg("Error running live attributes job")
 			return
 		}
-	}
-
-	// Run ngrams job
-	ngramsPath := fmt.Sprintf("dictionary/%s/ngrams", config.GetDatasetName())
-	ngramsParams := url.Values{
-		"append":    []string{"0"},
-		"ngramSize": []string{fmt.Sprintf("%d", config.NGramSize)},
-		"aliasOf":   []string{config.Corpname},
-	}
-	ngramsArgs := dictActions.NGramsReqArgs{
-		ColMapping:            config.GetColMapping(),
-		PosTagset:             corp.TagsetCSCNC2020,
-		UsePartitionedTable:   false,
-		MinFreq:               1,
-		SkipGroupedNameSearch: true, // required so the ngrams job don't search for the corpus in the database
-	}
-	log.Info().Msg("Running ngrams job")
-
-	fetchDatasetSize := func(jobInfo []byte) error {
-		return nil
-	}
-	if err := doJob(
-		ctx,
-		config.API.BaseURL,
-		ngramsPath,
-		ngramsParams,
-		ngramsArgs,
-		time.Duration(config.DictBuildJobTimeoutSecs)*time.Second,
-		fetchDatasetSize,
-	); err != nil {
-		log.Error().Err(err).Msg("Error running live attributes job")
-		return
 	}
 
 	db, err := mysql.OpenImportTunedDB(*config.Database)
@@ -246,6 +219,35 @@ func run(ctx context.Context, configFilePath string) {
 		}
 	}
 
+	// Run ngrams job
+	ngramsPath := fmt.Sprintf("dictionary/%s/ngrams", config.GetDatasetName())
+	ngramsParams := url.Values{
+		"append":    []string{"0"},
+		"ngramSize": []string{fmt.Sprintf("%d", config.NGramSize)},
+		"aliasOf":   []string{config.Corpname},
+	}
+	ngramsArgs := dictActions.NGramsReqArgs{
+		ColMapping:            config.GetColMapping(),
+		PosTagset:             corp.TagsetCSCNC2020,
+		UsePartitionedTable:   false,
+		MinFreq:               1,
+		SkipGroupedNameSearch: true, // required so the ngrams job don't search for the corpus in the database
+	}
+	log.Info().Msg("Running ngrams job")
+
+	if err := doJob(
+		ctx,
+		config.API.BaseURL,
+		ngramsPath,
+		ngramsParams,
+		ngramsArgs,
+		time.Duration(config.DictBuildJobTimeoutSecs)*time.Second,
+		nil,
+	); err != nil {
+		log.Error().Err(err).Msg("Error running live attributes job")
+		return
+	}
+
 	if config.IsAliasedDataset() {
 		log.Info().Str("datasetName", config.GetDatasetName()).Msg("The target dataset is configured as aliased - no table renaming.")
 
@@ -259,6 +261,17 @@ func run(ctx context.Context, configFilePath string) {
 			}
 		}
 	}
+
+	if config.APIGuardReset.isDefined() {
+		log.Info().Msg("clearing apiguard cache")
+		if err := clearAPIGuardCaches(config.APIGuardReset); err != nil {
+			log.Error().Err(err).Msg("failed to clear cache, skipping")
+		}
+
+	} else {
+		log.Warn().Msg("no APIGuard cache cleaning defined, skipping the action")
+	}
+
 	log.Info().Msg("Job done!")
 }
 

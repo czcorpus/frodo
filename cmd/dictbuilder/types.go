@@ -35,6 +35,21 @@ type apiConf struct {
 	BaseURL string `json:"baseUrl"`
 }
 
+// -----
+
+type aPIGuardResetConf struct {
+	ServerURL       string   `json:"serverUrl"`
+	AuthToken       string   `json:"authToken"`
+	AuthTokenHeader string   `json:"authTokenHeader"`
+	ResetServices   []string `json:"resetServices"`
+}
+
+func (apgr aPIGuardResetConf) isDefined() bool {
+	return apgr.ServerURL != "" && len(apgr.ResetServices) > 0
+}
+
+// -----
+
 type DictbuilderConfig struct {
 	Logging           logging.LoggingConf `json:"logging"`
 	Database          *vtedb.Conf         `json:"database"`
@@ -76,6 +91,8 @@ type DictbuilderConfig struct {
 	DataFetchJobTimeoutSecs int `json:"dataFetchJobTimeoutSecs"`
 
 	DictBuildJobTimeoutSecs int `json:"dictBuildJobTimeoutSecs"`
+
+	APIGuardReset aPIGuardResetConf `json:"apiguardReset"`
 }
 
 func (dbconf *DictbuilderConfig) GetColMapping() *corpus.QSAttributes {

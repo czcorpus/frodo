@@ -146,3 +146,33 @@ func doJob(
 	log.Info().Msg("Job finished successfully")
 	return nil
 }
+
+func clearAPIGuardCaches(conf aPIGuardResetConf) error {
+	for _, bknd := range conf.ResetServices {
+		resetURL, err := url.JoinPath(conf.ServerURL, "cleanCache", bknd)
+		if err != nil {
+			return fmt.Errorf("failed to join URL for service %s: %w", bknd, err)
+		}
+
+		req, err := http.NewRequest("POST", resetURL, nil)
+		if err != nil {
+			return fmt.Errorf("failed to create request for service %s: %w", bknd, err)
+		}
+		if conf.AuthTokenHeader != "" && conf.AuthToken != "" {
+			req.Header.Set(conf.AuthTokenHeader, conf.AuthToken)
+		}
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return fmt.Errorf("failed to reset cache for service %s: %w", bknd, err)
+		}
+		resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("reset cache for service %s returned status %d", bknd, resp.StatusCode)
+		}
+
+		log.Info().Str("service", bknd).Msg("Cache reset successfully")
+	}
+	return nil
+}
