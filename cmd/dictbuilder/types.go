@@ -17,7 +17,6 @@
 package main
 
 import (
-	"fmt"
 	"frodo/corpus"
 
 	"github.com/czcorpus/cnc-gokit/logging"
@@ -65,23 +64,7 @@ type DictbuilderConfig struct {
 	// need a different name than the original corpus. This is typical
 	// e.g. for WaG dictionaries which are derived from a single corpus
 	// but have different properties (e.g. bigrams vs. unigrams etc.)
-	//
-	// Please note that if AliasName is non-zero, then TempCorpname
-	// must be either of the same value or empty as otherwise, Frodo
-	// would be confused what should be generated.
-	//
 	AliasName string `json:"aliasName"`
-
-	// TempCorpname is used for "atomic" table updates. Frodo will
-	// generate a dictionary to tables using TempCorpname and once
-	// everything is done, it will drop existing "normal" tables
-	// and renames temp ones to those dropped ones.
-	// In case the dataset is an "alias" (which means it does not
-	// represent the corpus directly, but it is rather derived for
-	// other purposes), the renaming is not performed and these
-	// "tmp" table names (= also AliasName tables, see AliasName)
-	// are actually the final ones.
-	TempCorpname string `json:"tmpCorpname"`
 
 	// NGramSize speicifies how long word sequences we want
 	// to include in our dictionary. For the cnc, this is typically
@@ -120,12 +103,6 @@ func (dbconf *DictbuilderConfig) GetColMapping() *corpus.QSAttributes {
 }
 
 func (dbconf *DictbuilderConfig) ValidateAndDefaults() error {
-	if dbconf.AliasName == "" && dbconf.TempCorpname == "" {
-		return fmt.Errorf("both aliasName and tempCorpname are empty")
-	}
-	if dbconf.AliasName != "" && dbconf.TempCorpname != "" && dbconf.AliasName != dbconf.TempCorpname {
-		return fmt.Errorf("aliasName and tempCorpname must be either same or the aliasName must be empty")
-	}
 	if dbconf.DataFetchJobTimeoutSecs == 0 {
 		dbconf.DataFetchJobTimeoutSecs = LAJobDefaultTimeout
 		log.Warn().Int("timeout", dbconf.DataFetchJobTimeoutSecs).Msgf("dataFetchJobTimeoutSecs not set, using default")
@@ -149,7 +126,7 @@ func (dbconf *DictbuilderConfig) GetDatasetName() string {
 	if dbconf.AliasName != "" {
 		return dbconf.AliasName
 	}
-	return dbconf.TempCorpname
+	return dbconf.Corpname
 }
 
 type JobStatus struct {

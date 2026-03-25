@@ -248,20 +248,6 @@ func run(ctx context.Context, configFilePath string) {
 		return
 	}
 
-	if config.IsAliasedDataset() {
-		log.Info().Str("datasetName", config.GetDatasetName()).Msg("The target dataset is configured as aliased - no table renaming.")
-
-	} else {
-		// Rename tables in database
-		for _, tableSuffix := range []string{"colcounts", "liveattrs_entry", "term_search", "word"} {
-			log.Info().Msgf("Replacing table %s_%s -> %s_%s", config.TempCorpname, tableSuffix, config.Corpname, tableSuffix)
-			if err := replaceTable(db, config.Corpname, config.TempCorpname, tableSuffix); err != nil {
-				log.Error().Err(err).Msgf("Error replacing table %s_%s", config.Corpname, tableSuffix)
-				return
-			}
-		}
-	}
-
 	if config.APIGuardReset.isDefined() {
 		log.Info().Msg("clearing apiguard cache")
 		if err := clearAPIGuardCaches(config.APIGuardReset); err != nil {
@@ -289,7 +275,6 @@ func generateConf(serverConfPath string, corpname string) {
 		corpname = cncDefaultTemplateCorpusName
 	}
 	mkdirConf.Corpname = corpname
-	mkdirConf.TempCorpname = "tmp_" + corpname
 	jsonData, err := json.Marshal(mkdirConf)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to store template json")
