@@ -225,3 +225,39 @@ func (a *Actions) Delete(ctx *gin.Context) {
 	}
 	uniresp.WriteJSONResponse(ctx.Writer, map[string]any{"ok": true})
 }
+
+// CleanTmpTables godoc
+// @Summary      Remove [corpus]_[data type]_new tables
+// @Description  Can be used to reset broken import process. It is allowed to run only if no other job is running.
+// @Produce      json
+// @Param        corpusId path string true "Used corpus"
+// @Success      200 {object} vteCnf.NgramConf
+// @Router       /liveAttributes/{corpusId}/cleanTmpTables [post]
+func (a *Actions) CleanTmpTables(ctx *gin.Context) {
+	if a.jobActions.HasRunningJobs() {
+		uniresp.RespondWithErrorJSON(
+			ctx,
+			fmt.Errorf("cannot run in case there are running jobs"),
+			http.StatusForbidden,
+		)
+		return
+	}
+
+	corpusID := ctx.Param("corpusId")
+
+	if _, err := a.laDB.DB().Exec(
+		fmt.Sprintf("DROP TABLE IF EXISTS %s_liveattrs_entry_new", corpusID),
+	); err != nil {
+		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
+		return
+	}
+
+	if _, err := a.laDB.DB().Exec(
+		fmt.Sprintf("DROP TABLE IF EXISTS %s_colcounts_new", corpusID),
+	); err != nil {
+		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
+		return
+	}
+
+	uniresp.WriteJSONResponse(ctx.Writer, map[string]bool{"ok": true})
+}
