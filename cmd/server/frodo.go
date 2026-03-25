@@ -242,6 +242,8 @@ func main() {
 		"/liveAttributes/:corpusId/data", liveattrsActions.Create)
 	engine.DELETE(
 		"/liveAttributes/:corpusId/data", liveattrsActions.Delete)
+	engine.POST(
+		"/liveAttributes/:corpusId/cleanTmpTables", liveattrsActions.CleanTmpTables)
 	engine.GET(
 		"/liveAttributes/:corpusId/conf", liveattrsActions.ViewConf)
 	engine.PUT(

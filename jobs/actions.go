@@ -89,6 +89,18 @@ func (a *Actions) createJobList(unfinishedOnly bool) JobInfoList {
 	return ans
 }
 
+func (a *Actions) HasRunningJobs() bool {
+	a.jobListLock.RLock()
+	defer a.jobListLock.RUnlock()
+	for _, v := range a.jobList {
+
+		if !v.IsFinished() {
+			return true
+		}
+	}
+	return false
+}
+
 func (a *Actions) EnqueueJob(fn *QueuedFunc, initialStatus GeneralJobInfo) {
 	a.jobQueueLock.Lock()
 	a.jobQueue.Enqueue(fn, initialStatus)
