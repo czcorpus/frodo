@@ -88,7 +88,7 @@ type Lemma struct {
 	PoS       string     `json:"pos"`
 	IsPname   bool       `json:"is_pname"`
 	Count     int        `json:"count"`
-	IPM       float64    `json:"ipm"`
+	IPM       float64    `json:"ipm,omitempty"`
 	NgramSize int        `json:"ngramSize"`
 
 	// SimFreqScore is an ARF-derived score for finding
