@@ -51,6 +51,7 @@ import (
 	"frodo/ltsearch"
 	"frodo/metadb"
 	"frodo/root"
+	"frodo/ujc/lex"
 	"frodo/ujc/ssjc"
 
 	_ "frodo/translations"
@@ -315,6 +316,13 @@ func main() {
 		"/dictionary/SJC/search/:term",
 		ujcActionsHandler.SearchSJC,
 	)
+
+	lexActionsHandler := lex.NewHandler(laDB, conf.UJC)
+	engine.GET(
+		"/dictionary/lex/search/:term",
+		lexActionsHandler.SearchWord,
+	)
+
 	engine.GET(
 		"/dictionary/:corpusId/querySuggestions/:term",
 		dictActionsHandler.GetQuerySuggestions)
