@@ -27,6 +27,7 @@ import (
 	"frodo/jobs"
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 const (
@@ -72,7 +73,8 @@ type Form struct {
 	Value    string  `json:"word"`
 	Sublemma string  `json:"sublemma"`
 	Count    int     `json:"count"`
-	ARF      float64 `json:"arf"`
+	IPM      float64 `json:"ipm,omitempty"`
+	ARF      float64 `json:"arf,omitempty"`
 }
 
 type Sublemma struct {
@@ -136,6 +138,50 @@ func isValidWord(w string, enableMultivalues bool) bool {
 	return validWordRegexp.MatchString(w)
 }
 
+// mergeEqualFormsLC merges all the forms of a lemma
+// using lowercase conversion. Typically, forms can have
+// any combination of upper/lower characters based on
+// their use which would otherwise provide too much
+// "false instances" (e.g. "good", "Good", "GOOD" for lemma
+// "good").
+func mergeEqualFormsLC(lemma *Lemma) {
+	grp := make(map[string]*Form)
+	for _, frm := range lemma.Forms {
+		var normValue string
+		if lemma.IsPname {
+			r := []rune(frm.Value)
+			if len(r) > 0 {
+				normValue = string(unicode.ToUpper(r[0])) + string(r[1:])
+			}
+
+		} else {
+			normValue = strings.ToLower(frm.Value)
+		}
+		stored, ok := grp[normValue]
+		if !ok {
+			grp[normValue] = &Form{
+				Value:    normValue,
+				Sublemma: frm.Sublemma,
+				Count:    frm.Count,
+				IPM:      frm.IPM,
+				ARF:      frm.ARF,
+			}
+
+		} else {
+			stored.ARF += frm.ARF
+			stored.Count += frm.Count
+			stored.IPM += frm.IPM
+		}
+	}
+	forms := make([]Form, len(grp))
+	i := 0
+	for _, v := range grp {
+		forms[i] = *v
+		i++
+	}
+	lemma.Forms = forms
+}
+
 func processRowsSync(rows *sql.Rows, datasetSizeForIPM int, enableMultivalues bool) ([]Lemma, error) {
 
 	var idBase, procRecords int
@@ -151,7 +197,7 @@ func processRowsSync(rows *sql.Rows, datasetSizeForIPM int, enableMultivalues bo
 		var ngramSize int
 		err := rows.Scan(
 			&wordValue, &lemmaValue, &sublemmaValue, &wordCount,
-			&wordPos, &wordArf, &ngramSize, &simFreqScore)
+			&wordPos, &wordArf, &ngramSize, &simFreqScore, &isPname)
 		if err != nil {
 			return []Lemma{}, fmt.Errorf("failed to process dictionary rows: %w", err)
 		}
@@ -173,6 +219,7 @@ func processRowsSync(rows *sql.Rows, datasetSizeForIPM int, enableMultivalues bo
 						currLemma.DatasetSize = datasetSizeForIPM
 						currLemma.IPM = float64(currLemma.Count) / float64(datasetSizeForIPM) * 1e6
 					}
+					mergeEqualFormsLC(currLemma)
 					matchingLemmas = append(matchingLemmas, *currLemma)
 				}
 				sublemmas = make(map[string]int)
@@ -190,15 +237,17 @@ func processRowsSync(rows *sql.Rows, datasetSizeForIPM int, enableMultivalues bo
 				}
 				idBase++
 			}
-			currLemma.Forms = append(
-				currLemma.Forms,
-				Form{
-					Value:    wordValue,
-					Count:    wordCount,
-					ARF:      wordArf,
-					Sublemma: sublemmaValue,
-				},
-			)
+
+			form := Form{
+				Value:    wordValue,
+				Count:    wordCount,
+				ARF:      wordArf,
+				Sublemma: sublemmaValue,
+			}
+			if datasetSizeForIPM > 0 {
+				form.IPM = float64(wordCount) / float64(datasetSizeForIPM) * 1e6
+			}
+			currLemma.Forms = append(currLemma.Forms, form)
 			sublemmas[sublemmaValue] += wordCount
 
 		}
@@ -221,6 +270,7 @@ func processRowsSync(rows *sql.Rows, datasetSizeForIPM int, enableMultivalues bo
 			currLemma.DatasetSize = datasetSizeForIPM
 			currLemma.IPM = float64(currLemma.Count) / float64(datasetSizeForIPM) * 1e6
 		}
+		mergeEqualFormsLC(currLemma)
 		matchingLemmas = append(matchingLemmas, *currLemma)
 	}
 	return matchingLemmas, nil
@@ -396,7 +446,6 @@ func Search(
 	for _, opt := range opts {
 		opt(&srchOpts)
 	}
-	joinExpr := fmt.Sprintf("JOIN %s_term_search AS s ON s.word_id = w.id", groupedName)
 	ngramSize := srchOpts.InferNgramSize()
 	if ngramSize <= 0 {
 		return []Lemma{}, fmt.Errorf("failed to determine n-gram size in the query")
@@ -431,7 +480,6 @@ func Search(
 		sql, args := lemmaSrch.toSQL("w")
 		whereSQL = append(whereSQL, sql)
 		whereArgs = append(whereArgs, args...)
-		joinExpr = ""
 	}
 	if srchOpts.PoS != "" {
 		whereSQL = append(whereSQL, "w.pos = ?")
@@ -448,14 +496,12 @@ func Search(
 		ctx,
 		fmt.Sprintf(
 			"SELECT w.value, w.lemma, w.sublemma, w.count, "+
-				"w.pos, w.arf, w.ngram, w.sim_freqs_score "+
+				"w.pos, w.arf, w.ngram, w.sim_freqs_score, w.initial_cap "+
 				"FROM %s_word AS w "+
-				" %s "+
 				"WHERE %s "+
 				"ORDER BY w.lemma, w.pos, w.sublemma, w.value "+
 				"%s",
 			groupedName,
-			joinExpr,
 			strings.Join(whereSQL, " AND "),
 			limitSQL,
 		),
