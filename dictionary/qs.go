@@ -105,6 +105,8 @@ type Lemma struct {
 	// DatasetSize shows dataset/corpus size so a consumer
 	// can calculate relative values etc.
 	DatasetSize int `json:"datasetSize"`
+
+	ExtraData any `json:"extraData,omitempty"`
 }
 
 func (lemma *Lemma) IsZero() bool {

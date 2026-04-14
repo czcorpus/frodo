@@ -34,11 +34,6 @@ type Handler struct {
 	conf ujc.Conf
 }
 
-type SearchWordResult struct {
-	Matches []dictionary.Lemma `json:"matches"`
-	LexData *LexData           `json:"args"`
-}
-
 func (actions *Handler) getQueryMatches(ctx context.Context, term string) ([]dictionary.Lemma, error) {
 	if actions.conf.BoundDict == "" {
 		return []dictionary.Lemma{}, nil
@@ -109,19 +104,24 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 		return
 	}
 
-	// search lex dictionary for the first lemma found in the corpus, get list of variants and their PoS
-	ans, err := SearchTerm(ctx, actions.db.DB(), matches[0].Lemma)
-	if err != nil {
-		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
-		return
+	for i, match := range matches {
+		// search lex dictionary for the first lemma found in the corpus, get list of variants and their PoS
+		lexData, err := SearchTerm(ctx, actions.db.DB(), match.Lemma)
+		if err != nil {
+			uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
+			return
+		}
+		if lexData != nil {
+			actions.attachCorpusLemmata(ctx, lexData)
+			match.ExtraData = lexData
+		}
+		matches[i] = match
 	}
 
-	response := SearchWordResult{
-		Matches: matches,
-		LexData: ans,
+	ans := map[string]any{
+		"matches": matches,
 	}
-	actions.attachCorpusLemmata(ctx, ans)
-	uniresp.WriteJSONResponse(ctx.Writer, response)
+	uniresp.WriteJSONResponse(ctx.Writer, ans)
 }
 
 func NewHandler(db *mysql.Adapter, conf ujc.Conf) *Handler {

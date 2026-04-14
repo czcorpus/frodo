@@ -105,7 +105,7 @@ func SearchTerm(ctx context.Context, db *sql.DB, lemma string) (*LexData, error)
 	}
 	defer row.Close()
 
-	var data map[Source][]LexItem
+	var sources map[Source][]LexItem
 	for row.Next() {
 		var genderArg, posArg sql.NullString
 		var jsonIdents string
@@ -126,18 +126,18 @@ func SearchTerm(ctx context.Context, db *sql.DB, lemma string) (*LexData, error)
 		if err := json.Unmarshal([]byte(jsonIdents), &srchItem.Idents); err != nil {
 			return nil, fmt.Errorf("failed to search the term: %w", err)
 		}
-		if data == nil {
-			data = make(map[Source][]LexItem)
+		if sources == nil {
+			sources = make(map[Source][]LexItem)
 		}
-		if _, ok := data[srchItem.Source]; !ok {
-			data[srchItem.Source] = []LexItem{}
+		if _, ok := sources[srchItem.Source]; !ok {
+			sources[srchItem.Source] = []LexItem{}
 		}
-		data[srchItem.Source] = append(data[srchItem.Source], srchItem)
+		sources[srchItem.Source] = append(sources[srchItem.Source], srchItem)
 	}
 
 	for _, source := range sourcePriority {
-		if items, ok := data[source]; ok {
-			lexItems, err := mergeSources(items, data)
+		if items, ok := sources[source]; ok {
+			lexItems, err := mergeSources(items, sources)
 			if err != nil {
 				return nil, fmt.Errorf("failed to merge sources: %w", err)
 			}
