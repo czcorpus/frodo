@@ -27,6 +27,7 @@ import (
 	"frodo/jobs"
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 const (
@@ -148,7 +149,10 @@ func mergeEqualFormsLC(lemma *Lemma) {
 	for _, frm := range lemma.Forms {
 		var normValue string
 		if lemma.IsPname {
-			normValue = frm.Value
+			r := []rune(frm.Value)
+			if len(r) > 0 {
+				normValue = string(unicode.ToUpper(r[0])) + string(r[1:])
+			}
 
 		} else {
 			normValue = strings.ToLower(frm.Value)
