@@ -442,7 +442,6 @@ func Search(
 	for _, opt := range opts {
 		opt(&srchOpts)
 	}
-	joinExpr := fmt.Sprintf("JOIN %s_term_search AS s ON s.word_id = w.id", groupedName)
 	ngramSize := srchOpts.InferNgramSize()
 	if ngramSize <= 0 {
 		return []Lemma{}, fmt.Errorf("failed to determine n-gram size in the query")
@@ -477,7 +476,6 @@ func Search(
 		sql, args := lemmaSrch.toSQL("w")
 		whereSQL = append(whereSQL, sql)
 		whereArgs = append(whereArgs, args...)
-		joinExpr = ""
 	}
 	if srchOpts.PoS != "" {
 		whereSQL = append(whereSQL, "w.pos = ?")
@@ -496,12 +494,10 @@ func Search(
 			"SELECT w.value, w.lemma, w.sublemma, w.count, "+
 				"w.pos, w.arf, w.ngram, w.sim_freqs_score, w.initial_cap "+
 				"FROM %s_word AS w "+
-				" %s "+
 				"WHERE %s "+
 				"ORDER BY w.lemma, w.pos, w.sublemma, w.value "+
 				"%s",
 			groupedName,
-			joinExpr,
 			strings.Join(whereSQL, " AND "),
 			limitSQL,
 		),
