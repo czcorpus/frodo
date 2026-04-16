@@ -53,19 +53,19 @@ func (actions *Handler) getQueryMatches(ctx context.Context, term string) ([]dic
 	return []dictionary.Lemma{}, nil
 }
 
-func (actions *Handler) attachCorpusLemmata(ctx context.Context, lexData *LexData) error {
+func (actions *Handler) attachCorpusLemmata(ctx context.Context, data []LexItem) ([]LexItem, error) {
 	if actions.conf.BoundDict == "" {
-		return nil
+		return data, nil
 	}
-	for i, item := range lexData.LexItems {
+	for i, item := range data {
 		corpusEntry, err := actions.searchCorpusLemma(ctx, item.Lemma, item.Pos)
 		if err != nil {
-			return fmt.Errorf("failed to search corpus lemma: %w", err)
+			return nil, fmt.Errorf("failed to search corpus lemma: %w", err)
 		}
-		lexData.LexItems[i].CorpusEntry = corpusEntry
+		data[i].CorpusEntry = corpusEntry
 		log.Debug().Str("lemma", item.Lemma).Str("pos", item.Pos).Interface("corpusEntry", corpusEntry).Msg("Attached corpus entry to lex item")
 	}
-	return nil
+	return data, nil
 }
 
 func (actions *Handler) searchCorpusLemma(ctx context.Context, lemma, pos string) (*dictionary.Lemma, error) {
@@ -106,14 +106,14 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 
 	for i, match := range matches {
 		// search lex dictionary for the first lemma found in the corpus, get list of variants and their PoS
-		lexData, err := SearchTerm(ctx, actions.db.DB(), match.Lemma)
+		lexItems, err := SearchTerm(ctx, actions.db.DB(), match.Lemma)
 		if err != nil {
 			uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 			return
 		}
-		if lexData != nil {
-			actions.attachCorpusLemmata(ctx, lexData)
-			match.ExtraData = lexData
+		if lexItems != nil {
+			actions.attachCorpusLemmata(ctx, lexItems)
+			match.ExtraData = lexItems
 		}
 		matches[i] = match
 	}

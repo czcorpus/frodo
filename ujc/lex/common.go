@@ -24,51 +24,18 @@ type LexID struct {
 }
 
 type LexItem struct {
-	Idents []LexID `json:"idents"`
-	Source Source  `json:"source"`
-
 	Lemma  string `json:"lemma"`
 	Pos    string `json:"pos"`
 	Gender string `json:"gender"`
+	Aspect string `json:"aspect"`
 
-	CorpusEntry  *dictionary.Lemma   `json:"corpusEntry"`
-	ExtraSources map[Source][]string `json:"extraSources"`
+	MainSource  Source             `json:"mainSource"`
+	Sources     map[Source][]LexID `json:"sources"`
+	CorpusEntry *dictionary.Lemma  `json:"corpusEntry"`
 }
 
 type SearchResult struct {
 	Matches []dictionary.Lemma `json:"matches"`
 	Source  Source             `json:"source"`
 	Items   []LexItem          `json:"items"`
-}
-
-type SrcFileRow struct {
-	ParentID     string
-	ID           string
-	Headword     string
-	HeadwordType string
-	Pos          string
-	Gender       string
-	Aspect       string
-}
-
-type SubHeadWord struct {
-	Headword    string           `json:"headword"`
-	Pos         string           `json:"pos"`
-	Gender      string           `json:"gender"`
-	Aspect      string           `json:"aspect"`
-	CorpusEntry dictionary.Lemma `json:"corpusEntry"`
-}
-
-type HeadWordEntry struct {
-	ID          string           `json:"id"`
-	Headword    string           `json:"headword"`
-	Pos         string           `json:"pos"`
-	Gender      string           `json:"gender"`
-	Aspect      string           `json:"aspect"`
-	CorpusEntry dictionary.Lemma `json:"corpusEntry"`
-	Children    []SubHeadWord    `json:"children"`
-}
-
-func (e HeadWordEntry) IsZero() bool {
-	return e.ID == ""
 }

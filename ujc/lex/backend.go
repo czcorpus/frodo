@@ -57,6 +57,10 @@ const (
 	GenderFem      = "F"
 	GenderNeut     = "N"
 
+	AspectPerf = "P"
+	AspectImp  = "I"
+	AspectBoth = "B"
+
 	TableName = "lex_dictionary"
 )
 
@@ -89,15 +93,19 @@ func CreateTables(ctx context.Context, db *sql.DB) (*sql.Tx, error) {
 	return tx, nil
 }
 
-func SearchTerm(ctx context.Context, db *sql.DB, lemma string) (*LexData, error) {
+func SearchTerm(ctx context.Context, db *sql.DB, lemma string) ([]LexItem, error) {
 	row, err := db.QueryContext(
 		ctx,
-		"select lemma, pos, gender, source, JSON_ARRAYAGG(JSON_OBJECT('id', external_id, 'parentId', external_parent_id)) as idents "+
+		"SELECT lemma, pos, gender, JSON_OBJECTAGG(source, idents) AS sources "+
 			"FROM ( "+
-			fmt.Sprintf("(select distinct group_id from %s where lemma = ?) as g ", TableName)+
-			fmt.Sprintf("join %s as l on g.group_id = l.group_id ", TableName)+
-			") "+
-			"GROUP BY lemma, pos, gender, source",
+			"SELECT lemma, pos, gender, source, JSON_ARRAYAGG(JSON_OBJECT('id', external_id, 'parentId', external_parent_id)) AS idents "+
+			"FROM lex_dictionary AS l "+
+			"JOIN ( "+
+			"SELECT DISTINCT group_id FROM lex_dictionary WHERE lemma = ? "+
+			") AS g ON g.group_id = l.group_id "+
+			"GROUP BY lemma, pos, gender, source "+
+			") AS sub "+
+			"GROUP BY lemma, pos, gender",
 		lemma,
 	)
 	if err != nil {
@@ -105,80 +113,38 @@ func SearchTerm(ctx context.Context, db *sql.DB, lemma string) (*LexData, error)
 	}
 	defer row.Close()
 
-	var sources map[Source][]LexItem
+	data := make([]LexItem, 0)
 	for row.Next() {
 		var genderArg, posArg sql.NullString
-		var jsonIdents string
-		srchItem := LexItem{}
-		if err := row.Scan(&srchItem.Lemma, &posArg, &genderArg, &srchItem.Source, &jsonIdents); err != nil {
+		var jsonSources string
+		item := LexItem{}
+		if err := row.Scan(&item.Lemma, &posArg, &genderArg, &jsonSources); err != nil {
 			if err == sql.ErrNoRows {
 				return nil, nil
 			}
 			return nil, fmt.Errorf("failed to search the term: %w", err)
 		}
 		if posArg.Valid {
-			srchItem.Pos = posArg.String
+			item.Pos = posArg.String
 		}
 		if genderArg.Valid {
-			srchItem.Gender = genderArg.String
+			item.Gender = genderArg.String
 		}
 		// parse jsonIdents into srchItem.Idents
-		if err := json.Unmarshal([]byte(jsonIdents), &srchItem.Idents); err != nil {
+		if err := json.Unmarshal([]byte(jsonSources), &item.Sources); err != nil {
 			return nil, fmt.Errorf("failed to search the term: %w", err)
 		}
-		if sources == nil {
-			sources = make(map[Source][]LexItem)
-		}
-		if _, ok := sources[srchItem.Source]; !ok {
-			sources[srchItem.Source] = []LexItem{}
-		}
-		sources[srchItem.Source] = append(sources[srchItem.Source], srchItem)
+		data = append(data, item)
 	}
 
-	for _, source := range sourcePriority {
-		if items, ok := sources[source]; ok {
-			lexItems, err := mergeSources(items, sources)
-			if err != nil {
-				return nil, fmt.Errorf("failed to merge sources: %w", err)
-			}
-			return &LexData{
-				MainSource: source,
-				LexItems:   lexItems,
-			}, nil
-		}
-	}
-	return nil, nil
-}
-
-func mergeSources(mainItems []LexItem, extraData map[Source][]LexItem) ([]LexItem, error) {
-	var extraItems []LexItem
-	for source, items := range extraData {
-		if source != mainItems[0].Source {
-			extraItems = append(extraItems, items...)
-		}
-	}
-
-	for i, mItem := range mainItems {
-		if mItem.ExtraSources == nil {
-			mItem.ExtraSources = make(map[Source][]string)
-		}
-		for _, eItem := range extraItems {
-			if mItem.Lemma == eItem.Lemma && mItem.Pos == eItem.Pos && mItem.Gender == eItem.Gender {
-				idents, ok := mItem.ExtraSources[eItem.Source]
-				if !ok {
-					idents = make([]string, len(eItem.Idents))
-					for j, ident := range eItem.Idents {
-						idents[j] = ident.ID
-					}
-				} else {
-					for _, ident := range eItem.Idents {
-						idents = append(idents, ident.ID)
-					}
-				}
-				mItem.ExtraSources[eItem.Source] = idents
-				mainItems[i] = mItem
+	for i, item := range data {
+		for _, source := range sourcePriority {
+			if _, ok := item.Sources[source]; ok {
+				item.MainSource = source
+				data[i] = item
+				break
 			}
 		}
 	}
-	return mainItems, nil
+	return data, nil
 }
