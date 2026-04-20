@@ -25,11 +25,6 @@ import (
 
 type Source string
 
-type LexData struct {
-	MainSource Source    `json:"mainSource"`
-	LexItems   []LexItem `json:"lexItems"`
-}
-
 const (
 	SourceASSC Source = "assc"
 	SourceIJP  Source = "ijp"
@@ -63,8 +58,6 @@ const (
 
 	TableName = "lex_dictionary"
 )
-
-var sourcePriority = []Source{SourceASSC, SourceIJP}
 
 var dictionaryTable = `
 CREATE TABLE %s (
@@ -137,14 +130,5 @@ func SearchTerm(ctx context.Context, db *sql.DB, lemma string) ([]LexItem, error
 		data = append(data, item)
 	}
 
-	for i, item := range data {
-		for _, source := range sourcePriority {
-			if _, ok := item.Sources[source]; ok {
-				item.MainSource = source
-				data[i] = item
-				break
-			}
-		}
-	}
 	return data, nil
 }

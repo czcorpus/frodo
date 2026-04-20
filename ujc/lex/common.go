@@ -29,7 +29,6 @@ type LexItem struct {
 	Gender string `json:"gender"`
 	Aspect string `json:"aspect"`
 
-	MainSource  Source             `json:"mainSource"`
 	Sources     map[Source][]LexID `json:"sources"`
 	CorpusEntry *dictionary.Lemma  `json:"corpusEntry"`
 }
