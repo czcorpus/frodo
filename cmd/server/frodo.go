@@ -317,9 +317,9 @@ func main() {
 		ujcActionsHandler.SearchSJC,
 	)
 
-	lexActionsHandler := lex.NewHandler(laDB, conf.UJC)
+	lexActionsHandler := lex.NewHandler(laDB, dictActionsHandler)
 	engine.GET(
-		"/dictionary/lex/search/:term",
+		"/dictionary/lex/:corpusId/search/:term",
 		lexActionsHandler.SearchWord,
 	)
 

@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"frodo/db/mysql"
 	"frodo/dictionary"
-	"frodo/ujc"
+	dictActions "frodo/dictionary/actions"
 	"net/http"
 
 	"github.com/czcorpus/cnc-gokit/uniresp"
@@ -30,19 +30,22 @@ import (
 )
 
 type Handler struct {
-	db   *mysql.Adapter
-	conf ujc.Conf
+	db          *mysql.Adapter
+	dictActions *dictActions.Actions
 }
 
-func (actions *Handler) getQueryMatches(ctx context.Context, term string) ([]dictionary.Lemma, error) {
-	if actions.conf.BoundDict == "" {
-		return []dictionary.Lemma{}, nil
+func (actions *Handler) getQueryMatches(ctx context.Context, corpusId, term string) ([]dictionary.Lemma, error) {
+	datasetSize, err := actions.dictActions.GetDatasetSize(corpusId)
+	if err != nil {
+		return nil, err
 	}
+
 	ans, err := dictionary.Search(
 		ctx,
 		actions.db,
-		actions.conf.BoundDict,
+		corpusId,
 		dictionary.SearchWithAnyValue(term),
+		dictionary.SearchWithDatasetSizeForIPM(int(datasetSize)),
 	)
 	if err != nil {
 		return []dictionary.Lemma{}, fmt.Errorf("failed to find lemma: %w", err)
@@ -53,12 +56,9 @@ func (actions *Handler) getQueryMatches(ctx context.Context, term string) ([]dic
 	return []dictionary.Lemma{}, nil
 }
 
-func (actions *Handler) attachCorpusLemmata(ctx context.Context, data []LexItem) ([]LexItem, error) {
-	if actions.conf.BoundDict == "" {
-		return data, nil
-	}
+func (actions *Handler) attachCorpusLemmata(ctx context.Context, corpusId string, data []LexItem) ([]LexItem, error) {
 	for i, item := range data {
-		corpusEntry, err := actions.searchCorpusLemma(ctx, item.Lemma, item.Pos)
+		corpusEntry, err := actions.searchCorpusLemma(ctx, corpusId, item.Lemma, item.Pos)
 		if err != nil {
 			return nil, fmt.Errorf("failed to search corpus lemma: %w", err)
 		}
@@ -68,7 +68,7 @@ func (actions *Handler) attachCorpusLemmata(ctx context.Context, data []LexItem)
 	return data, nil
 }
 
-func (actions *Handler) searchCorpusLemma(ctx context.Context, lemma, pos string) (*dictionary.Lemma, error) {
+func (actions *Handler) searchCorpusLemma(ctx context.Context, corpusId, lemma, pos string) (*dictionary.Lemma, error) {
 	if lemma == "" {
 		return nil, nil
 	}
@@ -77,11 +77,18 @@ func (actions *Handler) searchCorpusLemma(ctx context.Context, lemma, pos string
 	if pos != "" {
 		posArg = dictionary.SearchWithPoS(pos)
 	}
+
+	datasetSize, err := actions.dictActions.GetDatasetSize(corpusId)
+	if err != nil {
+		return nil, err
+	}
+
 	ans, err := dictionary.Search(
 		ctx,
 		actions.db,
-		actions.conf.BoundDict,
+		corpusId,
 		dictionary.SearchWithLemma(lemma),
+		dictionary.SearchWithDatasetSizeForIPM(int(datasetSize)),
 		posArg,
 	)
 	if err != nil {
@@ -97,8 +104,10 @@ func (actions *Handler) searchCorpusLemma(ctx context.Context, lemma, pos string
 }
 
 func (actions *Handler) SearchWord(ctx *gin.Context) {
+	corpusId := ctx.Param("corpusId")
+
 	// search corpus for possible lemmata of the word
-	matches, err := actions.getQueryMatches(ctx, ctx.Param("term"))
+	matches, err := actions.getQueryMatches(ctx, corpusId, ctx.Param("term"))
 	if err != nil {
 		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 		return
@@ -112,7 +121,7 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 			return
 		}
 		if lexItems != nil {
-			actions.attachCorpusLemmata(ctx, lexItems)
+			actions.attachCorpusLemmata(ctx, corpusId, lexItems)
 			match.ExtraData = lexItems
 		}
 		matches[i] = match
@@ -124,9 +133,9 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 	uniresp.WriteJSONResponse(ctx.Writer, ans)
 }
 
-func NewHandler(db *mysql.Adapter, conf ujc.Conf) *Handler {
+func NewHandler(db *mysql.Adapter, dictActions *dictActions.Actions) *Handler {
 	return &Handler{
-		db:   db,
-		conf: conf,
+		db:          db,
+		dictActions: dictActions,
 	}
 }
