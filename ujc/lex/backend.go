@@ -62,10 +62,12 @@ const (
 var dictionaryTable = `
 CREATE TABLE %s (
 	group_id INT NOT NULL,
+	homonym INT,
 
 	lemma VARCHAR(100) NOT NULL,
 	pos VARCHAR(1) NOT NULL,
 	gender VARCHAR(1),
+	aspect VARCHAR(1),
 	
 	source VARCHAR(8) NOT NULL,
 	external_id VARCHAR(100) NOT NULL,
@@ -89,16 +91,16 @@ func CreateTables(ctx context.Context, db *sql.DB) (*sql.Tx, error) {
 func SearchTerm(ctx context.Context, db *sql.DB, lemma string) ([]LexItem, error) {
 	row, err := db.QueryContext(
 		ctx,
-		"SELECT lemma, pos, gender, JSON_OBJECTAGG(source, idents) AS sources "+
+		"SELECT lemma, pos, gender, aspect, JSON_OBJECTAGG(source, idents) AS sources "+
 			"FROM ( "+
-			"SELECT lemma, pos, gender, source, JSON_ARRAYAGG(JSON_OBJECT('id', external_id, 'parentId', external_parent_id)) AS idents "+
+			"SELECT lemma, pos, gender, aspect, source, JSON_ARRAYAGG(JSON_OBJECT('id', external_id, 'parentId', external_parent_id) ORDER BY homonym) AS idents "+
 			"FROM lex_dictionary AS l "+
 			"JOIN ( "+
 			"SELECT DISTINCT group_id FROM lex_dictionary WHERE lemma = ? "+
 			") AS g ON g.group_id = l.group_id "+
-			"GROUP BY lemma, pos, gender, source "+
+			"GROUP BY lemma, pos, gender, aspect, source "+
 			") AS sub "+
-			"GROUP BY lemma, pos, gender",
+			"GROUP BY lemma, pos, gender, aspect",
 		lemma,
 	)
 	if err != nil {
@@ -108,19 +110,19 @@ func SearchTerm(ctx context.Context, db *sql.DB, lemma string) ([]LexItem, error
 
 	data := make([]LexItem, 0)
 	for row.Next() {
-		var genderArg, posArg sql.NullString
+		var genderArg, aspectArg sql.NullString
 		var jsonSources string
 		item := LexItem{}
-		if err := row.Scan(&item.Lemma, &posArg, &genderArg, &jsonSources); err != nil {
+		if err := row.Scan(&item.Lemma, &item.Pos, &genderArg, &aspectArg, &jsonSources); err != nil {
 			if err == sql.ErrNoRows {
 				return nil, nil
 			}
 			return nil, fmt.Errorf("failed to search the term: %w", err)
 		}
-		if posArg.Valid {
-			item.Pos = posArg.String
-		}
 		if genderArg.Valid {
+			item.Gender = genderArg.String
+		}
+		if aspectArg.Valid {
 			item.Gender = genderArg.String
 		}
 		// parse jsonIdents into srchItem.Idents
