@@ -113,9 +113,18 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 		return
 	}
 
+	// if empty corpus matches, use different sources
+	if len(matches) == 0 {
+		matches, err = SearchMatches(ctx, actions.db.DB(), ctx.Param("term"), SourceASSC)
+		if err != nil {
+			uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
+			return
+		}
+	}
+
 	for i, match := range matches {
 		// search lex dictionary for the first lemma found in the corpus, get list of variants and their PoS
-		lexItems, err := SearchTerm(ctx, actions.db.DB(), match.Lemma)
+		lexItems, err := SearchTerm(ctx, actions.db.DB(), match.Lemma, match.PoS)
 		if err != nil {
 			uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 			return

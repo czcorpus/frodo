@@ -21,6 +21,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"frodo/dictionary"
 )
 
 type Source string
@@ -88,7 +89,41 @@ func CreateTables(ctx context.Context, db *sql.DB) (*sql.Tx, error) {
 	return tx, nil
 }
 
-func SearchTerm(ctx context.Context, db *sql.DB, lemma string) ([]LexItem, error) {
+func SearchMatches(ctx context.Context, db *sql.DB, lemma string, source Source) ([]dictionary.Lemma, error) {
+	row, err := db.QueryContext(
+		ctx,
+		"SELECT DISTINCT lemma, pos "+
+			"FROM lex_dictionary "+
+			"WHERE lemma = ? AND source = ? "+
+			"GROUP BY lemma, pos",
+		lemma, source,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search match: %w", err)
+	}
+	defer row.Close()
+
+	matches := make([]dictionary.Lemma, 0)
+	i := 0
+	for row.Next() {
+		match := dictionary.Lemma{
+			ID:    fmt.Sprintf("match-%s-%d", source, i),
+			Forms: make([]dictionary.Form, 0),
+		}
+		if err := row.Scan(&match.Lemma, &match.PoS); err != nil {
+			if err == sql.ErrNoRows {
+				return nil, nil
+			}
+			return nil, fmt.Errorf("failed to scan match: %w", err)
+		}
+		match.Forms = append(match.Forms, dictionary.Form{Value: match.Lemma})
+		matches = append(matches, match)
+	}
+
+	return matches, nil
+}
+
+func SearchTerm(ctx context.Context, db *sql.DB, lemma string, pos string) ([]LexItem, error) {
 	row, err := db.QueryContext(
 		ctx,
 		"SELECT lemma, pos, gender, aspect, JSON_OBJECTAGG(source, idents) AS sources "+
@@ -96,12 +131,12 @@ func SearchTerm(ctx context.Context, db *sql.DB, lemma string) ([]LexItem, error
 			"SELECT lemma, pos, gender, aspect, source, JSON_ARRAYAGG(JSON_OBJECT('id', external_id, 'parentId', external_parent_id) ORDER BY homonym) AS idents "+
 			"FROM lex_dictionary AS l "+
 			"JOIN ( "+
-			"SELECT DISTINCT group_id FROM lex_dictionary WHERE lemma = ? "+
+			"SELECT DISTINCT group_id FROM lex_dictionary WHERE lemma = ? AND pos = ? "+
 			") AS g ON g.group_id = l.group_id "+
 			"GROUP BY lemma, pos, gender, aspect, source "+
 			") AS sub "+
 			"GROUP BY lemma, pos, gender, aspect",
-		lemma,
+		lemma, pos,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search the term: %w", err)
@@ -117,7 +152,7 @@ func SearchTerm(ctx context.Context, db *sql.DB, lemma string) ([]LexItem, error
 			if err == sql.ErrNoRows {
 				return nil, nil
 			}
-			return nil, fmt.Errorf("failed to search the term: %w", err)
+			return nil, fmt.Errorf("failed to scan the term: %w", err)
 		}
 		if genderArg.Valid {
 			item.Gender = genderArg.String
