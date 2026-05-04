@@ -31,6 +31,8 @@ type LexItem struct {
 
 	Sources     map[Source][]LexID `json:"sources"`
 	CorpusEntry *dictionary.Lemma  `json:"corpusEntry"`
+
+	relevanceScore int
 }
 
 type SearchResult struct {

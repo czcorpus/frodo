@@ -22,6 +22,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"frodo/dictionary"
+	"sort"
+
+	"github.com/agnivade/levenshtein"
 )
 
 type Source string
@@ -107,8 +110,9 @@ func SearchMatches(ctx context.Context, db *sql.DB, lemma string, source Source)
 	i := 0
 	for row.Next() {
 		match := dictionary.Lemma{
-			ID:    fmt.Sprintf("match-%s-%d", source, i),
-			Forms: make([]dictionary.Form, 0),
+			ID:        fmt.Sprintf("match-%s-%d", source, i),
+			Forms:     make([]dictionary.Form, 0, 1),
+			Sublemmas: make([]dictionary.Sublemma, 0, 1),
 		}
 		if err := row.Scan(&match.Lemma, &match.PoS); err != nil {
 			if err == sql.ErrNoRows {
@@ -116,7 +120,8 @@ func SearchMatches(ctx context.Context, db *sql.DB, lemma string, source Source)
 			}
 			return nil, fmt.Errorf("failed to scan match: %w", err)
 		}
-		match.Forms = append(match.Forms, dictionary.Form{Value: match.Lemma})
+		match.Forms = append(match.Forms, dictionary.Form{Value: match.Lemma, Sublemma: match.Lemma})
+		match.Sublemmas = append(match.Sublemmas, dictionary.Sublemma{Value: match.Lemma})
 		matches = append(matches, match)
 	}
 
@@ -164,8 +169,12 @@ func SearchTerm(ctx context.Context, db *sql.DB, lemma string, pos string) ([]Le
 		if err := json.Unmarshal([]byte(jsonSources), &item.Sources); err != nil {
 			return nil, fmt.Errorf("failed to search the term: %w", err)
 		}
+		item.relevanceScore = levenshtein.ComputeDistance(lemma, item.Lemma)
 		data = append(data, item)
 	}
+	sort.Slice(data, func(i, j int) bool {
+		return data[i].relevanceScore < data[j].relevanceScore
+	})
 
 	return data, nil
 }
