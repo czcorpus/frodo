@@ -23,7 +23,9 @@ import (
 	"frodo/dictionary"
 	dictActions "frodo/dictionary/actions"
 	"net/http"
+	"sort"
 
+	"github.com/agnivade/levenshtein"
 	"github.com/czcorpus/cnc-gokit/uniresp"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
@@ -105,9 +107,10 @@ func (actions *Handler) searchCorpusLemma(ctx context.Context, corpusId, lemma, 
 
 func (actions *Handler) SearchWord(ctx *gin.Context) {
 	corpusId := ctx.Param("corpusId")
+	term := ctx.Param("term")
 
 	// search corpus for possible lemmata of the word
-	matches, err := actions.getQueryMatches(ctx, corpusId, ctx.Param("term"))
+	matches, err := actions.getQueryMatches(ctx, corpusId, term)
 	if err != nil {
 		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 		return
@@ -115,12 +118,16 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 
 	// if empty corpus matches, use different sources
 	if len(matches) == 0 {
-		matches, err = SearchMatches(ctx, actions.db.DB(), ctx.Param("term"), SourceASSC)
+		matches, err = SearchMatches(ctx, actions.db.DB(), term, SourceASSC)
 		if err != nil {
 			uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 			return
 		}
 	}
+
+	sort.Slice(matches, func(i, j int) bool {
+		return levenshtein.ComputeDistance(term, matches[i].Lemma) < levenshtein.ComputeDistance(term, matches[j].Lemma)
+	})
 
 	for i, match := range matches {
 		// search lex dictionary for the first lemma found in the corpus, get list of variants and their PoS
