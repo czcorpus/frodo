@@ -24,6 +24,7 @@ type LexID struct {
 }
 
 type LexItem struct {
+	Ident  string `json:"ident"`
 	Lemma  string `json:"lemma"`
 	Pos    string `json:"pos"`
 	Gender string `json:"gender"`

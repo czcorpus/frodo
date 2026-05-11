@@ -138,6 +138,10 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 		}
 		if lexItems != nil {
 			actions.attachCorpusLemmata(ctx, corpusId, lexItems)
+			for i, item := range lexItems {
+				// unique identification of lex item
+				lexItems[i].Ident = fmt.Sprintf("%s-%s-%s-%s", item.Lemma, item.Pos, item.Gender, item.Aspect)
+			}
 			match.ExtraData = lexItems
 		}
 		matches[i] = match
