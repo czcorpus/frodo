@@ -26,14 +26,22 @@ import (
 	"sort"
 
 	"github.com/agnivade/levenshtein"
+	"github.com/czcorpus/cnc-gokit/collections"
 	"github.com/czcorpus/cnc-gokit/uniresp"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 )
 
+type LexExtraData struct {
+	CorpusId   string    `json:"corpusId"`
+	MainSource Source    `json:"mainSource"`
+	Variants   []LexItem `json:"variants"`
+}
+
 type Handler struct {
-	db          *mysql.Adapter
-	dictActions *dictActions.Actions
+	db             *mysql.Adapter
+	dictActions    *dictActions.Actions
+	sourcePriority []Source
 }
 
 func (actions *Handler) getQueryMatches(ctx context.Context, corpusId, term string) ([]dictionary.Lemma, error) {
@@ -108,6 +116,9 @@ func (actions *Handler) searchCorpusLemma(ctx context.Context, corpusId, lemma, 
 func (actions *Handler) SearchWord(ctx *gin.Context) {
 	corpusId := ctx.Param("corpusId")
 	term := ctx.Param("term")
+	extraData := LexExtraData{
+		CorpusId: corpusId,
+	}
 
 	// search corpus for possible lemmata of the word
 	matches, err := actions.getQueryMatches(ctx, corpusId, term)
@@ -137,12 +148,20 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 			return
 		}
 		if lexItems != nil {
-			actions.attachCorpusLemmata(ctx, corpusId, lexItems)
-			for i, item := range lexItems {
-				// unique identification of lex item
-				lexItems[i].Ident = fmt.Sprintf("%s-%s-%s-%s", item.Lemma, item.Pos, item.Gender, item.Aspect)
+			for _, source := range actions.sourcePriority {
+				filtered := collections.SliceFilter(lexItems, func(lexItem LexItem, i int) bool {
+					_, ok := lexItem.Sources[source]
+					return ok
+				})
+				if len(filtered) > 0 {
+					lexItems = filtered
+					extraData.MainSource = source
+					break
+				}
 			}
-			match.ExtraData = lexItems
+			actions.attachCorpusLemmata(ctx, corpusId, lexItems)
+			extraData.Variants = lexItems
+			match.ExtraData = extraData
 		}
 		matches[i] = match
 	}
@@ -155,7 +174,8 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 
 func NewHandler(db *mysql.Adapter, dictActions *dictActions.Actions) *Handler {
 	return &Handler{
-		db:          db,
-		dictActions: dictActions,
+		db:             db,
+		dictActions:    dictActions,
+		sourcePriority: []Source{SourceASSC, SourceIJP},
 	}
 }

@@ -24,7 +24,6 @@ type LexID struct {
 }
 
 type LexItem struct {
-	Ident  string `json:"ident"`
 	Lemma  string `json:"lemma"`
 	Pos    string `json:"pos"`
 	Gender string `json:"gender"`
@@ -34,10 +33,4 @@ type LexItem struct {
 	CorpusEntry *dictionary.Lemma  `json:"corpusEntry"`
 
 	relevanceScore int
-}
-
-type SearchResult struct {
-	Matches []dictionary.Lemma `json:"matches"`
-	Source  Source             `json:"source"`
-	Items   []LexItem          `json:"items"`
 }
