@@ -20,7 +20,9 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"frodo/ujc/lex"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/czcorpus/cnc-gokit/util"
@@ -78,6 +80,11 @@ func ReadTSV(ctx context.Context, path string) (<-chan importDataChunk, error) {
 				ans <- importDataChunk{Error: fmt.Errorf("line %d: expected 13 fields, got %d", lineNum, len(fields))}
 				return
 			}
+			pluralityIndexMap := map[string]int{"": lex.PluralityNone, "množné": lex.PluralityPlural, "jen množné": lex.PluralityAlways, "zprav. množné": lex.PluralityUsually, "pomnožné": lex.PluralityOnly}
+			plurality, ok := pluralityIndexMap[fields[11]]
+			if !ok {
+				ans <- importDataChunk{Error: fmt.Errorf("unknown plurality value: %s", fields[11])}
+			}
 			chunk[i] = SrcFileRow{
 				ParentID:    fields[0],
 				EntryID:     fields[1],
@@ -90,7 +97,7 @@ func ReadTSV(ctx context.Context, path string) (<-chan importDataChunk, error) {
 				Gender:      util.Ternary(fields[8] == "-", "", fields[8]),
 				Aspect:      util.Ternary(fields[9] == "-", "", fields[9]),
 				Uninflected: util.Ternary(fields[10] == "", "0", "1"),
-				Plurality:   fields[11],
+				Plurality:   strconv.Itoa(plurality),
 				Changed:     fields[12],
 			}
 			if i == procChunkSize-1 {

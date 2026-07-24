@@ -63,6 +63,15 @@ const (
 	AspectImp  = "I"
 	AspectBoth = "B"
 
+	UninflectedFalse = 0
+	UninflectedTrue  = 1
+
+	PluralityNone    = 0
+	PluralityPlural  = 1
+	PluralityAlways  = 2
+	PluralityUsually = 3
+	PluralityOnly    = 4
+
 	POSOrder    = "NAPCVDRJTI"
 	GenderOrder = "MIBFN"
 	AspectOrder = "PIB"
@@ -101,10 +110,10 @@ CREATE TABLE %s (
 
 	lemma VARCHAR(100) NOT NULL,
 	pos VARCHAR(4) NOT NULL,
-	gender VARCHAR(2),
+	gender VARCHAR(1),
 	aspect VARCHAR(1),
 	uninflected TINYINT DEFAULT 0 NOT NULL,
-	plurality VARCHAR(32),
+	plurality TINYINT DEFAULT 0 NOT NULL,
 	
 	source VARCHAR(8) NOT NULL,
 	external_id VARCHAR(100) NOT NULL,
@@ -230,28 +239,28 @@ func SearchVariants(ctx context.Context, db *sql.DB, lemma string, mainSource So
 		ctx,
 		`
 		-- aggregate external ids to JSON array for each lemma and its variants, grouped by source
-		SELECT lemma, pos, gender, aspect, uninflected, JSON_OBJECTAGG(source, idents) AS sources
+		SELECT lemma, pos, gender, aspect, uninflected, plurality, JSON_OBJECTAGG(source, idents) AS sources
 		FROM (
 			-- get external source identifiers for the lemma and its variants
-			SELECT sub.lemma as lemma, sub.pos as pos, sub.gender as gender, sub.aspect as aspect, sub.uninflected as uninflected, source, JSON_ARRAYAGG(JSON_OBJECT('id', external_id, 'parentId', external_parent_id, 'groupOrder', group_order, 'homonym', homonym) ORDER BY homonym) AS idents
+			SELECT sub.lemma as lemma, sub.pos as pos, sub.gender as gender, sub.aspect as aspect, sub.uninflected as uninflected, sub.plurality as plurality, source, JSON_ARRAYAGG(JSON_OBJECT('id', external_id, 'parentId', external_parent_id, 'groupOrder', group_order, 'homonym', homonym) ORDER BY homonym) AS idents
 			FROM (
 				-- find available variants, get exact lemmata and their variants based on group_id and source
-				SELECT DISTINCT lemma, pos, gender, aspect, uninflected
+				SELECT DISTINCT lemma, pos, gender, aspect, uninflected, plurality
 				FROM lex_dictionary AS l
 				JOIN (
 					SELECT DISTINCT group_id, source FROM lex_dictionary WHERE lemma = ? AND source = ? AND group_id IS NOT NULL
 				) AS g
 				ON g.group_id = l.group_id AND g.source = l.source
 				UNION
-				SELECT DISTINCT lemma, pos, gender, aspect, uninflected
+				SELECT DISTINCT lemma, pos, gender, aspect, uninflected, plurality
 				FROM lex_dictionary AS l
 				WHERE lemma = ? AND source = ? AND group_id IS NULL
 			) AS sub
 			JOIN lex_dictionary AS l2
-			ON l2.lemma = sub.lemma AND l2.pos = sub.pos AND (l2.gender = sub.gender OR (l2.gender IS NULL AND sub.gender IS NULL)) AND (l2.aspect = sub.aspect OR (l2.aspect IS NULL AND sub.aspect IS NULL)) AND l2.uninflected = sub.uninflected
-			GROUP BY lemma, pos, gender, aspect, uninflected, source
+			ON l2.lemma = sub.lemma AND l2.pos = sub.pos AND (l2.gender = sub.gender OR (l2.gender IS NULL AND sub.gender IS NULL)) AND (l2.aspect = sub.aspect OR (l2.aspect IS NULL AND sub.aspect IS NULL)) AND l2.uninflected = sub.uninflected AND l2.plurality = sub.plurality
+			GROUP BY lemma, pos, gender, aspect, uninflected, plurality, source
 		) AS sub2
-		GROUP BY lemma, pos, gender, aspect, uninflected`,
+		GROUP BY lemma, pos, gender, aspect, uninflected, plurality`,
 		lemma, mainSource, lemma, mainSource,
 	)
 	if err != nil {
@@ -259,13 +268,13 @@ func SearchVariants(ctx context.Context, db *sql.DB, lemma string, mainSource So
 	}
 	defer row.Close()
 
-	data := make([]LexItem, 0)
+	data := make([]LexItem, 0, 5)
 	for row.Next() {
 		var genderArg, aspectArg sql.NullString
 		var uninflectedArg int64
 		var jsonSources string
 		item := LexItem{}
-		if err := row.Scan(&item.Lemma, &item.Pos, &genderArg, &aspectArg, &uninflectedArg, &jsonSources); err != nil {
+		if err := row.Scan(&item.Lemma, &item.Pos, &genderArg, &aspectArg, &uninflectedArg, &item.Plurality, &jsonSources); err != nil {
 			if err == sql.ErrNoRows {
 				return nil, nil
 			}
@@ -274,9 +283,6 @@ func SearchVariants(ctx context.Context, db *sql.DB, lemma string, mainSource So
 		item.Uninflected = uninflectedArg != 0
 		if genderArg.Valid {
 			item.Gender = genderArg.String
-			if item.Gender == GenderMascAnimInan {
-				item.Gender = "MI"
-			}
 		}
 		if aspectArg.Valid {
 			item.Aspect = aspectArg.String

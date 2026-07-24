@@ -29,6 +29,6 @@ type LexItem struct {
 	Gender      string             `json:"gender"`
 	Aspect      string             `json:"aspect"`
 	Uninflected bool               `json:"uninflected"`
-	Plurality   string             `json:"pluarlity"`
+	Plurality   int                `json:"plurality"`
 	Sources     map[Source][]LexID `json:"sources"`
 }
