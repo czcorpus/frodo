@@ -24,9 +24,7 @@ import (
 	"frodo/dictionary"
 	dictActions "frodo/dictionary/actions"
 	"net/http"
-	"sort"
 
-	"github.com/agnivade/levenshtein"
 	"github.com/czcorpus/cnc-gokit/collections"
 	"github.com/czcorpus/cnc-gokit/uniresp"
 	"github.com/czcorpus/cnc-gokit/util"
@@ -38,12 +36,6 @@ type LexExtraData struct {
 	CorpusId   string  `json:"corpusId"`
 	MainSource Source  `json:"mainSource"`
 	Variant    LexItem `json:"variant"`
-}
-
-type SearchCandidate struct {
-	Value  string
-	Score  int
-	Source Source
 }
 
 type Handler struct {
@@ -85,77 +77,6 @@ func (actions *Handler) searchCorpusEntry(ctx context.Context, corpusId, lemma, 
 		return &ans[0], nil
 	}
 	return nil, nil
-}
-
-func (actions *Handler) findMainSource(ctx context.Context, searchTerm string) (Source, error) {
-	// find available sources for the best match, and select the main source based on the priority list
-	sources, err := SearchAvailableSources(ctx, actions.db.DB(), searchTerm)
-	if err != nil {
-		return "", err
-	}
-	for _, source := range actions.sourcePriority {
-		if collections.SliceContains(sources, source) {
-			return source, nil
-		}
-	}
-	return "", nil
-}
-
-func (actions *Handler) getLematizedSearchCandidates(ctx context.Context, corpusId, term string) ([]SearchCandidate, error) {
-	datasetSize, err := actions.dictActions.GetDatasetSize(corpusId)
-	if err != nil {
-		return []SearchCandidate{}, err
-	}
-
-	matches, err := dictionary.Search(
-		ctx,
-		actions.db,
-		corpusId,
-		dictionary.SearchWithAnyValue(term),
-		dictionary.SearchWithDatasetSizeForIPM(int(datasetSize)),
-	)
-	if err != nil {
-		return []SearchCandidate{}, err
-	}
-	return collections.SliceMap(matches, func(match dictionary.Lemma, i int) SearchCandidate {
-		return SearchCandidate{Value: match.Lemma, Score: levenshtein.ComputeDistance(term, match.Lemma)}
-	}), nil
-}
-
-func (actions *Handler) getSearchCandidates(ctx context.Context, corpusId string, term string) ([]SearchCandidate, error) {
-	corpusSearchCandidates, err := actions.getLematizedSearchCandidates(ctx, corpusId, term)
-	if err != nil {
-		return nil, err
-	}
-	// sort matches by their similarity to the query term using Levenshtein distance
-	sort.Slice(corpusSearchCandidates, func(i, j int) bool {
-		return corpusSearchCandidates[i].Source < corpusSearchCandidates[j].Source
-	})
-
-	// merge seach candidates, first is exact match, then corpus lematized candidates, remove duplicates
-	searchCandidates := append([]SearchCandidate{{Value: term, Score: levenshtein.ComputeDistance(term, term)}}, corpusSearchCandidates...)
-	searchCandidates = collections.SliceReduce(searchCandidates, func(acc []SearchCandidate, curr SearchCandidate, i int) []SearchCandidate {
-		if collections.SliceFindIndex(acc, func(item SearchCandidate) bool {
-			return item.Value == curr.Value
-		}) == -1 {
-			acc = append(acc, curr)
-		}
-		return acc
-	}, make([]SearchCandidate, 0, len(corpusSearchCandidates)+1))
-
-	// find main source for each candidate
-	for i, item := range searchCandidates {
-		source, err := actions.findMainSource(ctx, item.Value)
-		if err != nil {
-			return nil, err
-		}
-		searchCandidates[i].Source = source
-	}
-
-	// return only candidates available in some source
-	return collections.SliceFilter(searchCandidates, func(item SearchCandidate, i int) bool {
-		return item.Source != ""
-	}), nil
 }
 
 func (actions *Handler) SearchWord(ctx *gin.Context) {
@@ -205,6 +126,7 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 		return
 	}
 
+	lexItems = sortVariants(lexItems, usedCandidate.Source)
 	// for each variant, search for its entry in the corpus, if not found, create a new entry with minimal data
 	variants := make([]dictionary.Lemma, 0, len(lexItems))
 	for i, item := range lexItems {
