@@ -40,25 +40,16 @@ type LexExtraData struct {
 	Variant    LexItem `json:"variant"`
 }
 
+type SearchCandidate struct {
+	Value  string
+	Score  int
+	Source Source
+}
+
 type Handler struct {
 	db             *mysql.Adapter
 	dictActions    *dictActions.Actions
 	sourcePriority []Source
-}
-
-func (actions *Handler) findBestQueryMatches(ctx context.Context, corpusId, term string) ([]dictionary.Lemma, error) {
-	datasetSize, err := actions.dictActions.GetDatasetSize(corpusId)
-	if err != nil {
-		return []dictionary.Lemma{}, err
-	}
-
-	return dictionary.Search(
-		ctx,
-		actions.db,
-		corpusId,
-		dictionary.SearchWithAnyValue(term),
-		dictionary.SearchWithDatasetSizeForIPM(int(datasetSize)),
-	)
 }
 
 func (actions *Handler) searchCorpusEntry(ctx context.Context, corpusId, lemma, pos string) (*dictionary.Lemma, error) {
@@ -110,49 +101,66 @@ func (actions *Handler) findMainSource(ctx context.Context, searchTerm string) (
 	return "", nil
 }
 
+func (actions *Handler) getLematizedSearchCandidates(ctx context.Context, corpusId, term string) ([]SearchCandidate, error) {
+	datasetSize, err := actions.dictActions.GetDatasetSize(corpusId)
+	if err != nil {
+		return []SearchCandidate{}, err
+	}
+
+	matches, err := dictionary.Search(
+		ctx,
+		actions.db,
+		corpusId,
+		dictionary.SearchWithAnyValue(term),
+		dictionary.SearchWithDatasetSizeForIPM(int(datasetSize)),
+	)
+	if err != nil {
+		return []SearchCandidate{}, err
+	}
+	return collections.SliceMap(matches, func(match dictionary.Lemma, i int) SearchCandidate {
+		return SearchCandidate{Value: match.Lemma, Score: levenshtein.ComputeDistance(term, match.Lemma)}
+	}), nil
+}
+
+func (actions *Handler) getSearchCandidates(ctx context.Context, corpusId string, term string) ([]SearchCandidate, error) {
+	corpusSearchCandidates, err := actions.getLematizedSearchCandidates(ctx, corpusId, term)
+	if err != nil {
+		return nil, err
+	}
+	// sort matches by their similarity to the query term using Levenshtein distance
+	sort.Slice(corpusSearchCandidates, func(i, j int) bool {
+		return corpusSearchCandidates[i].Source < corpusSearchCandidates[j].Source
+	})
+
+	// merge seach candidates, first is exact match, then corpus lematized candidates, remove duplicates
+	searchCandidates := append([]SearchCandidate{{Value: term, Score: levenshtein.ComputeDistance(term, term)}}, corpusSearchCandidates...)
+	searchCandidates = collections.SliceReduce(searchCandidates, func(acc []SearchCandidate, curr SearchCandidate, i int) []SearchCandidate {
+		if collections.SliceFindIndex(acc, func(item SearchCandidate) bool {
+			return item.Value == curr.Value
+		}) == -1 {
+			acc = append(acc, curr)
+		}
+		return acc
+	}, make([]SearchCandidate, 0, len(corpusSearchCandidates)+1))
+
+	// find main source for each candidate
+	for i, item := range searchCandidates {
+		source, err := actions.findMainSource(ctx, item.Value)
+		if err != nil {
+			return nil, err
+		}
+		searchCandidates[i].Source = source
+	}
+
+	// return only candidates available in some source
+	return collections.SliceFilter(searchCandidates, func(item SearchCandidate, i int) bool {
+		return item.Source != ""
+	}), nil
+}
+
 func (actions *Handler) SearchWord(ctx *gin.Context) {
 	corpusId := ctx.Param("corpusId")
 	term := ctx.Param("term")
-
-	var lexMatches []dictionary.Lemma
-	for _, source := range actions.sourcePriority {
-		matches, err := SearchMatches(ctx, actions.db.DB(), term, source)
-		if err != nil {
-			uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
-			return
-		}
-		if len(matches) > 0 {
-			lexMatches = matches
-			break
-		}
-	}
-
-	corpusMatches, err := actions.findBestQueryMatches(ctx, corpusId, term)
-	if err != nil {
-		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
-		return
-	}
-	// sort matches by their similarity to the query term using Levenshtein distance
-	sort.Slice(corpusMatches, func(i, j int) bool {
-		return levenshtein.ComputeDistance(term, corpusMatches[i].Lemma) < levenshtein.ComputeDistance(term, corpusMatches[j].Lemma)
-	})
-
-	// merge matches and remove lemma duplicates, lex matches should go first => exact matches
-	searchCandidates := collections.SliceReduce(append(lexMatches, corpusMatches...), func(acc []dictionary.Lemma, curr dictionary.Lemma, i int) []dictionary.Lemma {
-		if collections.SliceFindIndex(acc, func(item dictionary.Lemma) bool {
-			return item.Lemma == curr.Lemma
-		}) == -1 {
-			// just bare minimum for WaG to process the match
-			acc = append(acc, dictionary.Lemma{
-				ID:        curr.ID,
-				Lemma:     curr.Lemma,
-				PoS:       curr.PoS,
-				Forms:     []dictionary.Form{{Value: curr.Lemma, Sublemma: curr.Lemma}},
-				Sublemmas: []dictionary.Sublemma{{Value: curr.Lemma}},
-			})
-		}
-		return acc
-	}, make([]dictionary.Lemma, 0, len(lexMatches)+len(corpusMatches)))
 
 	typoSuggestions, err := SearchTypoSuggestions(ctx, actions.db.DB(), term)
 	if err != nil {
@@ -160,42 +168,37 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 		return
 	}
 
-	var mainSource Source
-	var usedMatch dictionary.Lemma
-	var suggestions []string
-	for i, match := range searchCandidates {
-		source, err := actions.findMainSource(ctx, match.Lemma)
-		if err != nil {
-			uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
-			return
-		}
-		if source != "" {
-			mainSource = source
-			usedMatch = match
-			suggestions = collections.SliceMap(searchCandidates[i+1:], func(v dictionary.Lemma, i int) string { return v.Lemma })
-			break
-		}
+	searchCandidates, err := actions.getSearchCandidates(ctx, corpusId, term)
+	if err != nil {
+		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
+		return
 	}
-	if mainSource == "" {
+	if len(searchCandidates) == 0 {
 		ans := map[string]any{
-			"matches":     make([]dictionary.Lemma, 0),
+			"matches":     []dictionary.Lemma{},
 			"suggestions": typoSuggestions,
 		}
 		uniresp.WriteJSONResponse(ctx.Writer, ans)
 		return
 	}
 
-	// search for all variants of the best match in the main source
-	lexItems, err := SearchVariants(ctx, actions.db.DB(), usedMatch.Lemma, mainSource)
+	usedCandidate := searchCandidates[0]
+	// unused search candidates will be suggestions
+	suggestions := append(collections.SliceMap(searchCandidates[1:], func(item SearchCandidate, i int) string {
+		return item.Value
+	}), typoSuggestions...)
+	// search variants of the best candidate
+	lexItems, err := SearchVariants(ctx, actions.db.DB(), usedCandidate.Value, usedCandidate.Source)
 	if err != nil {
 		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 		return
 	}
 
-	// this should never occur, mainSource should be always available here
+	// just in case..., should not happen, since searched item is certainly in dictionary, `mainSource` exists
+	// TODO? corpus source
 	if lexItems == nil {
 		ans := map[string]any{
-			"matches":     []dictionary.Lemma{usedMatch},
+			"matches":     []dictionary.Lemma{},
 			"suggestions": suggestions,
 		}
 		uniresp.WriteJSONResponse(ctx.Writer, ans)
@@ -233,16 +236,17 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 		}
 		corpusEntry.ExtraData = LexExtraData{
 			CorpusId:   corpusId,
-			MainSource: mainSource,
+			MainSource: usedCandidate.Source,
 			Variant:    item,
 		}
 		variants = append(variants, *corpusEntry)
+		// remove variant from suggestions if present
 		suggestions = collections.SliceFilter(suggestions, func(v string, i int) bool { return v != corpusEntry.Lemma })
 	}
 
 	ans := map[string]any{
 		"matches":     variants,
-		"suggestions": append(suggestions, typoSuggestions...),
+		"suggestions": suggestions,
 	}
 	uniresp.WriteJSONResponse(ctx.Writer, ans)
 }

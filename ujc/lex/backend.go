@@ -21,7 +21,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"frodo/dictionary"
 	"sort"
 	"strings"
 
@@ -167,43 +166,6 @@ func SearchTypoSuggestions(ctx context.Context, db *sql.DB, term string) ([]stri
 		return !strings.EqualFold(v, term)
 	})
 	return suggestions, nil
-}
-
-func SearchMatches(ctx context.Context, db *sql.DB, lemma string, source Source) ([]dictionary.Lemma, error) {
-	// TODO this does not do much now, but we could implement fuzzy search to provide suggestions
-	row, err := db.QueryContext(
-		ctx,
-		"SELECT DISTINCT lemma, pos "+
-			"FROM lex_dictionary "+
-			"WHERE lemma = ? AND source = ? ",
-		lemma, source,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to search match: %w", err)
-	}
-	defer row.Close()
-
-	matches := make([]dictionary.Lemma, 0)
-	i := 0
-	for row.Next() {
-		// just bare minimum for WaG to process the match
-		match := dictionary.Lemma{
-			ID:        fmt.Sprintf("lex-%s-%d", source, i),
-			Forms:     make([]dictionary.Form, 0, 1),
-			Sublemmas: make([]dictionary.Sublemma, 0, 1),
-		}
-		if err := row.Scan(&match.Lemma, &match.PoS); err != nil {
-			if err == sql.ErrNoRows {
-				return nil, nil
-			}
-			return nil, fmt.Errorf("failed to scan match: %w", err)
-		}
-		match.Forms = append(match.Forms, dictionary.Form{Value: match.Lemma, Sublemma: match.Lemma})
-		match.Sublemmas = append(match.Sublemmas, dictionary.Sublemma{Value: match.Lemma})
-		matches = append(matches, match)
-	}
-
-	return matches, nil
 }
 
 func SearchAvailableSources(ctx context.Context, db *sql.DB, lemma string) ([]Source, error) {
