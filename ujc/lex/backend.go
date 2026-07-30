@@ -242,3 +242,65 @@ func PruneData(ctx context.Context, tx *sql.Tx, source Source) error {
 	}
 	return nil
 }
+
+func SearchLexItemID(ctx context.Context, db *sql.DB, lexItem LexItem, source Source) ([]LexID, error) {
+	// Build WHERE clause dynamically so empty Gender/Aspect are searched as NULL
+	where := make([]string, 0, 8)
+	args := make([]interface{}, 0, 8)
+	where = append(where, "lemma = ?")
+	args = append(args, lexItem.Lemma)
+	where = append(where, "pos = ?")
+	args = append(args, lexItem.Pos)
+
+	if lexItem.Gender == "" {
+		where = append(where, "gender IS NULL")
+	} else {
+		where = append(where, "gender = ?")
+		args = append(args, lexItem.Gender)
+	}
+
+	if lexItem.Aspect == "" {
+		where = append(where, "aspect IS NULL")
+	} else {
+		where = append(where, "aspect = ?")
+		args = append(args, lexItem.Aspect)
+	}
+
+	// uninflected stored as tinyint; convert bool to int
+	uninflectedInt := 0
+	if lexItem.Uninflected {
+		uninflectedInt = 1
+	}
+	where = append(where, "uninflected = ?")
+	args = append(args, uninflectedInt)
+
+	where = append(where, "plurality = ?")
+	args = append(args, lexItem.Plurality)
+
+	where = append(where, "source = ?")
+	args = append(args, source)
+
+	query := "SELECT external_id, external_parent_id, group_order, homonym FROM lex_dictionary WHERE " + strings.Join(where, " AND ")
+
+	row, err := db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search the term: %w", err)
+	}
+	defer row.Close()
+
+	lexIds := make([]LexID, 0, 1)
+	for row.Next() {
+		var lexId LexID
+		var externalParentID sql.NullString
+		if err := row.Scan(&lexId.ID, &externalParentID, &lexId.GroupOrder, &lexId.Homonym); err != nil {
+			if err == sql.ErrNoRows {
+				return lexIds, nil
+			}
+			return nil, fmt.Errorf("failed to scan the lex id: %w", err)
+		}
+		lexId.ParentID = externalParentID.String
+		lexIds = append(lexIds, lexId)
+	}
+
+	return lexIds, nil
+}

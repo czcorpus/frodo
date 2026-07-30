@@ -103,12 +103,11 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 		return
 	}
 
+	// search variants for first candidate, the rest will be used as suggestions
 	usedCandidate := searchCandidates[0]
-	// unused search candidates will be suggestions
 	suggestions := append(collections.SliceMap(searchCandidates[1:], func(item SearchCandidate, i int) string {
 		return item.Value
 	}), typoSuggestions...)
-	// search variants of the best candidate
 	lexItems, err := SearchVariants(ctx, actions.db.DB(), usedCandidate.Value, usedCandidate.Source)
 	if err != nil {
 		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
@@ -126,8 +125,16 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 		return
 	}
 
+	// apply special transformations
+	lexItems, err = ApplyTransformations(ctx, actions.db.DB(), lexItems, JoinToPluarlityFromIJP)
+	if err != nil {
+		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
+		return
+	}
 	lexItems = sortVariants(lexItems, usedCandidate.Source)
-	// for each variant, search for its entry in the corpus, if not found, create a new entry with minimal data
+
+	// search corpus entry for each variant
+	// if not found, create a new entry with minimal data
 	variants := make([]dictionary.Lemma, 0, len(lexItems))
 	for i, item := range lexItems {
 		corpusEntry, err := actions.searchCorpusEntry(ctx, corpusId, item.Lemma, item.Pos)
