@@ -21,8 +21,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"frodo/dictionary"
-	"sort"
 	"strings"
 
 	"github.com/czcorpus/cnc-gokit/collections"
@@ -72,35 +70,8 @@ const (
 	PluralityUsually = 3
 	PluralityOnly    = 4
 
-	POSOrder    = "NAPCVDRJTI"
-	GenderOrder = "MIBFN"
-	AspectOrder = "PIB"
-
 	TableName = "lex_dictionary"
 )
-
-func morphologySort(item1 LexItem, item2 LexItem) bool {
-	var orderMap, orderData1, orderData2 string
-	if item1.Pos == "N" && item2.Pos == "N" {
-		// order by gender if both items are nouns
-		orderMap, orderData1, orderData2 = GenderOrder, item1.Gender, item2.Gender
-	} else if item1.Pos == "V" && item2.Pos == "V" {
-		// order by aspect if both items are verbs
-		orderMap, orderData1, orderData2 = AspectOrder, item1.Aspect, item2.Aspect
-	} else {
-		// order by PoS for other items
-		orderMap, orderData1, orderData2 = POSOrder, item1.Pos, item2.Pos
-	}
-	orderIndex1 := strings.Index(orderMap, orderData1)
-	orderIndex2 := strings.Index(orderMap, orderData2)
-	if orderIndex1 == -1 {
-		orderIndex1 = len(orderMap)
-	}
-	if orderIndex2 == -1 {
-		orderIndex2 = len(orderMap)
-	}
-	return orderIndex1 < orderIndex2
-}
 
 var dictionaryTable = `
 CREATE TABLE %s (
@@ -167,43 +138,6 @@ func SearchTypoSuggestions(ctx context.Context, db *sql.DB, term string) ([]stri
 		return !strings.EqualFold(v, term)
 	})
 	return suggestions, nil
-}
-
-func SearchMatches(ctx context.Context, db *sql.DB, lemma string, source Source) ([]dictionary.Lemma, error) {
-	// TODO this does not do much now, but we could implement fuzzy search to provide suggestions
-	row, err := db.QueryContext(
-		ctx,
-		"SELECT DISTINCT lemma, pos "+
-			"FROM lex_dictionary "+
-			"WHERE lemma = ? AND source = ? ",
-		lemma, source,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to search match: %w", err)
-	}
-	defer row.Close()
-
-	matches := make([]dictionary.Lemma, 0)
-	i := 0
-	for row.Next() {
-		// just bare minimum for WaG to process the match
-		match := dictionary.Lemma{
-			ID:        fmt.Sprintf("lex-%s-%d", source, i),
-			Forms:     make([]dictionary.Form, 0, 1),
-			Sublemmas: make([]dictionary.Sublemma, 0, 1),
-		}
-		if err := row.Scan(&match.Lemma, &match.PoS); err != nil {
-			if err == sql.ErrNoRows {
-				return nil, nil
-			}
-			return nil, fmt.Errorf("failed to scan match: %w", err)
-		}
-		match.Forms = append(match.Forms, dictionary.Form{Value: match.Lemma, Sublemma: match.Lemma})
-		match.Sublemmas = append(match.Sublemmas, dictionary.Sublemma{Value: match.Lemma})
-		matches = append(matches, match)
-	}
-
-	return matches, nil
 }
 
 func SearchAvailableSources(ctx context.Context, db *sql.DB, lemma string) ([]Source, error) {
@@ -294,50 +228,6 @@ func SearchVariants(ctx context.Context, db *sql.DB, lemma string, mainSource So
 		data = append(data, item)
 	}
 
-	// Get first items of groups
-	firstGroupItems := collections.SliceReduce(data, func(acc []LexItem, curr LexItem, i int) []LexItem {
-		groupIdx := collections.SliceFindIndex(acc, func(v LexItem) bool {
-			return v.Sources[mainSource][0].ID == curr.Sources[mainSource][0].ID
-		})
-		if groupIdx == -1 {
-			return append(acc, curr)
-		}
-		if acc[groupIdx].Sources[mainSource][0].GroupOrder > curr.Sources[mainSource][0].GroupOrder {
-			acc[groupIdx] = curr
-		}
-		return acc
-	}, make([]LexItem, 0, 5))
-
-	// Sort first items of groups
-	sort.Slice(firstGroupItems, func(i, j int) bool {
-		// first order by Lemma
-		if firstGroupItems[i].Lemma != firstGroupItems[j].Lemma {
-			return firstGroupItems[i].Lemma < firstGroupItems[j].Lemma
-		}
-		// then by homonymy
-		if firstGroupItems[i].Sources[mainSource][0].Homonym != firstGroupItems[j].Sources[mainSource][0].Homonym {
-			return firstGroupItems[i].Sources[mainSource][0].Homonym < firstGroupItems[j].Sources[mainSource][0].Homonym
-		}
-		return morphologySort(firstGroupItems[i], firstGroupItems[j])
-	})
-
-	// groupID order map
-	groupOrder := make(map[string]int)
-	for i, v := range firstGroupItems {
-		groupOrder[v.Sources[mainSource][0].ID] = i
-	}
-
-	// sort groups all data
-	sort.Slice(data, func(i, j int) bool {
-		if data[i].Sources[mainSource][0].ID != data[j].Sources[mainSource][0].ID {
-			return groupOrder[data[i].Sources[mainSource][0].ID] < groupOrder[data[j].Sources[mainSource][0].ID]
-		}
-		if data[i].Sources[mainSource][0].GroupOrder != data[j].Sources[mainSource][0].GroupOrder {
-			return data[i].Sources[mainSource][0].GroupOrder < data[j].Sources[mainSource][0].GroupOrder
-		}
-		return morphologySort(data[i], data[j])
-	})
-
 	return data, nil
 }
 
@@ -351,4 +241,66 @@ func PruneData(ctx context.Context, tx *sql.Tx, source Source) error {
 		return err
 	}
 	return nil
+}
+
+func SearchLexItemID(ctx context.Context, db *sql.DB, lexItem LexItem, source Source) ([]LexID, error) {
+	// Build WHERE clause dynamically so empty Gender/Aspect are searched as NULL
+	where := make([]string, 0, 8)
+	args := make([]interface{}, 0, 8)
+	where = append(where, "lemma = ?")
+	args = append(args, lexItem.Lemma)
+	where = append(where, "pos = ?")
+	args = append(args, lexItem.Pos)
+
+	if lexItem.Gender == "" {
+		where = append(where, "gender IS NULL")
+	} else {
+		where = append(where, "gender = ?")
+		args = append(args, lexItem.Gender)
+	}
+
+	if lexItem.Aspect == "" {
+		where = append(where, "aspect IS NULL")
+	} else {
+		where = append(where, "aspect = ?")
+		args = append(args, lexItem.Aspect)
+	}
+
+	// uninflected stored as tinyint; convert bool to int
+	uninflectedInt := 0
+	if lexItem.Uninflected {
+		uninflectedInt = 1
+	}
+	where = append(where, "uninflected = ?")
+	args = append(args, uninflectedInt)
+
+	where = append(where, "plurality = ?")
+	args = append(args, lexItem.Plurality)
+
+	where = append(where, "source = ?")
+	args = append(args, source)
+
+	query := "SELECT external_id, external_parent_id, group_order, homonym FROM lex_dictionary WHERE " + strings.Join(where, " AND ")
+
+	row, err := db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search the term: %w", err)
+	}
+	defer row.Close()
+
+	lexIds := make([]LexID, 0, 1)
+	for row.Next() {
+		var lexId LexID
+		var externalParentID sql.NullString
+		if err := row.Scan(&lexId.ID, &externalParentID, &lexId.GroupOrder, &lexId.Homonym); err != nil {
+			if err == sql.ErrNoRows {
+				return lexIds, nil
+			}
+			return nil, fmt.Errorf("failed to scan the lex id: %w", err)
+		}
+		lexId.ParentID = externalParentID.String
+		lexIds = append(lexIds, lexId)
+	}
+
+	return lexIds, nil
 }

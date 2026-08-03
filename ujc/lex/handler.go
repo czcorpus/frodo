@@ -24,9 +24,7 @@ import (
 	"frodo/dictionary"
 	dictActions "frodo/dictionary/actions"
 	"net/http"
-	"sort"
 
-	"github.com/agnivade/levenshtein"
 	"github.com/czcorpus/cnc-gokit/collections"
 	"github.com/czcorpus/cnc-gokit/uniresp"
 	"github.com/czcorpus/cnc-gokit/util"
@@ -44,21 +42,6 @@ type Handler struct {
 	db             *mysql.Adapter
 	dictActions    *dictActions.Actions
 	sourcePriority []Source
-}
-
-func (actions *Handler) findBestQueryMatches(ctx context.Context, corpusId, term string) ([]dictionary.Lemma, error) {
-	datasetSize, err := actions.dictActions.GetDatasetSize(corpusId)
-	if err != nil {
-		return []dictionary.Lemma{}, err
-	}
-
-	return dictionary.Search(
-		ctx,
-		actions.db,
-		corpusId,
-		dictionary.SearchWithAnyValue(term),
-		dictionary.SearchWithDatasetSizeForIPM(int(datasetSize)),
-	)
 }
 
 func (actions *Handler) searchCorpusEntry(ctx context.Context, corpusId, lemma, pos string) (*dictionary.Lemma, error) {
@@ -96,63 +79,9 @@ func (actions *Handler) searchCorpusEntry(ctx context.Context, corpusId, lemma, 
 	return nil, nil
 }
 
-func (actions *Handler) findMainSource(ctx context.Context, searchTerm string) (Source, error) {
-	// find available sources for the best match, and select the main source based on the priority list
-	sources, err := SearchAvailableSources(ctx, actions.db.DB(), searchTerm)
-	if err != nil {
-		return "", err
-	}
-	for _, source := range actions.sourcePriority {
-		if collections.SliceContains(sources, source) {
-			return source, nil
-		}
-	}
-	return "", nil
-}
-
 func (actions *Handler) SearchWord(ctx *gin.Context) {
 	corpusId := ctx.Param("corpusId")
 	term := ctx.Param("term")
-
-	var lexMatches []dictionary.Lemma
-	for _, source := range actions.sourcePriority {
-		matches, err := SearchMatches(ctx, actions.db.DB(), term, source)
-		if err != nil {
-			uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
-			return
-		}
-		if len(matches) > 0 {
-			lexMatches = matches
-			break
-		}
-	}
-
-	corpusMatches, err := actions.findBestQueryMatches(ctx, corpusId, term)
-	if err != nil {
-		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
-		return
-	}
-	// sort matches by their similarity to the query term using Levenshtein distance
-	sort.Slice(corpusMatches, func(i, j int) bool {
-		return levenshtein.ComputeDistance(term, corpusMatches[i].Lemma) < levenshtein.ComputeDistance(term, corpusMatches[j].Lemma)
-	})
-
-	// merge matches and remove lemma duplicates, lex matches should go first => exact matches
-	searchCandidates := collections.SliceReduce(append(lexMatches, corpusMatches...), func(acc []dictionary.Lemma, curr dictionary.Lemma, i int) []dictionary.Lemma {
-		if collections.SliceFindIndex(acc, func(item dictionary.Lemma) bool {
-			return item.Lemma == curr.Lemma
-		}) == -1 {
-			// just bare minimum for WaG to process the match
-			acc = append(acc, dictionary.Lemma{
-				ID:        curr.ID,
-				Lemma:     curr.Lemma,
-				PoS:       curr.PoS,
-				Forms:     []dictionary.Form{{Value: curr.Lemma, Sublemma: curr.Lemma}},
-				Sublemmas: []dictionary.Sublemma{{Value: curr.Lemma}},
-			})
-		}
-		return acc
-	}, make([]dictionary.Lemma, 0, len(lexMatches)+len(corpusMatches)))
 
 	typoSuggestions, err := SearchTypoSuggestions(ctx, actions.db.DB(), term)
 	if err != nil {
@@ -160,49 +89,52 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 		return
 	}
 
-	var mainSource Source
-	var usedMatch dictionary.Lemma
-	var suggestions []string
-	for i, match := range searchCandidates {
-		source, err := actions.findMainSource(ctx, match.Lemma)
-		if err != nil {
-			uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
-			return
-		}
-		if source != "" {
-			mainSource = source
-			usedMatch = match
-			suggestions = collections.SliceMap(searchCandidates[i+1:], func(v dictionary.Lemma, i int) string { return v.Lemma })
-			break
-		}
+	searchCandidates, err := actions.getSearchCandidates(ctx, corpusId, term)
+	if err != nil {
+		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
+		return
 	}
-	if mainSource == "" {
+	if len(searchCandidates) == 0 {
 		ans := map[string]any{
-			"matches":     make([]dictionary.Lemma, 0),
+			"matches":     []dictionary.Lemma{},
 			"suggestions": typoSuggestions,
 		}
 		uniresp.WriteJSONResponse(ctx.Writer, ans)
 		return
 	}
 
-	// search for all variants of the best match in the main source
-	lexItems, err := SearchVariants(ctx, actions.db.DB(), usedMatch.Lemma, mainSource)
+	// search variants for first candidate, the rest will be used as suggestions
+	usedCandidate := searchCandidates[0]
+	suggestions := append(collections.SliceMap(searchCandidates[1:], func(item SearchCandidate, i int) string {
+		return item.Value
+	}), typoSuggestions...)
+	lexItems, err := SearchVariants(ctx, actions.db.DB(), usedCandidate.Value, usedCandidate.Source)
 	if err != nil {
 		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 		return
 	}
 
-	// this should never occur, mainSource should be always available here
+	// just in case..., should not happen, since searched item is certainly in dictionary, `mainSource` exists
+	// TODO? corpus source
 	if lexItems == nil {
 		ans := map[string]any{
-			"matches":     []dictionary.Lemma{usedMatch},
+			"matches":     []dictionary.Lemma{},
 			"suggestions": suggestions,
 		}
 		uniresp.WriteJSONResponse(ctx.Writer, ans)
 		return
 	}
 
-	// for each variant, search for its entry in the corpus, if not found, create a new entry with minimal data
+	// apply special transformations
+	lexItems, err = ApplyTransformations(ctx, actions.db.DB(), lexItems, JoinToPluarlityFromIJP)
+	if err != nil {
+		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
+		return
+	}
+	lexItems = sortVariants(lexItems, usedCandidate.Source)
+
+	// search corpus entry for each variant
+	// if not found, create a new entry with minimal data
 	variants := make([]dictionary.Lemma, 0, len(lexItems))
 	for i, item := range lexItems {
 		corpusEntry, err := actions.searchCorpusEntry(ctx, corpusId, item.Lemma, item.Pos)
@@ -233,16 +165,17 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 		}
 		corpusEntry.ExtraData = LexExtraData{
 			CorpusId:   corpusId,
-			MainSource: mainSource,
+			MainSource: usedCandidate.Source,
 			Variant:    item,
 		}
 		variants = append(variants, *corpusEntry)
+		// remove variant from suggestions if present
 		suggestions = collections.SliceFilter(suggestions, func(v string, i int) bool { return v != corpusEntry.Lemma })
 	}
 
 	ans := map[string]any{
 		"matches":     variants,
-		"suggestions": append(suggestions, typoSuggestions...),
+		"suggestions": suggestions,
 	}
 	uniresp.WriteJSONResponse(ctx.Writer, ans)
 }
