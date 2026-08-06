@@ -25,6 +25,7 @@ import (
 	"frodo/ujc/lex"
 	"frodo/ujc/lex/assc"
 	"frodo/ujc/lex/ijp"
+	"frodo/ujc/lex/ssc"
 	"os"
 	"os/signal"
 	"syscall"
@@ -142,6 +143,50 @@ func runAsscUpdate(args updateArgs) error {
 	return nil
 }
 
+func runSscImport(args importArgs) {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	conf := cnf.LoadConfig(args.configPath)
+	db, err := mysql.OpenDB(*conf.LiveAttrs.DB)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to import data")
+	}
+
+	tx, err := db.DB().BeginTx(ctx, nil)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to import data")
+	}
+
+	log.Info().Msg("Pruning old SSC data")
+	if err := lex.PruneData(ctx, tx, lex.SourceSSC); err != nil {
+		log.Fatal().Err(err).Msg("failed to import data")
+	}
+
+	log.Info().Msg("Reading SSC data from TSV file")
+	data, err := ssc.ReadTSV(ctx, args.inputFile)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to import data")
+	}
+
+	for chunk := range data {
+		if chunk.Error != nil {
+			log.Fatal().Err(chunk.Error).Msg("failed to import data")
+		}
+		if err := ssc.InsertDictChunk(ctx, tx, chunk.Items); err != nil {
+			log.Fatal().Err(err).Msg("failed to import data")
+		}
+	}
+	tx.Commit()
+
+}
+
+func runSscUpdate(args updateArgs) error {
+	fmt.Printf("Running SSC update: targetID=%s, force=%v\n", args.targetID, args.force)
+	// TODO: implement update logic
+	return nil
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Fprintf(os.Stderr, "Usage: %s <command> [options]\n", os.Args[0])
@@ -183,6 +228,8 @@ func main() {
 			runIjpImport(importOpts)
 		case "assc":
 			runAsscImport(importOpts)
+		case "ssc":
+			runSscImport(importOpts)
 		default:
 			fmt.Fprintf(os.Stderr, "Unknown service type: %s\n", importOpts.serviceType)
 			os.Exit(1)
@@ -199,6 +246,8 @@ func main() {
 			err = runIjpUpdate(updateOpts)
 		case "assc":
 			err = runAsscUpdate(updateOpts)
+		case "ssc":
+			err = runSscUpdate(updateOpts)
 		default:
 			fmt.Fprintf(os.Stderr, "Unknown service type: %s\n", updateOpts.serviceType)
 			os.Exit(1)

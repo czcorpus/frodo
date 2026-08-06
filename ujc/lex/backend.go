@@ -32,7 +32,9 @@ const (
 	SourceASSC Source = "assc"
 	SourceIJP  Source = "ijp"
 	SourceSSJC Source = "ssjc"
+	SourcePSJC Source = "psjc"
 	SourceSJC  Source = "sjc"
+	SourceSSC  Source = "ssc"
 
 	POSAdj   = "A"
 	POSAbb   = "B"

@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package assc
+package ssc
 
 import (
 	"bufio"
@@ -80,12 +80,12 @@ func ReadTSV(ctx context.Context, path string) (<-chan importDataChunk, error) {
 				ans <- importDataChunk{Error: fmt.Errorf("line %d: expected 13 fields, got %d", lineNum, len(fields))}
 				return
 			}
-			pluralityIndexMap := map[string]int{"": lex.PluralityNone, "množné": lex.PluralityPlural, "jen množné": lex.PluralityAlways, "zprav. množné": lex.PluralityUsually, "pomnožné": lex.PluralityOnly}
+			pluralityIndexMap := map[string]int{"": lex.PluralityNone, "plurale_tantum": lex.PluralityOnly}
 			plurality, ok := pluralityIndexMap[fields[11]]
 			if !ok {
 				ans <- importDataChunk{Error: fmt.Errorf("unknown plurality value: %s", fields[11])}
 			}
-			item := SrcFileRow{
+			chunk[i] = SrcFileRow{
 				ParentID:    fields[0],
 				EntryID:     fields[1],
 				Type:        fields[2],
@@ -94,29 +94,26 @@ func ReadTSV(ctx context.Context, path string) (<-chan importDataChunk, error) {
 				LemmaType:   fields[5],
 				Homonymy:    fields[6],
 				Pos:         fields[7],
-				Gender:      util.Ternary(fields[8] == "-", "", fields[8]),
-				Aspect:      util.Ternary(fields[9] == "-", "", fields[9]),
+				Gender:      fields[8],
+				Aspect:      fields[9],
 				Uninflected: util.Ternary(fields[10] == "", "0", "1"),
 				Plurality:   strconv.Itoa(plurality),
 				Changed:     fields[12],
 			}
-			if item.LemmaType != "víceslovné" {
-				chunk[i] = item
 
-				if i == procChunkSize-1 {
-					select {
-					case <-ctx.Done():
-						return
-					default:
-					}
-
-					ans <- importDataChunk{Items: chunk}
-					i = 0
-					chunk = make([]SrcFileRow, procChunkSize)
-
-				} else {
-					i++
+			if i == procChunkSize-1 {
+				select {
+				case <-ctx.Done():
+					return
+				default:
 				}
+
+				ans <- importDataChunk{Items: chunk}
+				i = 0
+				chunk = make([]SrcFileRow, procChunkSize)
+
+			} else {
+				i++
 			}
 		}
 		if err := scanner.Err(); err != nil {
