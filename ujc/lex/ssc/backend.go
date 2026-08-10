@@ -43,7 +43,7 @@ func InsertDictChunk(ctx context.Context, tx *sql.Tx, data []SrcFileRow) error {
 		if err != nil {
 			log.Fatal().Msgf("Invalid sort order %s", v.SortOrder)
 		}
-		dataArgs = append(dataArgs, v.EntryID, v.Homonymy, sortOrder-1, v.Variant, v.Pos, gender, aspect, v.Uninflected, plurality, lex.SourceASSC, v.EntryID, parentID)
+		dataArgs = append(dataArgs, v.EntryID, v.Homonymy, sortOrder-1, v.Variant, v.Pos, gender, aspect, v.Uninflected, plurality, lex.SourceSSC, v.EntryID, parentID)
 	}
 	_, err := tx.ExecContext(
 		ctx,

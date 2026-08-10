@@ -39,8 +39,9 @@ type SrcFileRow struct {
 }
 
 type importDataChunk struct {
-	Items []SrcFileRow
-	Error error
+	Items    []SrcFileRow
+	Error    error
+	NotFatal bool
 }
 
 func ReadTSV(ctx context.Context, path string) (<-chan importDataChunk, error) {
@@ -78,6 +79,10 @@ func ReadTSV(ctx context.Context, path string) (<-chan importDataChunk, error) {
 				Pos:        fields[4],
 				Gender:     fields[5],
 				Aspect:     fields[6],
+			}
+			if chunk[i].Pos == "" {
+				ans <- importDataChunk{Error: fmt.Errorf("line %d: empty pos", lineNum), NotFatal: true}
+				continue
 			}
 			if i == procChunkSize-1 {
 				select {

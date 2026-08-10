@@ -83,6 +83,10 @@ func runIjpImport(args importArgs) {
 
 	for chunk := range data {
 		if chunk.Error != nil {
+			if chunk.NotFatal {
+				log.Warn().Err(chunk.Error).Msg("skipping line")
+				continue
+			}
 			log.Fatal().Err(chunk.Error).Msg("failed to import data")
 		}
 		if err := ijp.InsertDictChunk(ctx, tx, chunk.Items); err != nil {
@@ -127,6 +131,10 @@ func runAsscImport(args importArgs) {
 
 	for chunk := range data {
 		if chunk.Error != nil {
+			if chunk.NotFatal {
+				log.Warn().Err(chunk.Error).Msg("skipping line")
+				continue
+			}
 			log.Fatal().Err(chunk.Error).Msg("failed to import data")
 		}
 		if err := assc.InsertDictChunk(ctx, tx, chunk.Items); err != nil {
@@ -171,6 +179,10 @@ func runSscImport(args importArgs) {
 
 	for chunk := range data {
 		if chunk.Error != nil {
+			if chunk.NotFatal {
+				log.Warn().Err(chunk.Error).Msg("skipping line")
+				continue
+			}
 			log.Fatal().Err(chunk.Error).Msg("failed to import data")
 		}
 		if err := ssc.InsertDictChunk(ctx, tx, chunk.Items); err != nil {

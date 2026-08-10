@@ -180,10 +180,10 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 	uniresp.WriteJSONResponse(ctx.Writer, ans)
 }
 
-func NewHandler(db *mysql.Adapter, dictActions *dictActions.Actions) *Handler {
+func NewHandler(db *mysql.Adapter, dictActions *dictActions.Actions, sourcePriority []Source) *Handler {
 	return &Handler{
 		db:             db,
 		dictActions:    dictActions,
-		sourcePriority: []Source{SourceASSC, SourceIJP},
+		sourcePriority: sourcePriority,
 	}
 }

@@ -317,7 +317,7 @@ func main() {
 		ujcActionsHandler.SearchSJC,
 	)
 
-	lexActionsHandler := lex.NewHandler(laDB, dictActionsHandler)
+	lexActionsHandler := lex.NewHandler(laDB, dictActionsHandler, conf.UJC.SourcePriority)
 	engine.GET(
 		"/dictionary/lex/:corpusId/search/:term",
 		lexActionsHandler.SearchWord,

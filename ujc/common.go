@@ -16,6 +16,9 @@
 
 package ujc
 
+import "frodo/ujc/lex"
+
 type Conf struct {
-	BoundDict string `json:"boundDict"`
+	BoundDict      string       `json:"boundDict"`
+	SourcePriority []lex.Source `json:"sourcePriority"`
 }

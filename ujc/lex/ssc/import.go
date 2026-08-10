@@ -49,8 +49,9 @@ type SrcFileRow struct {
 }
 
 type importDataChunk struct {
-	Items []SrcFileRow
-	Error error
+	Items    []SrcFileRow
+	Error    error
+	NotFatal bool
 }
 
 func ReadTSV(ctx context.Context, path string) (<-chan importDataChunk, error) {
@@ -89,16 +90,20 @@ func ReadTSV(ctx context.Context, path string) (<-chan importDataChunk, error) {
 				ParentID:    fields[0],
 				EntryID:     fields[1],
 				Type:        fields[2],
-				SortOrder:   fields[3],
+				SortOrder:   util.Ternary(fields[3] == "", "1", fields[3]),
 				Variant:     fields[4],
 				LemmaType:   fields[5],
-				Homonymy:    fields[6],
+				Homonymy:    util.Ternary(fields[6] == "", "0", fields[6]),
 				Pos:         fields[7],
 				Gender:      fields[8],
 				Aspect:      fields[9],
 				Uninflected: util.Ternary(fields[10] == "", "0", "1"),
 				Plurality:   strconv.Itoa(plurality),
 				Changed:     fields[12],
+			}
+			if chunk[i].Pos == "" {
+				ans <- importDataChunk{Error: fmt.Errorf("line %d: empty pos", lineNum), NotFatal: true}
+				continue
 			}
 
 			if i == procChunkSize-1 {
