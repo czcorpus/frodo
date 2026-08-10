@@ -126,7 +126,7 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 	}
 
 	// apply special transformations
-	lexItems, err = ApplyTransformations(ctx, actions.db.DB(), lexItems, JoinToPluarlityFromIJP, JoinToIBGenderFromSSC)
+	lexItems, err = ApplyTransformations(ctx, actions.db.DB(), usedCandidate.Source, lexItems, JoinToPluarlityFromIJP, JoinToIBGenderFromSSC)
 	if err != nil {
 		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 		return

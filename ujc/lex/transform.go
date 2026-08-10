@@ -22,15 +22,15 @@ import (
 	"fmt"
 )
 
-type LexTransform func(context.Context, *sql.DB, []LexItem) ([]LexItem, error)
+type LexTransform func(context.Context, *sql.DB, Source, []LexItem) ([]LexItem, error)
 
-func ApplyTransformations(ctx context.Context, db *sql.DB, data []LexItem, transforms ...LexTransform) ([]LexItem, error) {
+func ApplyTransformations(ctx context.Context, db *sql.DB, mainSource Source, data []LexItem, transforms ...LexTransform) ([]LexItem, error) {
 	var err error
 	for _, transform := range transforms {
 		if transform == nil {
 			continue
 		}
-		data, err = transform(ctx, db, data)
+		data, err = transform(ctx, db, mainSource, data)
 		if err != nil {
 			return nil, fmt.Errorf("failed to transform data: %w", err)
 		}
@@ -39,7 +39,7 @@ func ApplyTransformations(ctx context.Context, db *sql.DB, data []LexItem, trans
 	return data, nil
 }
 
-func JoinToPluarlityFromIJP(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
+func JoinToPluarlityFromIJP(ctx context.Context, db *sql.DB, mainSource Source, data []LexItem) ([]LexItem, error) {
 	// if data plurality != 0 and no IJP source
 	// add to data IJP source with plurality 0
 	// (IJP source does not distinct plurality)
@@ -66,7 +66,7 @@ func JoinToPluarlityFromIJP(ctx context.Context, db *sql.DB, data []LexItem) ([]
 	return data, nil
 }
 
-func JoinToIBGenderFromSSC(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
+func JoinToIBGenderFromSSC(ctx context.Context, db *sql.DB, mainSource Source, data []LexItem) ([]LexItem, error) {
 	// if data gender == I || B and no SSC source
 	// add to data SSC source with gender M
 	// (SSC source does not distinct masculine genders)
