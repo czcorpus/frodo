@@ -193,7 +193,7 @@ func SearchVariants(ctx context.Context, db *sql.DB, lemma string, mainSource So
 				WHERE lemma = ? AND source = ? AND group_id IS NULL
 			) AS sub
 			JOIN lex_dictionary AS l2
-			ON l2.lemma = sub.lemma AND l2.pos = sub.pos AND (l2.gender = sub.gender OR (l2.gender IS NULL AND sub.gender IS NULL)) AND (l2.aspect = sub.aspect OR (l2.aspect IS NULL AND sub.aspect IS NULL)) AND l2.uninflected = sub.uninflected AND l2.plurality = sub.plurality
+			ON l2.lemma = sub.lemma AND (l2.pos = 'X' OR sub.pos = 'X' OR (l2.pos = sub.pos AND (l2.gender = sub.gender OR (l2.gender IS NULL AND sub.gender IS NULL)) AND (l2.aspect = sub.aspect OR (l2.aspect IS NULL AND sub.aspect IS NULL)) AND l2.uninflected = sub.uninflected AND l2.plurality = sub.plurality))
 			GROUP BY lemma, pos, gender, aspect, uninflected, plurality, source
 		) AS sub2
 		GROUP BY lemma, pos, gender, aspect, uninflected, plurality`,

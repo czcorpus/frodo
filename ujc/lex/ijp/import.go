@@ -20,6 +20,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"frodo/ujc/lex"
 	"os"
 	"strings"
 )
@@ -82,8 +83,8 @@ func ReadTSV(ctx context.Context, path string) (<-chan importDataChunk, error) {
 				Aspect:     fields[6],
 			}
 			if chunk[i].Pos == "" {
-				ans <- importDataChunk{Error: fmt.Errorf("line %d: empty pos", lineNum), NotFatal: true}
-				continue
+				chunk[i].Pos = lex.POSUnkn
+				ans <- importDataChunk{Error: fmt.Errorf("line %d: empty pos, using '%s'", lineNum, lex.POSUnkn), NotFatal: true}
 			}
 			if i == procChunkSize-1 {
 				select {
