@@ -55,8 +55,9 @@ func ReadTSV(ctx context.Context, path string) (<-chan importDataChunk, error) {
 		}
 		defer f.Close()
 		scanner := bufio.NewScanner(f)
-		lineNum := 0
-		scanner.Scan() // first line header // TODO configurable
+
+		scanner.Scan() // first line is header
+		lineNum := 1
 
 		chunk := make([]SrcFileRow, procChunkSize)
 		i := 0
