@@ -22,15 +22,15 @@ import (
 	"fmt"
 )
 
-type LexTransform func(context.Context, *sql.DB, []LexItem) ([]LexItem, error)
+type LexTransform func(context.Context, *sql.DB, Source, []LexItem) ([]LexItem, error)
 
-func ApplyTransformations(ctx context.Context, db *sql.DB, data []LexItem, transforms ...LexTransform) ([]LexItem, error) {
+func ApplyTransformations(ctx context.Context, db *sql.DB, mainSource Source, data []LexItem, transforms ...LexTransform) ([]LexItem, error) {
 	var err error
 	for _, transform := range transforms {
 		if transform == nil {
 			continue
 		}
-		data, err = transform(ctx, db, data)
+		data, err = transform(ctx, db, mainSource, data)
 		if err != nil {
 			return nil, fmt.Errorf("failed to transform data: %w", err)
 		}
@@ -39,7 +39,10 @@ func ApplyTransformations(ctx context.Context, db *sql.DB, data []LexItem, trans
 	return data, nil
 }
 
-func JoinToPluarlityFromIJP(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
+func JoinToPluarlityFromIJP(ctx context.Context, db *sql.DB, mainSource Source, data []LexItem) ([]LexItem, error) {
+	// if data plurality != 0 and no IJP source
+	// add to data IJP source with plurality 0
+	// (IJP source does not distinct plurality)
 	for i, item := range data {
 		_, ok := item.Sources[SourceIJP]
 		if item.Plurality != 0 && !ok {
@@ -55,7 +58,36 @@ func JoinToPluarlityFromIJP(ctx context.Context, db *sql.DB, data []LexItem) ([]
 			if err != nil {
 				return nil, fmt.Errorf("failed to join inflected IJP data: %w", err)
 			}
-			data[i].Sources[SourceIJP] = ids
+			if len(ids) != 0 {
+				data[i].Sources[SourceIJP] = ids
+			}
+		}
+	}
+	return data, nil
+}
+
+func JoinToIBGenderFromSSC(ctx context.Context, db *sql.DB, mainSource Source, data []LexItem) ([]LexItem, error) {
+	// if data gender == I || B and no SSC source
+	// add to data SSC source with gender M
+	// (SSC source does not distinct masculine genders)
+	for i, item := range data {
+		_, ok := item.Sources[SourceSSC]
+		if (item.Gender == GenderMascInan || item.Gender == GenderMascAnimInan) && !ok {
+			search := LexItem{
+				Lemma:       item.Lemma,
+				Pos:         item.Pos,
+				Gender:      GenderMascAnim,
+				Aspect:      item.Aspect,
+				Uninflected: item.Uninflected,
+				Plurality:   0,
+			}
+			ids, err := SearchLexItemID(ctx, db, search, SourceSSC)
+			if err != nil {
+				return nil, fmt.Errorf("failed to join masculine gender SSC data: %w", err)
+			}
+			if len(ids) != 0 {
+				data[i].Sources[SourceSSC] = ids
+			}
 		}
 	}
 	return data, nil

@@ -20,6 +20,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"frodo/ujc/lex"
 	"os"
 	"strings"
 )
@@ -39,8 +40,9 @@ type SrcFileRow struct {
 }
 
 type importDataChunk struct {
-	Items []SrcFileRow
-	Error error
+	Items    []SrcFileRow
+	Error    error
+	NotFatal bool
 }
 
 func ReadTSV(ctx context.Context, path string) (<-chan importDataChunk, error) {
@@ -54,8 +56,9 @@ func ReadTSV(ctx context.Context, path string) (<-chan importDataChunk, error) {
 		}
 		defer f.Close()
 		scanner := bufio.NewScanner(f)
-		lineNum := 0
-		scanner.Scan() // first line header // TODO configurable
+
+		scanner.Scan() // first line is header
+		lineNum := 1
 
 		chunk := make([]SrcFileRow, procChunkSize)
 		i := 0
@@ -78,6 +81,10 @@ func ReadTSV(ctx context.Context, path string) (<-chan importDataChunk, error) {
 				Pos:        fields[4],
 				Gender:     fields[5],
 				Aspect:     fields[6],
+			}
+			if chunk[i].Pos == "" {
+				chunk[i].Pos = lex.POSUnkn
+				ans <- importDataChunk{Error: fmt.Errorf("line %d: empty pos, using '%s'", lineNum, lex.POSUnkn), NotFatal: true}
 			}
 			if i == procChunkSize-1 {
 				select {

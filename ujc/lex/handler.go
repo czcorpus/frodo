@@ -126,7 +126,7 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 	}
 
 	// apply special transformations
-	lexItems, err = ApplyTransformations(ctx, actions.db.DB(), lexItems, JoinToPluarlityFromIJP)
+	lexItems, err = ApplyTransformations(ctx, actions.db.DB(), usedCandidate.Source, lexItems, JoinToPluarlityFromIJP, JoinToIBGenderFromSSC)
 	if err != nil {
 		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 		return
@@ -180,10 +180,10 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 	uniresp.WriteJSONResponse(ctx.Writer, ans)
 }
 
-func NewHandler(db *mysql.Adapter, dictActions *dictActions.Actions) *Handler {
+func NewHandler(db *mysql.Adapter, dictActions *dictActions.Actions, sourcePriority []Source) *Handler {
 	return &Handler{
 		db:             db,
 		dictActions:    dictActions,
-		sourcePriority: []Source{SourceASSC, SourceIJP},
+		sourcePriority: sourcePriority,
 	}
 }
