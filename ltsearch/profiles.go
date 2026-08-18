@@ -30,4 +30,9 @@ var profiles = map[string]livetokens.AttrList{
 		{Name: "feats", IsUDFeats: true},
 		{Name: "deprel"},
 	},
+	"intercorp_v17ud": []livetokens.Attr{
+		{Name: "upos"},
+		{Name: "feats", IsUDFeats: true},
+		{Name: "deprel"},
+	},
 }
