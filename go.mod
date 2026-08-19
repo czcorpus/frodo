@@ -1,18 +1,18 @@
 module frodo
 
-go 1.24.0
-
-toolchain go1.24.7
+go 1.25.5
 
 require (
+	github.com/agnivade/levenshtein v1.2.1
 	github.com/czcorpus/cnc-gokit v0.21.0
 	github.com/czcorpus/mquery-common v0.6.3
 	github.com/czcorpus/rexplorer v0.0.8
-	github.com/czcorpus/vert-tagextract/v3 v3.8.0
+	github.com/czcorpus/vert-tagextract/v3 v3.9.1
 	github.com/davecgh/go-spew v1.1.1
 	github.com/gin-gonic/gin v1.11.0
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/google/uuid v1.6.0
+	github.com/mark3labs/mcp-go v0.58.0
 	github.com/rs/zerolog v1.34.0
 	github.com/stretchr/testify v1.11.1
 	github.com/swaggo/files v1.0.1
@@ -28,7 +28,6 @@ require (
 	github.com/KyleBanks/depth v1.2.1 // indirect
 	github.com/PuerkitoBio/purell v1.1.1 // indirect
 	github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578 // indirect
-	github.com/agnivade/levenshtein v1.2.1 // indirect
 	github.com/bytedance/sonic v1.14.0 // indirect
 	github.com/bytedance/sonic/loader v0.3.0 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
@@ -43,6 +42,7 @@ require (
 	github.com/go-playground/validator/v10 v10.27.0 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/goccy/go-yaml v1.18.0 // indirect
+	github.com/google/jsonschema-go v0.4.2 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
@@ -58,8 +58,11 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/quic-go/qpack v0.5.1 // indirect
 	github.com/quic-go/quic-go v0.54.0 // indirect
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
+	github.com/spf13/cast v1.7.1 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.3.0 // indirect
+	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	go.uber.org/mock v0.5.0 // indirect
 	golang.org/x/arch v0.20.0 // indirect
 	golang.org/x/crypto v0.42.0 // indirect
