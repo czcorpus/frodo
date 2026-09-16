@@ -17,6 +17,8 @@
 package lex
 
 import (
+	"context"
+	"database/sql"
 	"sort"
 	"strings"
 
@@ -98,4 +100,10 @@ func sortVariants(data []LexItem, sortBySource Source) []LexItem {
 	})
 
 	return data
+}
+
+func SortTransform(sortBySource Source) func(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
+	return func(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
+		return sortVariants(data, sortBySource), nil
+	}
 }

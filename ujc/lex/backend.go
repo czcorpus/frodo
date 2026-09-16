@@ -62,13 +62,16 @@ const (
 	GenderMascAnimInan = "B"
 	GenderFem          = "F"
 	GenderNeut         = "N"
+	GenderUnknown      = "X"
 
-	AspectPerf = "P"
-	AspectImp  = "I"
-	AspectBoth = "B"
+	AspectPerf    = "P"
+	AspectImp     = "I"
+	AspectBoth    = "B"
+	AspectUnknown = "X"
 
 	UninflectedFalse = 0
 	UninflectedTrue  = 1
+	// TODO uninflected unknown value
 
 	PluralityNone    = 0
 	PluralityPlural  = 1
@@ -228,26 +231,24 @@ func SearchSources(ctx context.Context, db *sql.DB, lexKey LexKey) (map[Source][
 	// if lexItem.Pos is 'X', do not filter by pos (accept any pos)
 	whereParts := []string{"lemma = ?"}
 	args := []any{lexKey.Lemma}
-	if lexKey.Pos != PosUnkn {
-		if lexKey.Pos == PosDTIJCR {
-			whereParts = append(whereParts, "pos IN (?, ?, ?, ?, ?, ?, ?, ?)")
-			args = append(args, PosDTIJ, PosAdv, PosPart, PosInter, PosConj, PosNum, PosPrep, PosUnkn)
-		} else {
-			whereParts = append(whereParts, "pos IN (?, ?)")
-			args = append(args, lexKey.Pos, PosUnkn)
-		}
+	if lexKey.Pos == PosDTIJCR {
+		whereParts = append(whereParts, "pos IN (?, ?, ?, ?, ?, ?, ?, ?)")
+		args = append(args, PosDTIJ, PosAdv, PosPart, PosInter, PosConj, PosNum, PosPrep, PosUnkn)
+	} else if lexKey.Pos != PosUnkn {
+		whereParts = append(whereParts, "pos IN (?, ?)")
+		args = append(args, lexKey.Pos, PosUnkn)
 	}
-	if lexKey.Gender != "" {
+	if lexKey.Gender == "" {
+		whereParts = append(whereParts, "gender is NULL")
+	} else if lexKey.Gender != GenderUnknown {
 		whereParts = append(whereParts, "gender = ?")
 		args = append(args, lexKey.Gender)
-	} else {
-		whereParts = append(whereParts, "gender is NULL")
 	}
-	if lexKey.Aspect != "" {
+	if lexKey.Aspect == "" {
+		whereParts = append(whereParts, "aspect is NULL")
+	} else if lexKey.Aspect != AspectUnknown {
 		whereParts = append(whereParts, "aspect = ?")
 		args = append(args, lexKey.Aspect)
-	} else {
-		whereParts = append(whereParts, "aspect is NULL")
 	}
 	if lexKey.Plurality != PluralityUnknown {
 		whereParts = append(whereParts, "(plurality = ? OR plurality = ?)")
@@ -311,14 +312,14 @@ func SearchLexItemID(ctx context.Context, db *sql.DB, lexKey LexKey, source Sour
 
 	if lexKey.Gender == "" {
 		where = append(where, "gender IS NULL")
-	} else {
+	} else if lexKey.Gender != GenderUnknown {
 		where = append(where, "gender = ?")
 		args = append(args, lexKey.Gender)
 	}
 
 	if lexKey.Aspect == "" {
 		where = append(where, "aspect IS NULL")
-	} else {
+	} else if lexKey.Aspect != AspectUnknown {
 		where = append(where, "aspect = ?")
 		args = append(args, lexKey.Aspect)
 	}

@@ -143,23 +143,23 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 			uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 			return
 		}
-		log.Debug().Any("sources", sources).Send()
 		lexItems[i].Sources = sources
 	}
 
 	// apply special transformations after getting source data
 	lexItems, err = ApplyTransformations(ctx, actions.db.DB(), lexItems,
-		SSC_JoinMToIB,
-		IJP_JoinNToCOrA,
 		DTIJCR_ResolvePos(actions.sourcePriority),
+		IJP_JoinNToCOrA,
+		IJP_FindNumForNoun,
+		IJP_FindAdjForNoun,
 		IJP_ResolvePos(actions.sourcePriority),
+		SSC_JoinMToIB,
+		SortTransform(usedCandidate.Source),
 	)
 	if err != nil {
 		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 		return
 	}
-
-	lexItems = sortVariants(lexItems, usedCandidate.Source)
 
 	// search corpus entry for each variant
 	// if not found, create a new entry with minimal data

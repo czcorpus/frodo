@@ -46,7 +46,12 @@ func DTIJCR_MergeItems(ctx context.Context, db *sql.DB, data []LexItem) ([]LexIt
 	var result []LexItem
 	for _, item := range data {
 		if item.Key.Pos != PosNum {
-			if item.Key.Pos == PosDTIJ || item.Key.Pos == PosAdv || item.Key.Pos == PosPart || item.Key.Pos == PosInter || item.Key.Pos == PosConj || item.Key.Pos == PosPrep {
+			if item.Key.Pos == PosDTIJ ||
+				item.Key.Pos == PosAdv ||
+				item.Key.Pos == PosPart ||
+				item.Key.Pos == PosInter ||
+				item.Key.Pos == PosConj ||
+				item.Key.Pos == PosPrep {
 				item.Key.Pos = PosDTIJCR
 			}
 			if collections.SliceFindIndex(result, func(v LexItem) bool { return item.Key == v.Key }) == -1 {
@@ -124,10 +129,10 @@ func IJP_JoinNToCOrA(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem
 			search := LexKey{
 				Lemma:       item.Key.Lemma,
 				Pos:         PosNoun,
-				Gender:      "",
-				Aspect:      "",
+				Gender:      GenderUnknown,
+				Aspect:      AspectUnknown,
 				Uninflected: false,
-				Plurality:   5,
+				Plurality:   PluralityUnknown,
 			}
 			ids, err := SearchLexItemID(ctx, db, search, SourceIJP)
 			if err != nil {
@@ -135,6 +140,54 @@ func IJP_JoinNToCOrA(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem
 			}
 			if len(ids) != 0 {
 				data[i].Sources[SourceIJP] = ids
+			}
+		}
+	}
+	return data, nil
+}
+
+func IJP_FindNumForNoun(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
+	for i, item := range data {
+		if item.PosSource == SourceIJP && item.Key.Pos == PosNoun && len(item.Sources) == 1 {
+			search := LexKey{
+				Lemma:       item.Key.Lemma,
+				Pos:         PosNum,
+				Gender:      GenderUnknown,
+				Aspect:      AspectUnknown,
+				Uninflected: false,
+				Plurality:   PluralityUnknown,
+			}
+			sources, err := SearchSources(ctx, db, search)
+			if err != nil {
+				return nil, fmt.Errorf("failed to search C for IJP noun: %w", err)
+			}
+			if len(sources) > 0 {
+				sources[SourceIJP] = item.Sources[SourceIJP]
+				data[i].Sources = sources
+			}
+		}
+	}
+	return data, nil
+}
+
+func IJP_FindAdjForNoun(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
+	for i, item := range data {
+		if item.PosSource == SourceIJP && item.Key.Pos == PosNoun && len(item.Sources) == 1 {
+			search := LexKey{
+				Lemma:       item.Key.Lemma,
+				Pos:         PosAdj,
+				Gender:      GenderUnknown,
+				Aspect:      AspectUnknown,
+				Uninflected: false,
+				Plurality:   PluralityUnknown,
+			}
+			sources, err := SearchSources(ctx, db, search)
+			if err != nil {
+				return nil, fmt.Errorf("failed to search A for IJP noun: %w", err)
+			}
+			if len(sources) > 0 {
+				sources[SourceIJP] = item.Sources[SourceIJP]
+				data[i].Sources = sources
 			}
 		}
 	}
