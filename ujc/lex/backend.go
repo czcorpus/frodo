@@ -62,12 +62,12 @@ const (
 	GenderMascAnimInan = "B"
 	GenderFem          = "F"
 	GenderNeut         = "N"
-	GenderUnknown      = "X"
+	GenderUnknown      = "X" // mainly for search purposes
 
 	AspectPerf    = "P"
 	AspectImp     = "I"
 	AspectBoth    = "B"
-	AspectUnknown = "X"
+	AspectUnknown = "X" // mainly for search purposes
 
 	UninflectedFalse = 0
 	UninflectedTrue  = 1
@@ -78,7 +78,7 @@ const (
 	PluralityAlways  = 2
 	PluralityUsually = 3
 	PluralityOnly    = 4
-	PluralityUnknown = 5
+	PluralityUnknown = 5 // mainly for search purposes
 
 	TableName = "lex_dictionary"
 )

@@ -41,6 +41,12 @@ func ApplyTransformations(ctx context.Context, db *sql.DB, data []LexItem, trans
 	return data, nil
 }
 
+func SortTransformation(sortBySource Source) func(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
+	return func(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
+		return sortVariants(data, sortBySource), nil
+	}
+}
+
 func DTIJCR_MergeItems(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
 	// making DTIJCR group from any DTIJ, D, T, I, J, R item
 	var result []LexItem
@@ -120,12 +126,12 @@ func IJP_ResolvePos(sourcePriority []Source) func(ctx context.Context, db *sql.D
 	}
 }
 
-func IJP_JoinNToCOrA(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
+func FromIJP_JoinNounToNum(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
 	// TODO
 	// if data pos == C || A and no IJP source
 	// add to data IJP source with pos N
 	for i, item := range data {
-		if !item.HasSource(SourceIJP) && (item.Key.Pos == PosNum || item.Key.Pos == PosAdj) {
+		if !item.HasSource(SourceIJP) && item.Key.Pos == PosNum {
 			search := LexKey{
 				Lemma:       item.Key.Lemma,
 				Pos:         PosNoun,
@@ -146,7 +152,7 @@ func IJP_JoinNToCOrA(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem
 	return data, nil
 }
 
-func IJP_FindNumForNoun(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
+func ToIJP_FindNumForNoun(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
 	for i, item := range data {
 		if item.PosSource == SourceIJP && item.Key.Pos == PosNoun && len(item.Sources) == 1 {
 			search := LexKey{
@@ -170,31 +176,7 @@ func IJP_FindNumForNoun(ctx context.Context, db *sql.DB, data []LexItem) ([]LexI
 	return data, nil
 }
 
-func IJP_FindAdjForNoun(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
-	for i, item := range data {
-		if item.PosSource == SourceIJP && item.Key.Pos == PosNoun && len(item.Sources) == 1 {
-			search := LexKey{
-				Lemma:       item.Key.Lemma,
-				Pos:         PosAdj,
-				Gender:      GenderUnknown,
-				Aspect:      AspectUnknown,
-				Uninflected: false,
-				Plurality:   PluralityUnknown,
-			}
-			sources, err := SearchSources(ctx, db, search)
-			if err != nil {
-				return nil, fmt.Errorf("failed to search A for IJP noun: %w", err)
-			}
-			if len(sources) > 0 {
-				sources[SourceIJP] = item.Sources[SourceIJP]
-				data[i].Sources = sources
-			}
-		}
-	}
-	return data, nil
-}
-
-func SSC_JoinMToIB(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
+func FromSSC_JoinMToIB(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
 	// if data gender == I || B and no SSC source
 	// add to data SSC source with gender M
 	// (SSC source does not distinct masculine genders)
