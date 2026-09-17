@@ -126,35 +126,36 @@ func IJP_ResolvePos(sourcePriority []Source) func(ctx context.Context, db *sql.D
 	}
 }
 
-func FromIJP_JoinNounToNum(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
-	// TODO
-	// if data pos == C || A and no IJP source
-	// add to data IJP source with pos N
+func JoinFromIJP_NAP_To_C(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
+	// if data pos == C and not uninflected and no IJP source
+	// add to data IJP source with pos N|A|P
 	for i, item := range data {
-		if !item.HasSource(SourceIJP) && item.Key.Pos == PosNum {
-			search := LexKey{
-				Lemma:       item.Key.Lemma,
-				Pos:         PosNoun,
-				Gender:      GenderUnknown,
-				Aspect:      AspectUnknown,
-				Uninflected: false,
-				Plurality:   PluralityUnknown,
-			}
-			ids, err := SearchLexItemID(ctx, db, search, SourceIJP)
-			if err != nil {
-				return nil, fmt.Errorf("failed to join N to CA from IJP data: %w", err)
-			}
-			if len(ids) != 0 {
-				data[i].Sources[SourceIJP] = ids
+		if !item.HasSource(SourceIJP) && item.Key.Pos == PosNum && !item.Key.Uninflected {
+			for _, pos := range []string{PosNoun, PosAdj, PosPron} {
+				search := LexKey{
+					Lemma:       item.Key.Lemma,
+					Pos:         pos,
+					Gender:      GenderUnknown,
+					Aspect:      AspectUnknown,
+					Uninflected: false,
+					Plurality:   PluralityUnknown,
+				}
+				ids, err := SearchLexItemID(ctx, db, search, SourceIJP)
+				if err != nil {
+					return nil, fmt.Errorf("failed to join N|A|P to C in IJP: %w", err)
+				}
+				if len(ids) != 0 {
+					data[i].Sources[SourceIJP] = ids
+				}
 			}
 		}
 	}
 	return data, nil
 }
 
-func ToIJP_FindNumForNoun(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
+func JoinToIJP_C_To_NAP(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
 	for i, item := range data {
-		if item.PosSource == SourceIJP && item.Key.Pos == PosNoun && len(item.Sources) == 1 {
+		if item.PosSource == SourceIJP && (item.Key.Pos == PosNoun || item.Key.Pos == PosAdj || item.Key.Pos == PosPron) && len(item.Sources) == 1 {
 			search := LexKey{
 				Lemma:       item.Key.Lemma,
 				Pos:         PosNum,
@@ -165,7 +166,7 @@ func ToIJP_FindNumForNoun(ctx context.Context, db *sql.DB, data []LexItem) ([]Le
 			}
 			sources, err := SearchSources(ctx, db, search)
 			if err != nil {
-				return nil, fmt.Errorf("failed to search C for IJP noun: %w", err)
+				return nil, fmt.Errorf("failed to search C for N|A|P in IJP: %w", err)
 			}
 			if len(sources) > 0 {
 				sources[SourceIJP] = item.Sources[SourceIJP]
@@ -176,7 +177,7 @@ func ToIJP_FindNumForNoun(ctx context.Context, db *sql.DB, data []LexItem) ([]Le
 	return data, nil
 }
 
-func FromSSC_JoinMToIB(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
+func JoinFromSSC_M_To_IB(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
 	// if data gender == I || B and no SSC source
 	// add to data SSC source with gender M
 	// (SSC source does not distinct masculine genders)
