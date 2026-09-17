@@ -85,12 +85,19 @@ func DTIJCR_ResolvePos(sourcePriority []Source) func(ctx context.Context, db *sq
 		for i, item := range data {
 			if item.Key.Pos == PosDTIJCR {
 				for _, source := range sourcePriority {
-					if source != SourceIJP && item.HasSource(source) {
-						v := item.Sources[source]
-						if len(v) == 1 {
-							data[i].PosSource = source
-							data[i].Key.Pos = v[0].Pos
+					if v, ok := item.Sources[source]; ok {
+						samePos := true
+						for _, item := range v {
+							if item.Pos != v[0].Pos {
+								samePos = false
+								break
+							}
 						}
+						if !samePos {
+							continue
+						}
+						data[i].PosSource = source
+						data[i].Key.Pos = v[0].Pos
 						break
 					}
 				}
@@ -107,16 +114,19 @@ func IJP_ResolvePos(sourcePriority []Source) func(ctx context.Context, db *sql.D
 		for i, item := range data {
 			if item.PosSource == SourceIJP {
 				for _, source := range sourcePriority {
-					if source != SourceIJP && item.HasSource(source) {
-						if item.Key.Pos == PosDTIJCR {
-							data[i].PosSource = source
-						} else {
-							v := item.Sources[source]
-							if len(v) == 1 {
-								data[i].PosSource = source
-								data[i].Key.Pos = v[0].Pos
+					if v, ok := item.Sources[source]; source != SourceIJP && ok {
+						samePos := true
+						for _, item := range v {
+							if item.Pos != v[0].Pos {
+								samePos = false
+								break
 							}
 						}
+						if !samePos {
+							continue
+						}
+						data[i].PosSource = source
+						data[i].Key.Pos = v[0].Pos
 						break
 					}
 				}
