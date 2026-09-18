@@ -52,7 +52,7 @@ func ApplyTransformations(ctx context.Context, db *sql.DB, data []LexItem, trans
 
 func SortTransformation(sortBySource Source) func(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
 	return func(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
-		return sortVariants(data, sortBySource), nil
+		return sortVariants2(data, sortBySource), nil
 	}
 }
 

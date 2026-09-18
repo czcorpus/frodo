@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/czcorpus/cnc-gokit/collections"
+	"github.com/czcorpus/cnc-gokit/util"
 )
 
 const (
@@ -28,6 +29,18 @@ const (
 	GenderOrder = "MIBFN"
 	AspectOrder = "PIB"
 )
+
+func posSort(item1 LexKey, item2 LexKey) bool {
+	orderIndex1 := util.Ternary(item1.Pos == PosDTIJCR, 5, strings.Index(POSOrder, item1.Pos))
+	orderIndex2 := util.Ternary(item2.Pos == PosDTIJCR, 5, strings.Index(POSOrder, item2.Pos))
+	if orderIndex1 == -1 {
+		orderIndex1 = len(POSOrder)
+	}
+	if orderIndex2 == -1 {
+		orderIndex2 = len(POSOrder)
+	}
+	return orderIndex1 < orderIndex2
+}
 
 func morphologySort(item1 LexKey, item2 LexKey) bool {
 	var orderMap, orderData1, orderData2 string
@@ -39,7 +52,7 @@ func morphologySort(item1 LexKey, item2 LexKey) bool {
 		orderMap, orderData1, orderData2 = AspectOrder, item1.Aspect, item2.Aspect
 	} else {
 		// order by PoS for other items
-		orderMap, orderData1, orderData2 = POSOrder, item1.Pos, item2.Pos
+		return posSort(item1, item2)
 	}
 	orderIndex1 := strings.Index(orderMap, orderData1)
 	orderIndex2 := strings.Index(orderMap, orderData2)
@@ -95,6 +108,20 @@ func sortVariants(data []LexItem, sortBySource Source) []LexItem {
 			return data[i].Sources[sortBySource][0].GroupOrder < data[j].Sources[sortBySource][0].GroupOrder
 		}
 		return morphologySort(data[i].Key, data[j].Key)
+	})
+
+	return data
+}
+
+func sortVariants2(data []LexItem, sortBySource Source) []LexItem {
+	sort.Slice(data, func(i, j int) bool {
+		if data[i].Key.Pos != data[j].Key.Pos {
+			return posSort(data[i].Key, data[j].Key)
+		}
+		if data[i].Sources[sortBySource][0].GroupOrder != data[j].Sources[sortBySource][0].GroupOrder {
+			return data[i].Sources[sortBySource][0].GroupOrder < data[j].Sources[sortBySource][0].GroupOrder
+		}
+		return data[i].Sources[sortBySource][0].Homonym < data[j].Sources[sortBySource][0].Homonym
 	})
 
 	return data
