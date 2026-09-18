@@ -149,12 +149,11 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 	// apply special transformations after getting source data
 	lexItems, err = ApplyTransformations(ctx, actions.db.DB(), lexItems,
 		DTIJCR_ResolvePos(actions.sourcePriority),
-		IJP_JoinNToCOrA,
-		IJP_FindNumForNoun,
-		IJP_FindAdjForNoun,
+		JoinFromIJP_NAP_To_C,
+		JoinToIJP_C_To_NAP,
 		IJP_ResolvePos(actions.sourcePriority),
-		SSC_JoinMToIB,
-		SortTransform(usedCandidate.Source),
+		JoinFromSSC_M_To_IB,
+		SortTransformation(usedCandidate.Source),
 	)
 	if err != nil {
 		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)

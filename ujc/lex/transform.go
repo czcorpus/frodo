@@ -26,6 +26,15 @@ import (
 
 type LexTransform func(context.Context, *sql.DB, []LexItem) ([]LexItem, error)
 
+func samePos(data []LexID) bool {
+	for _, item := range data {
+		if item.Pos != data[0].Pos {
+			return false
+		}
+	}
+	return true
+}
+
 func ApplyTransformations(ctx context.Context, db *sql.DB, data []LexItem, transforms ...LexTransform) ([]LexItem, error) {
 	var err error
 	for _, transform := range transforms {
@@ -39,6 +48,12 @@ func ApplyTransformations(ctx context.Context, db *sql.DB, data []LexItem, trans
 
 	}
 	return data, nil
+}
+
+func SortTransformation(sortBySource Source) func(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
+	return func(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
+		return sortVariants2(data, sortBySource), nil
+	}
 }
 
 func DTIJCR_MergeItems(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
@@ -79,12 +94,9 @@ func DTIJCR_ResolvePos(sourcePriority []Source) func(ctx context.Context, db *sq
 		for i, item := range data {
 			if item.Key.Pos == PosDTIJCR {
 				for _, source := range sourcePriority {
-					if source != SourceIJP && item.HasSource(source) {
-						v := item.Sources[source]
-						if len(v) == 1 {
-							data[i].PosSource = source
-							data[i].Key.Pos = v[0].Pos
-						}
+					if v, ok := item.Sources[source]; ok && samePos(v) {
+						data[i].PosSource = source
+						data[i].Key.Pos = v[0].Pos
 						break
 					}
 				}
@@ -101,16 +113,9 @@ func IJP_ResolvePos(sourcePriority []Source) func(ctx context.Context, db *sql.D
 		for i, item := range data {
 			if item.PosSource == SourceIJP {
 				for _, source := range sourcePriority {
-					if source != SourceIJP && item.HasSource(source) {
-						if item.Key.Pos == PosDTIJCR {
-							data[i].PosSource = source
-						} else {
-							v := item.Sources[source]
-							if len(v) == 1 {
-								data[i].PosSource = source
-								data[i].Key.Pos = v[0].Pos
-							}
-						}
+					if v, ok := item.Sources[source]; source != SourceIJP && ok && samePos(v) {
+						data[i].PosSource = source
+						data[i].Key.Pos = v[0].Pos
 						break
 					}
 				}
@@ -120,35 +125,36 @@ func IJP_ResolvePos(sourcePriority []Source) func(ctx context.Context, db *sql.D
 	}
 }
 
-func IJP_JoinNToCOrA(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
-	// TODO
-	// if data pos == C || A and no IJP source
-	// add to data IJP source with pos N
+func JoinFromIJP_NAP_To_C(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
+	// if data pos == C and not uninflected and no IJP source
+	// add to data IJP source with pos N|A|P
 	for i, item := range data {
-		if !item.HasSource(SourceIJP) && (item.Key.Pos == PosNum || item.Key.Pos == PosAdj) {
-			search := LexKey{
-				Lemma:       item.Key.Lemma,
-				Pos:         PosNoun,
-				Gender:      GenderUnknown,
-				Aspect:      AspectUnknown,
-				Uninflected: false,
-				Plurality:   PluralityUnknown,
-			}
-			ids, err := SearchLexItemID(ctx, db, search, SourceIJP)
-			if err != nil {
-				return nil, fmt.Errorf("failed to join N to CA from IJP data: %w", err)
-			}
-			if len(ids) != 0 {
-				data[i].Sources[SourceIJP] = ids
+		if !item.HasSource(SourceIJP) && item.Key.Pos == PosNum && !item.Key.Uninflected {
+			for _, pos := range []string{PosNoun, PosAdj, PosPron} {
+				search := LexKey{
+					Lemma:       item.Key.Lemma,
+					Pos:         pos,
+					Gender:      GenderUnknown,
+					Aspect:      AspectUnknown,
+					Uninflected: false,
+					Plurality:   PluralityUnknown,
+				}
+				ids, err := SearchLexItemID(ctx, db, search, SourceIJP)
+				if err != nil {
+					return nil, fmt.Errorf("failed to join N|A|P to C in IJP: %w", err)
+				}
+				if len(ids) != 0 {
+					data[i].Sources[SourceIJP] = ids
+				}
 			}
 		}
 	}
 	return data, nil
 }
 
-func IJP_FindNumForNoun(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
+func JoinToIJP_C_To_NAP(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
 	for i, item := range data {
-		if item.PosSource == SourceIJP && item.Key.Pos == PosNoun && len(item.Sources) == 1 {
+		if item.PosSource == SourceIJP && (item.Key.Pos == PosNoun || item.Key.Pos == PosAdj || item.Key.Pos == PosPron) && len(item.Sources) == 1 {
 			search := LexKey{
 				Lemma:       item.Key.Lemma,
 				Pos:         PosNum,
@@ -159,7 +165,7 @@ func IJP_FindNumForNoun(ctx context.Context, db *sql.DB, data []LexItem) ([]LexI
 			}
 			sources, err := SearchSources(ctx, db, search)
 			if err != nil {
-				return nil, fmt.Errorf("failed to search C for IJP noun: %w", err)
+				return nil, fmt.Errorf("failed to search C for N|A|P in IJP: %w", err)
 			}
 			if len(sources) > 0 {
 				sources[SourceIJP] = item.Sources[SourceIJP]
@@ -170,31 +176,7 @@ func IJP_FindNumForNoun(ctx context.Context, db *sql.DB, data []LexItem) ([]LexI
 	return data, nil
 }
 
-func IJP_FindAdjForNoun(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
-	for i, item := range data {
-		if item.PosSource == SourceIJP && item.Key.Pos == PosNoun && len(item.Sources) == 1 {
-			search := LexKey{
-				Lemma:       item.Key.Lemma,
-				Pos:         PosAdj,
-				Gender:      GenderUnknown,
-				Aspect:      AspectUnknown,
-				Uninflected: false,
-				Plurality:   PluralityUnknown,
-			}
-			sources, err := SearchSources(ctx, db, search)
-			if err != nil {
-				return nil, fmt.Errorf("failed to search A for IJP noun: %w", err)
-			}
-			if len(sources) > 0 {
-				sources[SourceIJP] = item.Sources[SourceIJP]
-				data[i].Sources = sources
-			}
-		}
-	}
-	return data, nil
-}
-
-func SSC_JoinMToIB(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
+func JoinFromSSC_M_To_IB(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
 	// if data gender == I || B and no SSC source
 	// add to data SSC source with gender M
 	// (SSC source does not distinct masculine genders)
