@@ -26,6 +26,15 @@ import (
 
 type LexTransform func(context.Context, *sql.DB, []LexItem) ([]LexItem, error)
 
+func samePos(data []LexID) bool {
+	for _, item := range data {
+		if item.Pos != data[0].Pos {
+			return false
+		}
+	}
+	return true
+}
+
 func ApplyTransformations(ctx context.Context, db *sql.DB, data []LexItem, transforms ...LexTransform) ([]LexItem, error) {
 	var err error
 	for _, transform := range transforms {
@@ -85,17 +94,7 @@ func DTIJCR_ResolvePos(sourcePriority []Source) func(ctx context.Context, db *sq
 		for i, item := range data {
 			if item.Key.Pos == PosDTIJCR {
 				for _, source := range sourcePriority {
-					if v, ok := item.Sources[source]; ok {
-						samePos := true
-						for _, item := range v {
-							if item.Pos != v[0].Pos {
-								samePos = false
-								break
-							}
-						}
-						if !samePos {
-							continue
-						}
+					if v, ok := item.Sources[source]; ok && samePos(v) {
 						data[i].PosSource = source
 						data[i].Key.Pos = v[0].Pos
 						break
@@ -114,17 +113,7 @@ func IJP_ResolvePos(sourcePriority []Source) func(ctx context.Context, db *sql.D
 		for i, item := range data {
 			if item.PosSource == SourceIJP {
 				for _, source := range sourcePriority {
-					if v, ok := item.Sources[source]; source != SourceIJP && ok {
-						samePos := true
-						for _, item := range v {
-							if item.Pos != v[0].Pos {
-								samePos = false
-								break
-							}
-						}
-						if !samePos {
-							continue
-						}
+					if v, ok := item.Sources[source]; source != SourceIJP && ok && samePos(v) {
 						data[i].PosSource = source
 						data[i].Key.Pos = v[0].Pos
 						break
