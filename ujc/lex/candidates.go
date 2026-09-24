@@ -61,9 +61,17 @@ func (actions *Handler) getLematizedSearchCandidates(ctx context.Context, corpus
 	if err != nil {
 		return []SearchCandidate{}, err
 	}
-	return collections.SliceMap(matches, func(match dictionary.Lemma, i int) SearchCandidate {
-		return SearchCandidate{Value: match.Lemma, Score: levenshtein.ComputeDistance(term, match.Lemma)}
-	}), nil
+	searchCandidates := make([]SearchCandidate, 0, 10)
+	for _, match := range matches {
+		for _, sublemma := range match.Sublemmas {
+			searchCandidates = append(searchCandidates, SearchCandidate{Value: sublemma.Value, Score: levenshtein.ComputeDistance(term, match.Lemma)})
+		}
+	}
+	// sort matches by their similarity to the query term using Levenshtein distance
+	sort.Slice(searchCandidates, func(i, j int) bool {
+		return searchCandidates[i].Score < searchCandidates[j].Score
+	})
+	return searchCandidates, nil
 }
 
 func (actions *Handler) getSearchCandidates(ctx context.Context, corpusId string, term string) ([]SearchCandidate, error) {
@@ -71,10 +79,6 @@ func (actions *Handler) getSearchCandidates(ctx context.Context, corpusId string
 	if err != nil {
 		return nil, err
 	}
-	// sort matches by their similarity to the query term using Levenshtein distance
-	sort.Slice(corpusSearchCandidates, func(i, j int) bool {
-		return corpusSearchCandidates[i].Source < corpusSearchCandidates[j].Source
-	})
 
 	// merge seach candidates, first is exact match, then corpus lematized candidates, remove duplicates
 	searchCandidates := append([]SearchCandidate{{Value: term, Score: levenshtein.ComputeDistance(term, term)}}, corpusSearchCandidates...)

@@ -44,8 +44,8 @@ type Handler struct {
 	sourcePriority []Source
 }
 
-func (actions *Handler) searchCorpusEntry(ctx context.Context, corpusId, lemma, pos string) (*dictionary.Lemma, error) {
-	if lemma == "" {
+func (actions *Handler) searchCorpusEntry(ctx context.Context, corpusId, sublemma, pos string) (*dictionary.Lemma, error) {
+	if sublemma == "" {
 		return nil, nil
 	}
 
@@ -63,16 +63,16 @@ func (actions *Handler) searchCorpusEntry(ctx context.Context, corpusId, lemma, 
 		ctx,
 		actions.db,
 		corpusId,
-		dictionary.SearchWithLemma(lemma),
+		dictionary.SearchWithSublemma(sublemma),
 		dictionary.SearchWithDatasetSizeForIPM(int(datasetSize)),
 		posArg,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find lemma: %w", err)
+		return nil, fmt.Errorf("failed to find sublemma: %w", err)
 	}
 	if len(ans) > 0 {
 		if len(ans) > 1 {
-			log.Warn().Str("lemma", lemma).Str("pos", pos).Int("numMatches", len(ans)).Msg("Multiple matches found for lemma in corpus")
+			log.Warn().Str("sublemma", sublemma).Str("pos", pos).Int("numMatches", len(ans)).Msg("Multiple matches found for sublemma in corpus")
 		}
 		return &ans[0], nil
 	}
@@ -197,7 +197,7 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 		}
 		variants = append(variants, *corpusEntry)
 		// remove variant from suggestions if present
-		suggestions = collections.SliceFilter(suggestions, func(v string, i int) bool { return v != corpusEntry.Lemma })
+		suggestions = collections.SliceFilter(suggestions, func(v string, i int) bool { return v != item.Key.Lemma })
 	}
 
 	ans := map[string]any{
