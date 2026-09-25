@@ -79,12 +79,10 @@ const (
 	PluralityUsually = 3
 	PluralityOnly    = 4
 	PluralityUnknown = 5 // mainly for search purposes
-
-	TableName = "lex_dictionary"
 )
 
 var dictionaryTable = `
-CREATE TABLE %s (
+CREATE TABLE lex_dictionary (
 	group_id VARCHAR(100),
 	homonym TINYINT DEFAULT 0 NOT NULL,
 	group_order TINYINT DEFAULT 0 NOT NULL,
@@ -100,15 +98,21 @@ CREATE TABLE %s (
 	external_id VARCHAR(100) NOT NULL,
 	external_parent_id VARCHAR(100),
 
-	-- This column automatically calculates the normalized search key
-	search_key VARCHAR(100) COLLATE utf8mb4_unicode_ci GENERATED ALWAYS AS (
-		REPLACE(REPLACE(LOWER(lemma), 'y', 'i'), 'z', 's')
-	) STORED,
-
-	INDEX idx_lex_dictionary_search_key (search_key),
 	INDEX idx_lex_dictionary_lemma_source_group_id (lemma, source, group_id),
 	INDEX idx_lex_dictionary_lemma_pos_source (lemma, pos, source),
 	INDEX idx_lex_dictionary_lemma_source (lemma, source)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;`
+
+var suggestionsTable = `
+CREATE TABLE lex_suggestions (
+	lemma VARCHAR(100) NOT NULL,
+	-- This column automatically calculates the normalized search key
+	search_key VARCHAR(100) COLLATE utf8mb4_unicode_ci GENERATED ALWAYS AS (
+		REPLACE(REPLACE(REPLACE(LOWER(lemma), 'y', 'i'), 'z', 's'), 'ž', 'š')
+	) STORED,
+
+	CONSTRAINT unique_lex_suggestions_lemma UNIQUE (lemma),
+	INDEX idx_lex_suggestions_search_key (search_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;`
 
 func CreateTables(ctx context.Context, db *sql.DB) (*sql.Tx, error) {
@@ -116,10 +120,16 @@ func CreateTables(ctx context.Context, db *sql.DB) (*sql.Tx, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create table: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx, fmt.Sprintf("DROP TABLE IF EXISTS %s", TableName)); err != nil {
+	if _, err := tx.ExecContext(ctx, "DROP TABLE IF EXISTS lex_dictionary"); err != nil {
 		return nil, fmt.Errorf("failed to create table: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx, fmt.Sprintf(dictionaryTable, TableName)); err != nil {
+	if _, err := tx.ExecContext(ctx, dictionaryTable); err != nil {
+		return nil, fmt.Errorf("failed to create table: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, "DROP TABLE IF EXISTS lex_suggestions"); err != nil {
+		return nil, fmt.Errorf("failed to create table: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, suggestionsTable); err != nil {
 		return nil, fmt.Errorf("failed to create table: %w", err)
 	}
 	return tx, nil
@@ -128,9 +138,9 @@ func CreateTables(ctx context.Context, db *sql.DB) (*sql.Tx, error) {
 func SearchTypoSuggestions(ctx context.Context, db *sql.DB, term string) ([]string, error) {
 	row, err := db.QueryContext(
 		ctx,
-		"SELECT DISTINCT lemma "+
-			"FROM lex_dictionary "+
-			"WHERE search_key = REPLACE(REPLACE(LOWER(?), 'y', 'i'), 'z', 's');",
+		"SELECT lemma "+
+			"FROM lex_suggestions "+
+			"WHERE search_key = REPLACE(REPLACE(REPLACE(LOWER(?), 'y', 'i'), 'z', 's'), 'ž', 'š');",
 		term,
 	)
 	if err != nil {
