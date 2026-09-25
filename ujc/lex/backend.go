@@ -103,7 +103,12 @@ CREATE TABLE %s (
 	-- This column automatically calculates the normalized search key
 	search_key VARCHAR(100) COLLATE utf8mb4_unicode_ci GENERATED ALWAYS AS (
 		REPLACE(REPLACE(LOWER(lemma), 'y', 'i'), 'z', 's')
-	) STORED
+	) STORED,
+
+	INDEX idx_lex_dictionary_search_key (search_key),
+	INDEX idx_lex_dictionary_lemma_source_group_id (lemma, source, group_id),
+	INDEX idx_lex_dictionary_lemma_pos_source (lemma, pos, source),
+	INDEX idx_lex_dictionary_lemma_source (lemma, source)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;`
 
 func CreateTables(ctx context.Context, db *sql.DB) (*sql.Tx, error) {
