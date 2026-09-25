@@ -94,9 +94,11 @@ func DTIJCR_ResolvePos(sourcePriority []Source) func(ctx context.Context, db *sq
 		for i, item := range data {
 			if item.Key.Pos == PosDTIJCR {
 				for _, source := range sourcePriority {
-					if v, ok := item.Sources[source]; ok && samePos(v) {
+					if v, ok := item.Sources[source]; ok {
 						data[i].PosSource = source
-						data[i].Key.Pos = v[0].Pos
+						if samePos(v) {
+							data[i].Key.Pos = v[0].Pos
+						}
 						break
 					}
 				}
