@@ -183,12 +183,11 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 		} else {
 			corpusEntry.ID = fmt.Sprintf("corp-%d", i)
 			corpusEntry.Specifier = cmp.Or(corpusEntry.Specifier, lexSpecifier)
-			corpusEntry.Sublemmas = collections.SliceFilter(corpusEntry.Sublemmas, func(sublemma dictionary.Sublemma, i int) bool {
-				return sublemma.Value == item.Key.Lemma
-			})
-			corpusEntry.Forms = collections.SliceFilter(corpusEntry.Forms, func(form dictionary.Form, i int) bool {
-				return form.Sublemma == item.Key.Lemma
-			})
+			// use corpus PoS if IJP is used
+			if item.PosSource == SourceIJP {
+				item.PosSource = SourceCorpus
+				item.Key.Pos = corpusEntry.PoS
+			}
 		}
 		corpusEntry.ExtraData = LexExtraData{
 			CorpusId:      corpusId,

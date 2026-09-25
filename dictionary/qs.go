@@ -485,8 +485,13 @@ func Search(
 		whereArgs = append(whereArgs, args...)
 	}
 	if srchOpts.PoS != "" {
-		whereSQL = append(whereSQL, "w.pos = ?")
-		whereArgs = append(whereArgs, srchOpts.PoS)
+		if len(srchOpts.PoS) > 1 {
+			whereSQL = append(whereSQL, "INSTR(?, w.pos) > 0")
+			whereArgs = append(whereArgs, srchOpts.PoS)
+		} else {
+			whereSQL = append(whereSQL, "w.pos = ?")
+			whereArgs = append(whereArgs, srchOpts.PoS)
+		}
 	}
 	if srchOpts.NgramSize > 0 {
 		whereSQL = append(whereSQL, "w.ngram = ?")
