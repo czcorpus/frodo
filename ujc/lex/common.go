@@ -33,17 +33,48 @@ type LexKey struct {
 	Plurality   int    `json:"plurality"`
 }
 
+func (a *LexKey) UnknownEqual(o *LexKey) bool {
+	if a.Lemma != o.Lemma {
+		return false
+	}
+	if a.Pos != o.Pos {
+		return false
+	}
+	if a.Gender != o.Gender {
+		return false
+	}
+	if a.Aspect != o.Aspect {
+		return false
+	}
+	if a.Uninflected != o.Uninflected {
+		return false
+	}
+	if a.Plurality != o.Plurality && a.Plurality != PluralityUnknown && o.Plurality != PluralityUnknown {
+		return false
+	}
+	return true
+}
+
 type LexItem struct {
 	Key       LexKey             `json:"key"`
 	PosSource Source             `json:"posSource"`
 	Sources   map[Source][]LexID `json:"sources"`
 }
 
-func (li *LexItem) Equal(item LexItem) bool {
+func (li *LexItem) Equal(item *LexItem) bool {
 	return li.Key == item.Key
 }
 
 func (li *LexItem) HasSource(source Source) bool {
 	_, ok := li.Sources[source]
 	return ok
+}
+
+func hasVariant(key LexKey, variants []LexItem) bool {
+	for _, variant := range variants {
+		if variant.Key.UnknownEqual(&key) {
+			return true
+		}
+	}
+	return false
 }

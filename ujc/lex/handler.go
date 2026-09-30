@@ -128,7 +128,7 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 	}
 
 	// apply special transformations before getting source data
-	lexItems, err = ApplyTransformations(ctx, actions.db.DB(), lexItems,
+	lexItems, err = ApplyTransformations(ctx, actions.db.DB(), usedCandidate.Source, lexItems,
 		DTIJCR_MergeItems,
 	)
 	if err != nil {
@@ -147,8 +147,9 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 	}
 
 	// apply special transformations after getting source data
-	lexItems, err = ApplyTransformations(ctx, actions.db.DB(), lexItems,
+	lexItems, err = ApplyTransformations(ctx, actions.db.DB(), usedCandidate.Source, lexItems,
 		DTIJCR_ResolvePos(actions.sourcePriority),
+		JoinFromIJPToASSC_Uninflected,
 		JoinFromIJP_NAP_To_C,
 		JoinToIJP_C_To_NAP,
 		IJP_ResolvePos(actions.sourcePriority),
