@@ -24,7 +24,6 @@ import (
 	"strings"
 
 	"github.com/czcorpus/cnc-gokit/collections"
-	"github.com/czcorpus/cnc-gokit/util"
 )
 
 type Source string
@@ -71,9 +70,9 @@ const (
 	AspectBoth    = "B"
 	AspectUnknown = "X" // mainly for search purposes
 
-	UninflectedFalse = 0
-	UninflectedTrue  = 1
-	// TODO uninflected unknown value
+	UninflectedFalse   = 0
+	UninflectedTrue    = 1
+	UninflectedUnknown = 2
 
 	PluralityNone    = 0
 	PluralityPlural  = 1
@@ -223,15 +222,13 @@ func SearchVariants(ctx context.Context, db *sql.DB, lemma string, variantSource
 	data := make([]LexItem, 0, 5)
 	for row.Next() {
 		var genderArg, aspectArg sql.NullString
-		var uninflectedArg int64
 		key := LexKey{}
-		if err := row.Scan(&key.Lemma, &key.Pos, &genderArg, &aspectArg, &uninflectedArg, &key.Plurality); err != nil {
+		if err := row.Scan(&key.Lemma, &key.Pos, &genderArg, &aspectArg, &key.Uninflected, &key.Plurality); err != nil {
 			if err == sql.ErrNoRows {
 				return nil, nil
 			}
 			return nil, fmt.Errorf("failed to scan variants: %w", err)
 		}
-		key.Uninflected = uninflectedArg != 0
 		if genderArg.Valid {
 			key.Gender = genderArg.String
 		}
@@ -255,6 +252,7 @@ func SearchSources(ctx context.Context, db *sql.DB, lexKey LexKey) (map[Source][
 		whereParts = append(whereParts, "pos IN (?, ?)")
 		args = append(args, lexKey.Pos, PosUnkn)
 	}
+
 	if lexKey.Gender == "" {
 		whereParts = append(whereParts, "gender is NULL")
 	} else if lexKey.Gender != GenderUnknown {
@@ -267,12 +265,14 @@ func SearchSources(ctx context.Context, db *sql.DB, lexKey LexKey) (map[Source][
 		whereParts = append(whereParts, "aspect = ?")
 		args = append(args, lexKey.Aspect)
 	}
+	if lexKey.Uninflected != UninflectedUnknown {
+		whereParts = append(whereParts, "(uninflected = ? OR uninflected = ?)")
+		args = append(args, lexKey.Uninflected, UninflectedUnknown)
+	}
 	if lexKey.Plurality != PluralityUnknown {
 		whereParts = append(whereParts, "(plurality = ? OR plurality = ?)")
 		args = append(args, lexKey.Plurality, PluralityUnknown)
 	}
-	whereParts = append(whereParts, "uninflected = ?")
-	args = append(args, util.Ternary(lexKey.Uninflected, 1, 0))
 
 	query := `
 		SELECT source, JSON_ARRAYAGG(JSON_OBJECT('id', external_id, 'parentId', external_parent_id, 'groupOrder', group_order, 'homonym', homonym, 'pos', pos) ORDER BY homonym) AS idents
@@ -333,22 +333,16 @@ func SearchLexItemID(ctx context.Context, db *sql.DB, lexKey LexKey, source Sour
 		where = append(where, "gender = ?")
 		args = append(args, lexKey.Gender)
 	}
-
 	if lexKey.Aspect == "" {
 		where = append(where, "aspect IS NULL")
 	} else if lexKey.Aspect != AspectUnknown {
 		where = append(where, "aspect = ?")
 		args = append(args, lexKey.Aspect)
 	}
-
-	// uninflected stored as tinyint; convert bool to int
-	uninflectedInt := 0
-	if lexKey.Uninflected {
-		uninflectedInt = 1
+	if lexKey.Uninflected != UninflectedUnknown {
+		where = append(where, "(uninflected = ? OR uninflected = ?)")
+		args = append(args, lexKey.Uninflected, UninflectedUnknown)
 	}
-	where = append(where, "uninflected = ?")
-	args = append(args, uninflectedInt)
-
 	if lexKey.Plurality != PluralityUnknown {
 		where = append(where, "(plurality = ? OR plurality = ?)")
 		args = append(args, lexKey.Plurality, PluralityUnknown)

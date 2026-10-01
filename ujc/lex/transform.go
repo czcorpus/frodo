@@ -135,14 +135,14 @@ func JoinFromIJP_NAP_To_C(ctx context.Context, db *sql.DB, variantSource Source,
 	// if data pos == C and not uninflected and no IJP source
 	// add to data IJP source with pos N|A|P
 	for i, item := range variants {
-		if !item.HasSource(SourceIJP) && item.Key.Pos == PosNum && !item.Key.Uninflected {
+		if !item.HasSource(SourceIJP) && item.Key.Pos == PosNum && item.Key.Uninflected == UninflectedFalse {
 			for _, pos := range []string{PosNoun, PosAdj, PosPron} {
 				search := LexKey{
 					Lemma:       item.Key.Lemma,
 					Pos:         pos,
 					Gender:      GenderUnknown,
 					Aspect:      AspectUnknown,
-					Uninflected: false,
+					Uninflected: UninflectedFalse,
 					Plurality:   PluralityUnknown,
 				}
 				ids, err := SearchLexItemID(ctx, db, search, SourceIJP)
@@ -166,7 +166,7 @@ func JoinToIJP_C_To_NAP(ctx context.Context, db *sql.DB, variantSource Source, v
 				Pos:         PosNum,
 				Gender:      GenderUnknown,
 				Aspect:      AspectUnknown,
-				Uninflected: false,
+				Uninflected: UninflectedFalse,
 				Plurality:   PluralityUnknown,
 			}
 			sources, err := SearchSources(ctx, db, search)
@@ -213,9 +213,9 @@ func JoinFromIJPToASSC_Uninflected(ctx context.Context, db *sql.DB, variantSourc
 	// if no inflected ASSC variant exists
 	if variantSource == SourceASSC {
 		for _, item := range variants {
-			if item.Key.Uninflected && !item.HasSource(SourceIJP) {
+			if item.Key.Uninflected == UninflectedTrue && !item.HasSource(SourceIJP) {
 				search := item.Key
-				search.Uninflected = false
+				search.Uninflected = UninflectedFalse
 				search.Plurality = PluralityUnknown
 				if !hasVariant(search, variants) {
 					ids, err := SearchLexItemID(ctx, db, search, SourceIJP)

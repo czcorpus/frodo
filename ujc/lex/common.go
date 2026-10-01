@@ -29,7 +29,7 @@ type LexKey struct {
 	Pos         string `json:"pos"`
 	Gender      string `json:"gender"`
 	Aspect      string `json:"aspect"`
-	Uninflected bool   `json:"uninflected"`
+	Uninflected int    `json:"uninflected"`
 	Plurality   int    `json:"plurality"`
 }
 
@@ -46,7 +46,7 @@ func (a *LexKey) UnknownEqual(o *LexKey) bool {
 	if a.Aspect != o.Aspect {
 		return false
 	}
-	if a.Uninflected != o.Uninflected {
+	if a.Uninflected != o.Uninflected && a.Uninflected != UninflectedUnknown && o.Uninflected != UninflectedUnknown {
 		return false
 	}
 	if a.Plurality != o.Plurality && a.Plurality != PluralityUnknown && o.Plurality != PluralityUnknown {
