@@ -60,6 +60,7 @@ const (
 	GenderMascAnim     = "M"
 	GenderMascInan     = "I"
 	GenderMascAnimInan = "B"
+	GenderMascUnknown  = "MX"
 	GenderFem          = "F"
 	GenderNeut         = "N"
 	GenderUnknown      = "X" // mainly for search purposes

@@ -227,3 +227,13 @@ func JoinFromIJPToASSC_Uninflected(ctx context.Context, db *sql.DB, variantSourc
 	}
 	return variants, nil
 }
+
+func SSC_ResolveGenderMX(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
+	// SSC does not distinguish masculine genders, replace M, I, B with MX
+	for i, item := range variants {
+		if item.PosSource == SourceSSC && (item.Key.Gender == GenderMascAnim || item.Key.Gender == GenderMascInan || item.Key.Gender == GenderMascAnimInan) {
+			variants[i].Key.Gender = GenderMascUnknown
+		}
+	}
+	return variants, nil
+}

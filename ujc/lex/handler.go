@@ -154,6 +154,7 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 		JoinToIJP_C_To_NAP,
 		JoinFromSSC_M_To_IB,
 		IJP_ResolvePos(actions.sourcePriority),
+		SSC_ResolveGenderMX,
 		SortTransformation(usedCandidate.Source),
 	)
 	if err != nil {
@@ -171,7 +172,7 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 			return
 		}
 		// corpus entry needs to replace "B" gender with "MI"
-		lexSpecifier := cmp.Or(util.Ternary(item.Key.Gender == GenderMascAnimInan, "MI", item.Key.Gender), item.Key.Aspect)
+		lexSpecifier := cmp.Or(util.Ternary(item.Key.Gender == GenderMascAnimInan || item.Key.Gender == GenderMascUnknown, "MI", item.Key.Gender), item.Key.Aspect)
 		if corpusEntry == nil {
 			corpusEntry = &dictionary.Lemma{
 				ID:        fmt.Sprintf("lex-%d", i),
