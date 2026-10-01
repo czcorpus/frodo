@@ -152,8 +152,8 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 		JoinFromIJPToASSC_Uninflected,
 		JoinFromIJP_NAP_To_C,
 		JoinToIJP_C_To_NAP,
-		IJP_ResolvePos(actions.sourcePriority),
 		JoinFromSSC_M_To_IB,
+		IJP_ResolvePos(actions.sourcePriority),
 		SortTransformation(usedCandidate.Source),
 	)
 	if err != nil {
