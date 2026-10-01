@@ -116,11 +116,15 @@ func IJP_ResolvePos(sourcePriority []Source) func(ctx context.Context, db *sql.D
 			if item.PosSource == SourceIJP {
 				for _, source := range sourcePriority {
 					if v, ok := item.Sources[source]; source != SourceIJP && ok && samePos(v) {
-						variants[i].PosSource = source
-						variants[i].Key.Pos = v[0].Pos
+						item.PosSource = source
+						item.Key.Pos = v[0].Pos
 						break
 					}
 				}
+				if item.PosSource == SourceIJP {
+					item.PosSource = SourceEmpty
+				}
+				variants[i] = item
 			}
 		}
 		return variants, nil

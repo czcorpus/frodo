@@ -37,6 +37,7 @@ const (
 	SourceSJC    Source = "sjc"
 	SourceSSC    Source = "ssc"
 	SourceCorpus Source = "cnc"
+	SourceEmpty  Source = "---"
 
 	PosAdj   = "A"
 	PosAbb   = "B"

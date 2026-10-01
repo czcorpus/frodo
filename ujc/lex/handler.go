@@ -186,7 +186,7 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 			corpusEntry.ID = fmt.Sprintf("corp-%d", i)
 			corpusEntry.Specifier = cmp.Or(corpusEntry.Specifier, lexSpecifier)
 			// use corpus PoS if IJP is used
-			if item.PosSource == SourceIJP {
+			if item.PosSource == SourceEmpty {
 				item.PosSource = SourceCorpus
 				item.Key.Pos = corpusEntry.PoS
 			}
