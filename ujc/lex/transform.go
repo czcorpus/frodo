@@ -24,42 +24,42 @@ import (
 	"github.com/czcorpus/cnc-gokit/collections"
 )
 
-type LexTransform func(context.Context, *sql.DB, []LexItem) ([]LexItem, error)
+type LexTransform func(context.Context, *sql.DB, Source, []LexItem) ([]LexItem, error)
 
-func samePos(data []LexID) bool {
-	for _, item := range data {
-		if item.Pos != data[0].Pos {
+func samePos(sources []LexID) bool {
+	for _, item := range sources {
+		if item.Pos != sources[0].Pos {
 			return false
 		}
 	}
 	return true
 }
 
-func ApplyTransformations(ctx context.Context, db *sql.DB, data []LexItem, transforms ...LexTransform) ([]LexItem, error) {
+func ApplyTransformations(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem, transforms ...LexTransform) ([]LexItem, error) {
 	var err error
 	for _, transform := range transforms {
 		if transform == nil {
 			continue
 		}
-		data, err = transform(ctx, db, data)
+		variants, err = transform(ctx, db, variantSource, variants)
 		if err != nil {
 			return nil, fmt.Errorf("failed to transform data: %w", err)
 		}
 
 	}
-	return data, nil
+	return variants, nil
 }
 
-func SortTransformation(sortBySource Source) func(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
-	return func(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
-		return sortVariants2(data, sortBySource), nil
+func SortTransformation(sortBySource Source) func(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
+	return func(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
+		return sortVariants2(variants, sortBySource), nil
 	}
 }
 
-func DTIJCR_MergeItems(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
+func DTIJCR_MergeItems(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
 	// making DTIJCR group from any DTIJ, D, T, I, J, R item
 	var result []LexItem
-	for _, item := range data {
+	for _, item := range variants {
 		if item.Key.Pos != PosNum {
 			if item.Key.Pos == PosDTIJ ||
 				item.Key.Pos == PosAdv ||
@@ -75,7 +75,7 @@ func DTIJCR_MergeItems(ctx context.Context, db *sql.DB, data []LexItem) ([]LexIt
 		}
 	}
 	// join C item to DTIJCR group, if some exists
-	for _, item := range data {
+	for _, item := range variants {
 		if item.Key.Pos == PosNum {
 			item.Key.Pos = PosDTIJCR
 			if collections.SliceFindIndex(result, func(v LexItem) bool { return item.Key == v.Key }) == -1 {
@@ -88,57 +88,61 @@ func DTIJCR_MergeItems(ctx context.Context, db *sql.DB, data []LexItem) ([]LexIt
 	return result, nil
 }
 
-func DTIJCR_ResolvePos(sourcePriority []Source) func(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
+func DTIJCR_ResolvePos(sourcePriority []Source) func(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
 	// reduce DTIJCR to only one value, if possible
-	return func(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
-		for i, item := range data {
+	return func(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
+		for i, item := range variants {
 			if item.Key.Pos == PosDTIJCR {
 				for _, source := range sourcePriority {
 					if v, ok := item.Sources[source]; ok {
-						data[i].PosSource = source
+						variants[i].PosSource = source
 						if samePos(v) {
-							data[i].Key.Pos = v[0].Pos
+							variants[i].Key.Pos = v[0].Pos
 						}
 						break
 					}
 				}
 			}
 		}
-		return data, nil
+		return variants, nil
 	}
 }
 
-func IJP_ResolvePos(sourcePriority []Source) func(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
+func IJP_ResolvePos(sourcePriority []Source) func(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
 	// IJP should never be source of PoS
 	// select highest available source from sourcePriority list
-	return func(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
-		for i, item := range data {
+	return func(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
+		for i, item := range variants {
 			if item.PosSource == SourceIJP {
 				for _, source := range sourcePriority {
 					if v, ok := item.Sources[source]; source != SourceIJP && ok && samePos(v) {
-						data[i].PosSource = source
-						data[i].Key.Pos = v[0].Pos
+						item.PosSource = source
+						item.Key.Pos = v[0].Pos
 						break
 					}
 				}
+				if item.PosSource == SourceIJP {
+					item.PosSource = SourceEmpty
+				}
+				variants[i] = item
 			}
 		}
-		return data, nil
+		return variants, nil
 	}
 }
 
-func JoinFromIJP_NAP_To_C(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
+func JoinFromIJP_NAP_To_C(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
 	// if data pos == C and not uninflected and no IJP source
 	// add to data IJP source with pos N|A|P
-	for i, item := range data {
-		if !item.HasSource(SourceIJP) && item.Key.Pos == PosNum && !item.Key.Uninflected {
+	for i, item := range variants {
+		if !item.HasSource(SourceIJP) && item.Key.Pos == PosNum && item.Key.Uninflected == UninflectedFalse {
 			for _, pos := range []string{PosNoun, PosAdj, PosPron} {
 				search := LexKey{
 					Lemma:       item.Key.Lemma,
 					Pos:         pos,
 					Gender:      GenderUnknown,
 					Aspect:      AspectUnknown,
-					Uninflected: false,
+					Uninflected: UninflectedFalse,
 					Plurality:   PluralityUnknown,
 				}
 				ids, err := SearchLexItemID(ctx, db, search, SourceIJP)
@@ -146,23 +150,23 @@ func JoinFromIJP_NAP_To_C(ctx context.Context, db *sql.DB, data []LexItem) ([]Le
 					return nil, fmt.Errorf("failed to join N|A|P to C in IJP: %w", err)
 				}
 				if len(ids) != 0 {
-					data[i].Sources[SourceIJP] = ids
+					variants[i].Sources[SourceIJP] = ids
 				}
 			}
 		}
 	}
-	return data, nil
+	return variants, nil
 }
 
-func JoinToIJP_C_To_NAP(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
-	for i, item := range data {
+func JoinToIJP_C_To_NAP(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
+	for i, item := range variants {
 		if item.PosSource == SourceIJP && (item.Key.Pos == PosNoun || item.Key.Pos == PosAdj || item.Key.Pos == PosPron) && len(item.Sources) == 1 {
 			search := LexKey{
 				Lemma:       item.Key.Lemma,
 				Pos:         PosNum,
 				Gender:      GenderUnknown,
 				Aspect:      AspectUnknown,
-				Uninflected: false,
+				Uninflected: UninflectedFalse,
 				Plurality:   PluralityUnknown,
 			}
 			sources, err := SearchSources(ctx, db, search)
@@ -171,18 +175,18 @@ func JoinToIJP_C_To_NAP(ctx context.Context, db *sql.DB, data []LexItem) ([]LexI
 			}
 			if len(sources) > 0 {
 				sources[SourceIJP] = item.Sources[SourceIJP]
-				data[i].Sources = sources
+				variants[i].Sources = sources
 			}
 		}
 	}
-	return data, nil
+	return variants, nil
 }
 
-func JoinFromSSC_M_To_IB(ctx context.Context, db *sql.DB, data []LexItem) ([]LexItem, error) {
+func JoinFromSSC_M_To_IB(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
 	// if data gender == I || B and no SSC source
 	// add to data SSC source with gender M
 	// (SSC source does not distinct masculine genders)
-	for i, item := range data {
+	for i, item := range variants {
 		if !item.HasSource(SourceSSC) && (item.Key.Gender == GenderMascInan || item.Key.Gender == GenderMascAnimInan) {
 			search := LexKey{
 				Lemma:       item.Key.Lemma,
@@ -197,9 +201,43 @@ func JoinFromSSC_M_To_IB(ctx context.Context, db *sql.DB, data []LexItem) ([]Lex
 				return nil, fmt.Errorf("failed to join masculine gender SSC data: %w", err)
 			}
 			if len(ids) != 0 {
-				data[i].Sources[SourceSSC] = ids
+				variants[i].Sources[SourceSSC] = ids
 			}
 		}
 	}
-	return data, nil
+	return variants, nil
+}
+
+func JoinFromIJPToASSC_Uninflected(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
+	// to uninflected ASSC data add also IJP "inflected" data
+	// if no inflected ASSC variant exists
+	if variantSource == SourceASSC {
+		for _, item := range variants {
+			if item.Key.Uninflected == UninflectedTrue && !item.HasSource(SourceIJP) {
+				search := item.Key
+				search.Uninflected = UninflectedFalse
+				search.Plurality = PluralityUnknown
+				if !hasVariant(search, variants) {
+					ids, err := SearchLexItemID(ctx, db, search, SourceIJP)
+					if err != nil {
+						return nil, fmt.Errorf("failed to join from IJP to uninflected ASSC data: %w", err)
+					}
+					if len(ids) > 0 {
+						item.Sources[SourceIJP] = ids
+					}
+				}
+			}
+		}
+	}
+	return variants, nil
+}
+
+func SSC_ResolveGenderMX(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
+	// SSC does not distinguish masculine genders, replace M, I, B with MX
+	for i, item := range variants {
+		if item.PosSource == SourceSSC && (item.Key.Gender == GenderMascAnim || item.Key.Gender == GenderMascInan || item.Key.Gender == GenderMascAnimInan) {
+			variants[i].Key.Gender = GenderMascUnknown
+		}
+	}
+	return variants, nil
 }

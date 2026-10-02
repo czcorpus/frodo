@@ -128,7 +128,7 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 	}
 
 	// apply special transformations before getting source data
-	lexItems, err = ApplyTransformations(ctx, actions.db.DB(), lexItems,
+	lexItems, err = ApplyTransformations(ctx, actions.db.DB(), usedCandidate.Source, lexItems,
 		DTIJCR_MergeItems,
 	)
 	if err != nil {
@@ -147,12 +147,14 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 	}
 
 	// apply special transformations after getting source data
-	lexItems, err = ApplyTransformations(ctx, actions.db.DB(), lexItems,
+	lexItems, err = ApplyTransformations(ctx, actions.db.DB(), usedCandidate.Source, lexItems,
 		DTIJCR_ResolvePos(actions.sourcePriority),
+		JoinFromIJPToASSC_Uninflected,
 		JoinFromIJP_NAP_To_C,
 		JoinToIJP_C_To_NAP,
-		IJP_ResolvePos(actions.sourcePriority),
 		JoinFromSSC_M_To_IB,
+		IJP_ResolvePos(actions.sourcePriority),
+		SSC_ResolveGenderMX,
 		SortTransformation(usedCandidate.Source),
 	)
 	if err != nil {
@@ -170,7 +172,7 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 			return
 		}
 		// corpus entry needs to replace "B" gender with "MI"
-		lexSpecifier := cmp.Or(util.Ternary(item.Key.Gender == GenderMascAnimInan, "MI", item.Key.Gender), item.Key.Aspect)
+		lexSpecifier := cmp.Or(util.Ternary(item.Key.Gender == GenderMascAnimInan || item.Key.Gender == GenderMascUnknown, "MI", item.Key.Gender), item.Key.Aspect)
 		if corpusEntry == nil {
 			corpusEntry = &dictionary.Lemma{
 				ID:        fmt.Sprintf("lex-%d", i),
@@ -184,7 +186,7 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 			corpusEntry.ID = fmt.Sprintf("corp-%d", i)
 			corpusEntry.Specifier = cmp.Or(corpusEntry.Specifier, lexSpecifier)
 			// use corpus PoS if IJP is used
-			if item.PosSource == SourceIJP {
+			if item.PosSource == SourceEmpty {
 				item.PosSource = SourceCorpus
 				item.Key.Pos = corpusEntry.PoS
 			}
