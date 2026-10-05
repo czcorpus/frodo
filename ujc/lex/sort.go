@@ -121,7 +121,10 @@ func sortVariants2(data []LexItem, sortBySource Source) []LexItem {
 		if data[i].Sources[sortBySource][0].GroupOrder != data[j].Sources[sortBySource][0].GroupOrder {
 			return data[i].Sources[sortBySource][0].GroupOrder < data[j].Sources[sortBySource][0].GroupOrder
 		}
-		return data[i].Sources[sortBySource][0].Homonym < data[j].Sources[sortBySource][0].Homonym
+		if data[i].Key.Lemma == data[j].Key.Lemma {
+			return data[i].Sources[sortBySource][0].Homonym < data[j].Sources[sortBySource][0].Homonym
+		}
+		return data[i].Key.Lemma < data[j].Key.Lemma
 	})
 
 	return data

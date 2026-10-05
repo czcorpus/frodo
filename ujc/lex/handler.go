@@ -185,10 +185,13 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 		} else {
 			corpusEntry.ID = fmt.Sprintf("corp-%d", i)
 			corpusEntry.Specifier = cmp.Or(corpusEntry.Specifier, lexSpecifier)
-			// use corpus PoS if IJP is used
+
+			// use corpus PoS if pos source is unknown
 			if item.PosSource == SourceEmpty {
 				item.PosSource = SourceCorpus
 				item.Key.Pos = corpusEntry.PoS
+				item.Key.Gender = ""
+				item.Key.Aspect = ""
 			}
 		}
 		corpusEntry.ExtraData = LexExtraData{
