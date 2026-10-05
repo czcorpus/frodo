@@ -34,25 +34,34 @@ func InsertDictChunk(ctx context.Context, tx *sql.Tx, data []SrcFileRow) error {
 		if i > 0 {
 			insTpl.WriteString(", ")
 		}
-		insTpl.WriteString("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+		insTpl.WriteString("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
 		groupId := sql.NullString{String: v.GroupID, Valid: v.GroupID != ""}
+
+		externalIDParts := strings.Split(strings.TrimPrefix(v.ExternalID, "__"), "_")
 		homonym := 0
-		externalIDParts := strings.Split(v.ExternalID, "_")
 		if len(externalIDParts) > 1 {
 			if h, err := strconv.Atoi(externalIDParts[len(externalIDParts)-1]); err == nil {
 				homonym = h
 			}
 		}
+
+		groupOrder := 0
+		if strings.HasPrefix(v.ExternalID, "__") {
+			if gro, err := strconv.Atoi(externalIDParts[1]); err == nil {
+				groupOrder = gro
+			}
+		}
+
 		gender := sql.NullString{String: v.Gender, Valid: v.Gender != ""}
 		aspect := sql.NullString{String: v.Aspect, Valid: v.Aspect != ""}
 		plurality := lex.PluralityUnknown
 		uninflected := lex.UninflectedFalse
-		dataArgs = append(dataArgs, groupId, homonym, v.Variant, v.Pos, gender, aspect, plurality, uninflected, lex.SourceIJP, v.ExternalID)
+		dataArgs = append(dataArgs, groupId, homonym, groupOrder, v.Variant, v.Pos, gender, aspect, plurality, uninflected, lex.SourceIJP, v.ExternalID)
 	}
 	_, err := tx.ExecContext(
 		ctx,
 		fmt.Sprintf(
-			"INSERT INTO lex_dictionary (group_id, homonym, lemma, pos, gender, aspect, plurality, uninflected, source, external_id) VALUES %s",
+			"INSERT INTO lex_dictionary (group_id, homonym, group_order, lemma, pos, gender, aspect, plurality, uninflected, source, external_id) VALUES %s",
 			insTpl.String(),
 		),
 		dataArgs...,
@@ -62,21 +71,30 @@ func InsertDictChunk(ctx context.Context, tx *sql.Tx, data []SrcFileRow) error {
 		// try one by one and ignore errors:
 		for _, item := range data {
 			groupId := sql.NullString{String: item.GroupID, Valid: item.GroupID != ""}
+
+			externalIDParts := strings.Split(strings.TrimPrefix("__", item.ExternalID), "_")
 			homonym := 0
-			externalIDParts := strings.Split(item.ExternalID, "_")
 			if len(externalIDParts) > 1 {
 				if h, err := strconv.Atoi(externalIDParts[len(externalIDParts)-1]); err == nil {
 					homonym = h
 				}
 			}
+
+			groupOrder := 0
+			if strings.HasPrefix(item.ExternalID, "__") {
+				if gro, err := strconv.Atoi(externalIDParts[1]); err == nil {
+					groupOrder = gro
+				}
+			}
+
 			gender := sql.NullString{String: item.Gender, Valid: item.Gender != ""}
 			aspect := sql.NullString{String: item.Aspect, Valid: item.Aspect != ""}
 			plurality := lex.PluralityUnknown
 			uninflected := lex.UninflectedFalse
 			_, err := tx.ExecContext(
 				ctx,
-				"INSERT INTO lex_dictionary (group_id, homonym, lemma, pos, gender, aspect, plurality, uninflected, source, external_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ",
-				groupId, homonym, item.Variant, item.Pos, gender, aspect, plurality, uninflected, lex.SourceIJP, item.ExternalID,
+				"INSERT INTO lex_dictionary (group_id, homonym, group_order, lemma, pos, gender, aspect, plurality, uninflected, source, external_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ",
+				groupId, homonym, groupOrder, item.Variant, item.Pos, gender, aspect, plurality, uninflected, lex.SourceIJP, item.ExternalID,
 			)
 			if err != nil {
 				log.Error().Err(err).Any("values", item).Msg("failed to insert single row, ignoring")
