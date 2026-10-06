@@ -44,7 +44,7 @@ type testConfig struct {
 	Tests  []testSpec     `json:"tests"`
 }
 
-func runVariantTest(cfgPath string) error {
+func runVariantTest(cfgPath string, verbose bool) error {
 	raw, err := os.ReadFile(cfgPath)
 	if err != nil {
 		return fmt.Errorf("cannot read test config: %w", err)
@@ -110,11 +110,13 @@ tests:
 
 		if !reflect.DeepEqual(t.ExpectedVariants, actualExtraData) {
 			fmt.Printf("[%d] FAIL term=%s corpus=%s\n", i, t.Term, t.CorpusId)
-			fmt.Printf("URL: %s\n", u)
-			expb, _ := json.MarshalIndent(actualExtraData, "", "  ")
-			actb, _ := json.MarshalIndent(t.ExpectedVariants, "", "  ")
-			fmt.Printf("Expected: %s\n", string(expb))
-			fmt.Printf("Actual: %s\n", string(actb))
+			if verbose {
+				fmt.Printf("URL: %s\n", u)
+				expb, _ := json.MarshalIndent(actualExtraData, "", "  ")
+				actb, _ := json.MarshalIndent(t.ExpectedVariants, "", "  ")
+				fmt.Printf("Expected: %s\n", string(expb))
+				fmt.Printf("Actual: %s\n", string(actb))
+			}
 			failed++
 			continue tests
 		}

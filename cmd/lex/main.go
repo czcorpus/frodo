@@ -56,6 +56,10 @@ type updateArgs struct {
 	force       bool
 }
 
+type testArgs struct {
+	verbose bool
+}
+
 func runIjpImport(args importArgs) {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -223,6 +227,10 @@ func main() {
 	updateCmd.StringVar(&updateOpts.targetID, "id", "", "target ID to update")
 	updateCmd.BoolVar(&updateOpts.force, "force", false, "force update even if conflicts exist")
 
+	// Define flags for test subcommand
+	var testOpts testArgs
+	updateCmd.BoolVar(&testOpts.verbose, "verbose", false, "display expected/actual on fail")
+
 	// Parse based on subcommand
 	switch cmdAction(os.Args[1]) {
 	case cmdActionImport:
@@ -275,7 +283,7 @@ func main() {
 		if err := testCmd.Parse(os.Args[2:]); err != nil {
 			os.Exit(1)
 		}
-		if err := runVariantTest(testCmd.Arg(0)); err != nil {
+		if err := runVariantTest(testCmd.Arg(0), testOpts.verbose); err != nil {
 			fmt.Fprintf(os.Stderr, "test failed: %v\n", err)
 			os.Exit(1)
 		}
