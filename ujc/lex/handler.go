@@ -32,6 +32,11 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+type LexDictResponse struct {
+	Matches     []dictionary.Lemma `json:"matches"`
+	Suggestions []string           `json:"suggestions"`
+}
+
 type LexExtraData struct {
 	CorpusId      string  `json:"corpusId"`
 	VariantSource Source  `json:"variantSource"`
@@ -95,11 +100,10 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 		return
 	}
 	if len(searchCandidates) == 0 {
-		ans := map[string]any{
-			"matches":     []dictionary.Lemma{},
-			"suggestions": typoSuggestions,
-		}
-		uniresp.WriteJSONResponse(ctx.Writer, ans)
+		uniresp.WriteJSONResponse(ctx.Writer, LexDictResponse{
+			Matches:     []dictionary.Lemma{},
+			Suggestions: typoSuggestions,
+		})
 		return
 	}
 
@@ -119,11 +123,10 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 	// just in case..., should not happen, since searched item is certainly in dictionary, `variantSource` exists
 	// TODO? corpus source
 	if lexItems == nil {
-		ans := map[string]any{
-			"matches":     []dictionary.Lemma{},
-			"suggestions": suggestions,
-		}
-		uniresp.WriteJSONResponse(ctx.Writer, ans)
+		uniresp.WriteJSONResponse(ctx.Writer, LexDictResponse{
+			Matches:     []dictionary.Lemma{},
+			Suggestions: suggestions,
+		})
 		return
 	}
 
@@ -185,10 +188,13 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 		} else {
 			corpusEntry.ID = fmt.Sprintf("corp-%d", i)
 			corpusEntry.Specifier = cmp.Or(corpusEntry.Specifier, lexSpecifier)
-			// use corpus PoS if IJP is used
+
+			// use corpus PoS if pos source is unknown
 			if item.PosSource == SourceEmpty {
 				item.PosSource = SourceCorpus
 				item.Key.Pos = corpusEntry.PoS
+				item.Key.Gender = ""
+				item.Key.Aspect = ""
 			}
 		}
 		corpusEntry.ExtraData = LexExtraData{
@@ -201,11 +207,10 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 		suggestions = collections.SliceFilter(suggestions, func(v string, i int) bool { return v != item.Key.Lemma })
 	}
 
-	ans := map[string]any{
-		"matches":     variants,
-		"suggestions": suggestions,
-	}
-	uniresp.WriteJSONResponse(ctx.Writer, ans)
+	uniresp.WriteJSONResponse(ctx.Writer, LexDictResponse{
+		Matches:     variants,
+		Suggestions: suggestions,
+	})
 }
 
 func NewHandler(db *mysql.Adapter, dictActions *dictActions.Actions, sourcePriority []Source) *Handler {
