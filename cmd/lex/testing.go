@@ -17,15 +17,14 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
+	"frodo/ujc/lex"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"reflect"
-	"sort"
 )
 
 // Test config structures
@@ -35,9 +34,9 @@ type testServerConf struct {
 }
 
 type testSpec struct {
-	CorpusId string          `json:"corpusId"`
-	Term     string          `json:"term"`
-	Expected json.RawMessage `json:"expected"`
+	CorpusId         string             `json:"corpusId"`
+	Term             string             `json:"term"`
+	ExpectedVariants []lex.LexExtraData `json:"expectedVariants"`
 }
 
 type testConfig struct {
@@ -45,54 +44,7 @@ type testConfig struct {
 	Tests  []testSpec     `json:"tests"`
 }
 
-// KV is a deterministic representation of a map entry used for canonicalization.
-type KV struct {
-	K string      `json:"k"`
-	V interface{} `json:"v"`
-}
-
-func canonicalize(v interface{}) interface{} {
-	switch t := v.(type) {
-	case nil:
-		return nil
-	case bool, string, float64:
-		return t
-	case []interface{}:
-		elems := make([]interface{}, 0, len(t))
-		for _, e := range t {
-			elems = append(elems, canonicalize(e))
-		}
-		sort.SliceStable(elems, func(i, j int) bool {
-			bi, _ := json.Marshal(elems[i])
-			bj, _ := json.Marshal(elems[j])
-			return bytes.Compare(bi, bj) < 0
-		})
-		return elems
-	case map[string]interface{}:
-		kvs := make([]KV, 0, len(t))
-		for k, vv := range t {
-			kvs = append(kvs, KV{K: k, V: canonicalize(vv)})
-		}
-		sort.Slice(kvs, func(i, j int) bool { return kvs[i].K < kvs[j].K })
-		out := make([]interface{}, 0, len(kvs))
-		for _, kv := range kvs {
-			out = append(out, kv)
-		}
-		return out
-	default:
-		rb, err := json.Marshal(t)
-		if err != nil {
-			return fmt.Sprintf("<unmarshalable:%T>", t)
-		}
-		var tmp interface{}
-		if err := json.Unmarshal(rb, &tmp); err != nil {
-			return fmt.Sprintf("<unmarshalable:%T>", t)
-		}
-		return canonicalize(tmp)
-	}
-}
-
-func runTest(cfgPath string) error {
+func runVariantTest(cfgPath string) error {
 	raw, err := os.ReadFile(cfgPath)
 	if err != nil {
 		return fmt.Errorf("cannot read test config: %w", err)
@@ -107,50 +59,64 @@ func runTest(cfgPath string) error {
 
 	base := fmt.Sprintf("http://%s:%d", cfg.Server.Address, cfg.Server.Port)
 	var failed int
+
+tests:
 	for i, t := range cfg.Tests {
 		u := fmt.Sprintf("%s/dictionary/lex/%s/search/%s", base, url.PathEscape(t.CorpusId), url.PathEscape(t.Term))
 		resp, err := http.Get(u)
 		if err != nil {
 			fmt.Printf("[%d] ERROR requesting %s: %v\n", i, u, err)
 			failed++
-			continue
+			continue tests
 		}
 		body, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
 			fmt.Printf("[%d] ERROR reading response: %v\n", i, err)
 			failed++
-			continue
+			continue tests
 		}
 
 		// Unmarshal both expected and actual into interface{} for comparison
-		var actual any
+		var actual lex.LexDictResponse
 		if err := json.Unmarshal(body, &actual); err != nil {
 			fmt.Printf("[%d] ERROR unmarshalling actual JSON: %v\nBody: %s\n", i, err, string(body))
 			failed++
-			continue
+			continue tests
 		}
-		var expected any
-		if len(t.Expected) > 0 {
-			if err := json.Unmarshal(t.Expected, &expected); err != nil {
-				fmt.Printf("[%d] ERROR unmarshalling expected JSON: %v\nExpected: %s\n", i, err, string(t.Expected))
+
+		actualExtraData := make([]lex.LexExtraData, 0, len(actual.Matches))
+		for _, match := range actual.Matches {
+			extra, ok := match.ExtraData.(map[string]any)
+			if !ok {
+				fmt.Printf("[%d] ERROR type mismatch in ExtraData for term=%s corpus=%s: %T\n", i, t.Term, t.CorpusId, match.ExtraData)
 				failed++
-				continue
+				continue tests
 			}
+			var converted lex.LexExtraData
+			b, err := json.Marshal(extra)
+			if err != nil {
+				fmt.Printf("[%d] ERROR marshaling ExtraData for term=%s corpus=%s: %v\n", i, t.Term, t.CorpusId, err)
+				failed++
+				continue tests
+			}
+			if err := json.Unmarshal(b, &converted); err != nil {
+				fmt.Printf("[%d] ERROR unmarshalling ExtraData for term=%s corpus=%s: %v\n", i, t.Term, t.CorpusId, err)
+				failed++
+				continue tests
+			}
+			actualExtraData = append(actualExtraData, converted)
 		}
 
-		canA := canonicalize(actual)
-		canE := canonicalize(expected)
-
-		if !reflect.DeepEqual(canA, canE) {
+		if !reflect.DeepEqual(t.ExpectedVariants, actualExtraData) {
 			fmt.Printf("[%d] FAIL term=%s corpus=%s\n", i, t.Term, t.CorpusId)
 			fmt.Printf("URL: %s\n", u)
-			expb, _ := json.MarshalIndent(canE, "", "  ")
-			actb, _ := json.MarshalIndent(canA, "", "  ")
-			fmt.Printf("Expected (canonicalized): %s\n", string(expb))
-			fmt.Printf("Actual   (canonicalized): %s\n", string(actb))
+			expb, _ := json.MarshalIndent(actualExtraData, "", "  ")
+			actb, _ := json.MarshalIndent(t.ExpectedVariants, "", "  ")
+			fmt.Printf("Expected: %s\n", string(expb))
+			fmt.Printf("Actual: %s\n", string(actb))
 			failed++
-			continue
+			continue tests
 		}
 		fmt.Printf("[%d] PASS term=%s corpus=%s\n", i, t.Term, t.CorpusId)
 	}
