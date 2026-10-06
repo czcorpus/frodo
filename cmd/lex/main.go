@@ -38,6 +38,7 @@ type cmdAction string
 const (
 	cmdActionImport cmdAction = "import"
 	cmdActionUpdate cmdAction = "update"
+	cmdActionTest   cmdAction = "test"
 )
 
 // Import subcommand flags
@@ -202,13 +203,14 @@ func runSscUpdate(args updateArgs) error {
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Fprintf(os.Stderr, "Usage: %s <command> [options]\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "Commands: %s, %s\n", cmdActionImport, cmdActionUpdate)
+		fmt.Fprintf(os.Stderr, "Commands: %s, %s, %s\n", cmdActionImport, cmdActionUpdate, cmdActionTest)
 		os.Exit(1)
 	}
 
 	// Create subcommand flag sets
 	importCmd := flag.NewFlagSet(string(cmdActionImport), flag.ExitOnError)
 	updateCmd := flag.NewFlagSet(string(cmdActionUpdate), flag.ExitOnError)
+	testCmd := flag.NewFlagSet(string(cmdActionTest), flag.ExitOnError)
 
 	// Define flags for import subcommand
 	var importOpts importArgs
@@ -269,9 +271,18 @@ func main() {
 			os.Exit(1)
 		}
 
+	case cmdActionTest:
+		if err := testCmd.Parse(os.Args[2:]); err != nil {
+			os.Exit(1)
+		}
+		if err := runTest(testCmd.Arg(0)); err != nil {
+			fmt.Fprintf(os.Stderr, "test failed: %v\n", err)
+			os.Exit(1)
+		}
+
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", os.Args[1])
-		fmt.Fprintf(os.Stderr, "Commands: %s, %s\n", cmdActionImport, cmdActionUpdate)
+		fmt.Fprintf(os.Stderr, "Commands: %s, %s, %s\n", cmdActionImport, cmdActionUpdate, cmdActionTest)
 		os.Exit(1)
 	}
 }
