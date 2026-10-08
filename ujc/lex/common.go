@@ -21,7 +21,7 @@ type LexID struct {
 	ID         string `json:"id"`
 	GroupOrder int    `json:"groupOrder"`
 	Homonym    int    `json:"homonym"`
-	Pos        string `json:"pos"`
+	Key        LexKey `json:"key"`
 }
 
 type LexKey struct {
