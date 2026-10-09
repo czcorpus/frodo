@@ -28,7 +28,7 @@ type LexTransform func(context.Context, *sql.DB, Source, []LexItem) ([]LexItem, 
 
 func samePos(sources []LexID) bool {
 	for _, item := range sources {
-		if item.Pos != sources[0].Pos {
+		if item.Key.Pos != sources[0].Key.Pos {
 			return false
 		}
 	}
@@ -97,7 +97,7 @@ func DTIJCR_ResolvePos(sourcePriority []Source) func(ctx context.Context, db *sq
 					if v, ok := item.Sources[source]; ok {
 						variants[i].PosSource = source
 						if samePos(v) {
-							variants[i].Key.Pos = v[0].Pos
+							variants[i].Key.Pos = v[0].Key.Pos
 						}
 						break
 					}
@@ -117,7 +117,7 @@ func IJP_ResolvePos(sourcePriority []Source) func(ctx context.Context, db *sql.D
 				for _, source := range sourcePriority {
 					if v, ok := item.Sources[source]; source != SourceIJP && ok && samePos(v) {
 						item.PosSource = source
-						item.Key.Pos = v[0].Pos
+						item.Key.Pos = v[0].Key.Pos
 						break
 					}
 				}
@@ -235,8 +235,11 @@ func JoinFromIJPToASSC_Uninflected(ctx context.Context, db *sql.DB, variantSourc
 func SSC_ResolveGenderMX(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
 	// SSC does not distinguish masculine genders, replace M, I, B with MX
 	for i, item := range variants {
-		if item.PosSource == SourceSSC && (item.Key.Gender == GenderMascAnim || item.Key.Gender == GenderMascInan || item.Key.Gender == GenderMascAnimInan) {
-			variants[i].Key.Gender = GenderMascUnknown
+		if item.HasSource(SourceSSC) && (item.Key.Gender == GenderMascAnim || item.Key.Gender == GenderMascInan || item.Key.Gender == GenderMascAnimInan) {
+			variants[i].Sources[SourceSSC] = collections.SliceMap(variants[i].Sources[SourceSSC], func(v LexID, i int) LexID {
+				v.Key.Gender = GenderMascUnknown
+				return v
+			})
 		}
 	}
 	return variants, nil
