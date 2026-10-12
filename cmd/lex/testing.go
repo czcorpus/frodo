@@ -25,6 +25,7 @@ import (
 	"net/url"
 	"os"
 	"reflect"
+	"strings"
 )
 
 // Test config structures
@@ -110,13 +111,9 @@ tests:
 
 		if !reflect.DeepEqual(t.ExpectedVariants, actualExtraData) {
 			fmt.Printf("[%d] FAIL term=%s corpus=%s\n", i, t.Term, t.CorpusId)
-			if verbose {
-				fmt.Printf("URL: %s\n", u)
-				expb, _ := json.MarshalIndent(actualExtraData, "", "  ")
-				actb, _ := json.MarshalIndent(t.ExpectedVariants, "", "  ")
-				fmt.Printf("Expected: %s\n", string(expb))
-				fmt.Printf("Actual: %s\n", string(actb))
-			}
+			expb, _ := json.MarshalIndent(t.ExpectedVariants, "", "  ")
+			actb, _ := json.MarshalIndent(actualExtraData, "", "  ")
+			printDiff(string(expb), string(actb), verbose)
 			failed++
 			continue tests
 		}
@@ -134,4 +131,32 @@ func bytesOrString(b json.RawMessage) string {
 		return "null"
 	}
 	return string(b)
+}
+
+func printDiff(expected, actual string, verbose bool) {
+	expectedLines := strings.Split(expected, "\n")
+	actualLines := strings.Split(actual, "\n")
+	maxLines := max(len(actualLines), len(expectedLines))
+
+	for i := range maxLines {
+		var expLine, actLine string
+		if i < len(expectedLines) {
+			expLine = expectedLines[i]
+		}
+		if i < len(actualLines) {
+			actLine = actualLines[i]
+		}
+		if expLine == actLine {
+			if verbose {
+				fmt.Printf("  %03d: %s\n", i+1, expLine)
+			}
+			continue
+		}
+		if expLine != "" {
+			fmt.Printf("- %03d: %s\n", i+1, expLine)
+		}
+		if actLine != "" {
+			fmt.Printf("+ %03d: %s\n", i+1, actLine)
+		}
+	}
 }

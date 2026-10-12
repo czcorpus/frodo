@@ -229,7 +229,7 @@ func main() {
 
 	// Define flags for test subcommand
 	var testOpts testArgs
-	updateCmd.BoolVar(&testOpts.verbose, "verbose", false, "display expected/actual on fail")
+	testCmd.BoolVar(&testOpts.verbose, "verbose", false, "display expected/actual on fail")
 
 	// Parse based on subcommand
 	switch cmdAction(os.Args[1]) {
