@@ -50,6 +50,10 @@ func ApplyTransformations(ctx context.Context, db *sql.DB, variantSource Source,
 	return variants, nil
 }
 
+func Identity(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
+	return variants, nil
+}
+
 func SortTransformation(sortBySource Source) func(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
 	return func(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
 		return sortVariants2(variants, sortBySource), nil
@@ -108,8 +112,8 @@ func DTIJCR_ResolvePos(sourcePriority []Source) func(ctx context.Context, db *sq
 	}
 }
 
-func IJP_ResolvePos(sourcePriority []Source) func(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
-	// IJP should never be source of PoS
+func IJP_ResolveKey(sourcePriority []Source) func(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
+	// IJP should never be source of PoS/plurality
 	// select highest available source from sourcePriority list
 	return func(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
 		for i, item := range variants {
@@ -118,6 +122,7 @@ func IJP_ResolvePos(sourcePriority []Source) func(ctx context.Context, db *sql.D
 					if v, ok := item.Sources[source]; source != SourceIJP && ok && samePos(v) {
 						item.PosSource = source
 						item.Key.Pos = v[0].Key.Pos
+						item.Key.Plurality = v[0].Key.Plurality
 						break
 					}
 				}
@@ -208,10 +213,10 @@ func JoinFromSSC_M_To_IB(ctx context.Context, db *sql.DB, variantSource Source, 
 	return variants, nil
 }
 
-func JoinFromIJPToASSC_Uninflected(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
-	// to uninflected ASSC data add also IJP "inflected" data
-	// if no inflected ASSC variant exists
-	if variantSource == SourceASSC {
+func JoinFromIJP_ToUninflected(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
+	// to uninflected data add also IJP "inflected" data
+	// if no inflected variant exists
+	if variantSource != SourceIJP {
 		for _, item := range variants {
 			if item.Key.Uninflected == UninflectedTrue && !item.HasSource(SourceIJP) {
 				search := item.Key
@@ -220,12 +225,39 @@ func JoinFromIJPToASSC_Uninflected(ctx context.Context, db *sql.DB, variantSourc
 				if !hasVariant(search, variants) {
 					ids, err := SearchLexItemID(ctx, db, search, SourceIJP)
 					if err != nil {
-						return nil, fmt.Errorf("failed to join from IJP to uninflected ASSC data: %w", err)
+						return nil, fmt.Errorf("failed to join from IJP to uninflected data: %w", err)
 					}
 					if len(ids) > 0 {
 						item.Sources[SourceIJP] = ids
 					}
 				}
+			}
+		}
+	}
+	return variants, nil
+}
+
+func JoinToIJP_IgnoreUninflected(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
+	// to inflected IJP data add also "uninflected" data
+	// IJP does not distinguish uninflected
+	if variantSource == SourceIJP {
+		for i, item := range variants {
+			search := item.Key
+			search.Uninflected = UninflectedTrue
+			search.Plurality = PluralityUnknown
+			sources, err := SearchSources(ctx, db, search)
+			if err != nil {
+				return nil, fmt.Errorf("failed to join to IJP uninflected data: %w", err)
+			}
+			if len(sources) > 0 {
+				for source, ids := range sources {
+					if current, ok := item.Sources[source]; ok {
+						item.Sources[source] = append(current, ids...)
+					} else {
+						item.Sources[source] = ids
+					}
+				}
+				variants[i].Sources = item.Sources
 			}
 		}
 	}

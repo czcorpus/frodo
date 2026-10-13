@@ -33,6 +33,7 @@ type LexKey struct {
 	Plurality   int    `json:"plurality"`
 }
 
+// if som key has plurality/uninflected unknown, don't take them into account
 func (a *LexKey) UnknownEqual(o *LexKey) bool {
 	if a.Lemma != o.Lemma {
 		return false

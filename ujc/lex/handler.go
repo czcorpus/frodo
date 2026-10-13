@@ -49,6 +49,21 @@ type Handler struct {
 	sourcePriority []Source
 }
 
+func (actions *Handler) sourceHasHigherPriority(src, other Source) bool {
+	if src == other {
+		return false
+	}
+	for _, v := range actions.sourcePriority {
+		if v == src {
+			return true
+		}
+		if v == other {
+			return false
+		}
+	}
+	return false
+}
+
 func (actions *Handler) searchCorpusEntry(ctx context.Context, corpusId, sublemma, pos string) (*dictionary.Lemma, error) {
 	if sublemma == "" {
 		return nil, nil
@@ -152,11 +167,16 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 	// apply special transformations after getting source data
 	lexItems, err = ApplyTransformations(ctx, actions.db.DB(), usedCandidate.Source, lexItems,
 		DTIJCR_ResolvePos(actions.sourcePriority),
-		JoinFromIJPToASSC_Uninflected,
-		JoinFromIJP_NAP_To_C,
-		JoinToIJP_C_To_NAP,
-		JoinFromSSC_M_To_IB,
-		IJP_ResolvePos(actions.sourcePriority),
+		util.Ternary(actions.sourceHasHigherPriority(SourceIJP, usedCandidate.Source),
+			Identity,
+			util.Ternary(usedCandidate.Source == SourceIJP, JoinToIJP_IgnoreUninflected, JoinFromIJP_ToUninflected)),
+		util.Ternary(actions.sourceHasHigherPriority(SourceIJP, usedCandidate.Source),
+			Identity,
+			util.Ternary(usedCandidate.Source == SourceIJP, JoinToIJP_C_To_NAP, JoinFromIJP_NAP_To_C)),
+		util.Ternary(actions.sourceHasHigherPriority(SourceSSC, usedCandidate.Source),
+			Identity,
+			JoinFromSSC_M_To_IB),
+		IJP_ResolveKey(actions.sourcePriority),
 		SSC_ResolveGenderMX,
 		SortTransformation(usedCandidate.Source),
 	)
