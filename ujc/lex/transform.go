@@ -22,6 +22,7 @@ import (
 	"fmt"
 
 	"github.com/czcorpus/cnc-gokit/collections"
+	"github.com/rs/zerolog/log"
 )
 
 type LexTransform func(context.Context, *sql.DB, Source, []LexItem) ([]LexItem, error)
@@ -29,6 +30,15 @@ type LexTransform func(context.Context, *sql.DB, Source, []LexItem) ([]LexItem, 
 func samePos(sources []LexID) bool {
 	for _, item := range sources {
 		if item.Key.Pos != sources[0].Key.Pos {
+			return false
+		}
+	}
+	return true
+}
+
+func samePlurality(sources []LexID) bool {
+	for _, item := range sources {
+		if item.Key.Plurality != sources[0].Key.Plurality {
 			return false
 		}
 	}
@@ -112,7 +122,7 @@ func DTIJCR_ResolvePos(sourcePriority []Source) func(ctx context.Context, db *sq
 	}
 }
 
-func IJP_ResolveKey(sourcePriority []Source) func(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
+func IJP_ResolveVariantKey(sourcePriority []Source) func(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
 	// IJP should never be source of PoS/plurality
 	// select highest available source from sourcePriority list
 	return func(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
@@ -122,7 +132,11 @@ func IJP_ResolveKey(sourcePriority []Source) func(ctx context.Context, db *sql.D
 					if v, ok := item.Sources[source]; source != SourceIJP && ok && samePos(v) {
 						item.PosSource = source
 						item.Key.Pos = v[0].Key.Pos
-						item.Key.Plurality = v[0].Key.Plurality
+						if samePlurality(v) {
+							item.Key.Plurality = v[0].Key.Plurality
+						} else {
+							log.Debug().Any("key", item.Key).Msgf("found multiple plurality items, can not resolve")
+						}
 						break
 					}
 				}

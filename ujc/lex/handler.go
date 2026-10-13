@@ -174,7 +174,7 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 			Identity,
 			JoinFromSSC_M_To_IB),
 		IJP_RemoveUninflected,
-		IJP_ResolveKey(actions.sourcePriority),
+		IJP_ResolveVariantKey(actions.sourcePriority),
 		SSC_ResolveGenderMX,
 		SortTransformation(usedCandidate.Source),
 	)
