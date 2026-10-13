@@ -213,51 +213,16 @@ func JoinFromSSC_M_To_IB(ctx context.Context, db *sql.DB, variantSource Source, 
 	return variants, nil
 }
 
-func JoinFromIJP_ToUninflected(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
-	// to uninflected data add also IJP "inflected" data
-	// if no inflected variant exists
+func IJP_RemoveUninflected(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
+	// remove ijp source from uninflected data if inflected variant exists
 	if variantSource != SourceIJP {
-		for _, item := range variants {
-			if item.Key.Uninflected == UninflectedTrue && !item.HasSource(SourceIJP) {
+		for i, item := range variants {
+			if item.Key.Uninflected == UninflectedTrue && item.HasSource(SourceIJP) {
 				search := item.Key
 				search.Uninflected = UninflectedFalse
-				search.Plurality = PluralityUnknown
-				if !hasVariant(search, variants) {
-					ids, err := SearchLexItemID(ctx, db, search, SourceIJP)
-					if err != nil {
-						return nil, fmt.Errorf("failed to join from IJP to uninflected data: %w", err)
-					}
-					if len(ids) > 0 {
-						item.Sources[SourceIJP] = ids
-					}
+				if hasVariant(search, variants) {
+					delete(variants[i].Sources, SourceIJP)
 				}
-			}
-		}
-	}
-	return variants, nil
-}
-
-func JoinToIJP_IgnoreUninflected(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
-	// to inflected IJP data add also "uninflected" data
-	// IJP does not distinguish uninflected
-	if variantSource == SourceIJP {
-		for i, item := range variants {
-			search := item.Key
-			search.Uninflected = UninflectedTrue
-			search.Plurality = PluralityUnknown
-			sources, err := SearchSources(ctx, db, search)
-			if err != nil {
-				return nil, fmt.Errorf("failed to join to IJP uninflected data: %w", err)
-			}
-			if len(sources) > 0 {
-				for source, ids := range sources {
-					if current, ok := item.Sources[source]; ok {
-						item.Sources[source] = append(current, ids...)
-					} else {
-						item.Sources[source] = ids
-					}
-				}
-				variants[i].Sources = item.Sources
 			}
 		}
 	}

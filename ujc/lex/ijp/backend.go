@@ -55,7 +55,7 @@ func InsertDictChunk(ctx context.Context, tx *sql.Tx, data []SrcFileRow) error {
 		gender := sql.NullString{String: v.Gender, Valid: v.Gender != ""}
 		aspect := sql.NullString{String: v.Aspect, Valid: v.Aspect != ""}
 		plurality := lex.PluralityUnknown
-		uninflected := lex.UninflectedFalse
+		uninflected := lex.UninflectedUnknown
 		dataArgs = append(dataArgs, groupId, homonym, groupOrder, v.Variant, v.Pos, gender, aspect, plurality, uninflected, lex.SourceIJP, v.ExternalID)
 	}
 	_, err := tx.ExecContext(
@@ -90,7 +90,7 @@ func InsertDictChunk(ctx context.Context, tx *sql.Tx, data []SrcFileRow) error {
 			gender := sql.NullString{String: item.Gender, Valid: item.Gender != ""}
 			aspect := sql.NullString{String: item.Aspect, Valid: item.Aspect != ""}
 			plurality := lex.PluralityUnknown
-			uninflected := lex.UninflectedFalse
+			uninflected := lex.UninflectedUnknown
 			_, err := tx.ExecContext(
 				ctx,
 				"INSERT INTO lex_dictionary (group_id, homonym, group_order, lemma, pos, gender, aspect, plurality, uninflected, source, external_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ",
