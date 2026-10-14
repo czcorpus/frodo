@@ -25,7 +25,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-type LexTransform func(context.Context, *sql.DB, Source, []LexItem) ([]LexItem, error)
+type LexTransform func(context.Context, *sql.DB, []Source, Source, []LexItem) ([]LexItem, error)
 
 func samePos(sources []LexID) bool {
 	for _, item := range sources {
@@ -45,13 +45,28 @@ func samePlurality(sources []LexID) bool {
 	return true
 }
 
-func ApplyTransformations(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem, transforms ...LexTransform) ([]LexItem, error) {
+func sourceHasHigherPriority(sourcePriority []Source, src, other Source) bool {
+	if src == other {
+		return false
+	}
+	for _, v := range sourcePriority {
+		if v == src {
+			return true
+		}
+		if v == other {
+			return false
+		}
+	}
+	return false
+}
+
+func ApplyTransformations(ctx context.Context, db *sql.DB, sourcePriority []Source, variantSource Source, variants []LexItem, transforms ...LexTransform) ([]LexItem, error) {
 	var err error
 	for _, transform := range transforms {
 		if transform == nil {
 			continue
 		}
-		variants, err = transform(ctx, db, variantSource, variants)
+		variants, err = transform(ctx, db, sourcePriority, variantSource, variants)
 		if err != nil {
 			return nil, fmt.Errorf("failed to transform data: %w", err)
 		}
@@ -60,17 +75,13 @@ func ApplyTransformations(ctx context.Context, db *sql.DB, variantSource Source,
 	return variants, nil
 }
 
-func Identity(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
-	return variants, nil
-}
-
-func SortTransformation(sortBySource Source) func(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
-	return func(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
+func SortTransformation(sortBySource Source) func(ctx context.Context, db *sql.DB, sourcePriority []Source, variantSource Source, variants []LexItem) ([]LexItem, error) {
+	return func(ctx context.Context, db *sql.DB, sourcePriority []Source, variantSource Source, variants []LexItem) ([]LexItem, error) {
 		return sortVariants2(variants, sortBySource), nil
 	}
 }
 
-func DTIJCR_MergeItems(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
+func DTIJCR__MergeItems(ctx context.Context, db *sql.DB, sourcePriority []Source, variantSource Source, variants []LexItem) ([]LexItem, error) {
 	// making DTIJCR group from any DTIJ, D, T, I, J, R item
 	var result []LexItem
 	for _, item := range variants {
@@ -102,74 +113,72 @@ func DTIJCR_MergeItems(ctx context.Context, db *sql.DB, variantSource Source, va
 	return result, nil
 }
 
-func DTIJCR_ResolvePos(sourcePriority []Source) func(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
+func DTIJCR__ResolvePos(ctx context.Context, db *sql.DB, sourcePriority []Source, variantSource Source, variants []LexItem) ([]LexItem, error) {
 	// reduce DTIJCR to only one value, if possible
-	return func(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
-		for i, item := range variants {
-			if item.Key.Pos == PosDTIJCR {
-				for _, source := range sourcePriority {
-					if v, ok := item.Sources[source]; ok {
-						variants[i].PosSource = source
-						if samePos(v) {
-							variants[i].Key.Pos = v[0].Key.Pos
-						}
-						break
-					}
-				}
-			}
-		}
-		return variants, nil
-	}
-}
-
-func IJP_ResolveVariantKey(sourcePriority []Source) func(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
-	// IJP should never be source of PoS/plurality
-	// select highest available source from sourcePriority list
-	return func(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
-		for i, item := range variants {
-			if item.PosSource == SourceIJP {
-				for _, source := range sourcePriority {
-					if v, ok := item.Sources[source]; source != SourceIJP && ok && samePos(v) {
-						item.PosSource = source
-						item.Key.Pos = v[0].Key.Pos
-						if samePlurality(v) {
-							item.Key.Plurality = v[0].Key.Plurality
-						} else {
-							log.Debug().Any("key", item.Key).Msgf("found multiple plurality items, can not resolve")
-						}
-						break
-					}
-				}
-				if item.PosSource == SourceIJP {
-					item.PosSource = SourceEmpty
-				}
-				variants[i] = item
-			}
-		}
-		return variants, nil
-	}
-}
-
-func JoinFromIJP_NAP_To_C(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
-	// if data pos == C and not uninflected and no IJP source
-	// add to data IJP source with pos N|A|P
 	for i, item := range variants {
-		if !item.HasSource(SourceIJP) && item.Key.Pos == PosNum && item.Key.Uninflected == UninflectedFalse {
-			for _, pos := range []string{PosNoun, PosAdj, PosPron} {
+		if item.Key.Pos == PosDTIJCR {
+			for _, source := range sourcePriority {
+				if v, ok := item.Sources[source]; ok {
+					variants[i].PosSource = source
+					if samePos(v) {
+						variants[i].Key.Pos = v[0].Key.Pos
+					}
+					break
+				}
+			}
+		}
+	}
+	return variants, nil
+}
+
+func IJP__C_Is_NAP(ctx context.Context, db *sql.DB, sourcePriority []Source, variantSource Source, variants []LexItem) ([]LexItem, error) {
+	// if IJP is higher than used source, there should be no ijp data
+	if sourceHasHigherPriority(sourcePriority, SourceIJP, variantSource) {
+		return variants, nil
+
+	} else if variantSource == SourceIJP {
+		// join C from other sources to NAP in IJP
+		for i, item := range variants {
+			if item.PosSource == SourceIJP && (item.Key.Pos == PosNoun || item.Key.Pos == PosAdj || item.Key.Pos == PosPron) && len(item.Sources) == 1 {
 				search := LexKey{
 					Lemma:       item.Key.Lemma,
-					Pos:         pos,
+					Pos:         PosNum,
 					Gender:      GenderUnknown,
 					Aspect:      AspectUnknown,
 					Uninflected: UninflectedFalse,
 					Plurality:   PluralityUnknown,
 				}
-				ids, err := SearchLexItemID(ctx, db, search, SourceIJP)
+				sources, err := SearchSources(ctx, db, search)
 				if err != nil {
-					return nil, fmt.Errorf("failed to join N|A|P to C in IJP: %w", err)
+					return nil, fmt.Errorf("failed to search C for N|A|P in IJP: %w", err)
 				}
-				if len(ids) != 0 {
-					variants[i].Sources[SourceIJP] = ids
+				if len(sources) > 0 {
+					sources[SourceIJP] = item.Sources[SourceIJP]
+					variants[i].Sources = sources
+				}
+			}
+		}
+
+	} else {
+		// join NAP from IJP to C in used source
+		for i, item := range variants {
+			if !item.HasSource(SourceIJP) && item.Key.Pos == PosNum && item.Key.Uninflected == UninflectedFalse {
+				for _, pos := range []string{PosNoun, PosAdj, PosPron} {
+					search := LexKey{
+						Lemma:       item.Key.Lemma,
+						Pos:         pos,
+						Gender:      GenderUnknown,
+						Aspect:      AspectUnknown,
+						Uninflected: UninflectedFalse,
+						Plurality:   PluralityUnknown,
+					}
+					ids, err := SearchLexItemID(ctx, db, search, SourceIJP)
+					if err != nil {
+						return nil, fmt.Errorf("failed to join N|A|P to C in IJP: %w", err)
+					}
+					if len(ids) != 0 {
+						variants[i].Sources[SourceIJP] = ids
+					}
 				}
 			}
 		}
@@ -177,31 +186,33 @@ func JoinFromIJP_NAP_To_C(ctx context.Context, db *sql.DB, variantSource Source,
 	return variants, nil
 }
 
-func JoinToIJP_C_To_NAP(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
+func IJP__ResolveVariantKey(ctx context.Context, db *sql.DB, sourcePriority []Source, variantSource Source, variants []LexItem) ([]LexItem, error) {
+	// IJP should never be source of PoS/plurality
+	// select highest available source from sourcePriority list
 	for i, item := range variants {
-		if item.PosSource == SourceIJP && (item.Key.Pos == PosNoun || item.Key.Pos == PosAdj || item.Key.Pos == PosPron) && len(item.Sources) == 1 {
-			search := LexKey{
-				Lemma:       item.Key.Lemma,
-				Pos:         PosNum,
-				Gender:      GenderUnknown,
-				Aspect:      AspectUnknown,
-				Uninflected: UninflectedFalse,
-				Plurality:   PluralityUnknown,
+		if item.PosSource == SourceIJP {
+			for _, source := range sourcePriority {
+				if v, ok := item.Sources[source]; source != SourceIJP && ok && samePos(v) {
+					item.PosSource = source
+					item.Key.Pos = v[0].Key.Pos
+					if samePlurality(v) {
+						item.Key.Plurality = v[0].Key.Plurality
+					} else {
+						log.Debug().Any("key", item.Key).Msgf("found multiple plurality items, can not resolve")
+					}
+					break
+				}
 			}
-			sources, err := SearchSources(ctx, db, search)
-			if err != nil {
-				return nil, fmt.Errorf("failed to search C for N|A|P in IJP: %w", err)
+			if item.PosSource == SourceIJP {
+				item.PosSource = SourceEmpty
 			}
-			if len(sources) > 0 {
-				sources[SourceIJP] = item.Sources[SourceIJP]
-				variants[i].Sources = sources
-			}
+			variants[i] = item
 		}
 	}
 	return variants, nil
 }
 
-func IJP_RemoveUninflected(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
+func IJP__RemoveUninflected(ctx context.Context, db *sql.DB, sourcePriority []Source, variantSource Source, variants []LexItem) ([]LexItem, error) {
 	// remove ijp source from uninflected data if inflected variant exists
 	if variantSource != SourceIJP {
 		for i, item := range variants {

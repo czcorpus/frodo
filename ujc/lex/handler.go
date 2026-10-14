@@ -49,21 +49,6 @@ type Handler struct {
 	sourcePriority []Source
 }
 
-func (actions *Handler) sourceHasHigherPriority(src, other Source) bool {
-	if src == other {
-		return false
-	}
-	for _, v := range actions.sourcePriority {
-		if v == src {
-			return true
-		}
-		if v == other {
-			return false
-		}
-	}
-	return false
-}
-
 func (actions *Handler) searchCorpusEntry(ctx context.Context, corpusId, sublemma, pos string) (*dictionary.Lemma, error) {
 	if sublemma == "" {
 		return nil, nil
@@ -146,8 +131,8 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 	}
 
 	// apply special transformations before getting source data
-	lexItems, err = ApplyTransformations(ctx, actions.db.DB(), usedCandidate.Source, lexItems,
-		DTIJCR_MergeItems,
+	lexItems, err = ApplyTransformations(ctx, actions.db.DB(), actions.sourcePriority, usedCandidate.Source, lexItems,
+		DTIJCR__MergeItems,
 	)
 	if err != nil {
 		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
@@ -165,13 +150,11 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 	}
 
 	// apply special transformations after getting source data
-	lexItems, err = ApplyTransformations(ctx, actions.db.DB(), usedCandidate.Source, lexItems,
-		DTIJCR_ResolvePos(actions.sourcePriority),
-		util.Ternary(actions.sourceHasHigherPriority(SourceIJP, usedCandidate.Source),
-			Identity,
-			util.Ternary(usedCandidate.Source == SourceIJP, JoinToIJP_C_To_NAP, JoinFromIJP_NAP_To_C)),
-		IJP_RemoveUninflected,
-		IJP_ResolveVariantKey(actions.sourcePriority),
+	lexItems, err = ApplyTransformations(ctx, actions.db.DB(), actions.sourcePriority, usedCandidate.Source, lexItems,
+		DTIJCR__ResolvePos,
+		IJP__C_Is_NAP,
+		IJP__RemoveUninflected,
+		IJP__ResolveVariantKey,
 		SortTransformation(usedCandidate.Source),
 	)
 	if err != nil {
