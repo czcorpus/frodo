@@ -19,6 +19,7 @@ package lex
 type LexID struct {
 	ID         string `json:"id"`
 	ParentID   string `json:"parentId"`
+	GroupID    string `json:"groupId"`
 	GroupOrder int    `json:"groupOrder"`
 	Homonym    int    `json:"homonym"`
 	Key        LexKey `json:"key"`
@@ -60,6 +61,7 @@ type LexItem struct {
 	Key       LexKey             `json:"key"`
 	PosSource Source             `json:"posSource"`
 	Sources   map[Source][]LexID `json:"sources"`
+	Group     int                `json:"group"`
 }
 
 func (li *LexItem) Equal(item *LexItem) bool {

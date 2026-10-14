@@ -156,6 +156,7 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 		IJP__RemoveUninflected,
 		IJP__ResolveVariantKey,
 		SortTransformation(usedCandidate.Source),
+		ResolveGroups,
 	)
 	if err != nil {
 		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)

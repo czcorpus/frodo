@@ -281,7 +281,7 @@ func SearchSources(ctx context.Context, db *sql.DB, lexKey LexKey) (map[Source][
 	}
 
 	query := `
-		SELECT source, JSON_ARRAYAGG(JSON_OBJECT('id', external_id, 'parentId', external_parent_id, 'groupOrder', group_order, 'homonym', homonym, 'key', JSON_OBJECT('pos', pos, 'gender', COALESCE(gender, ''), 'aspect', COALESCE(aspect, ''), 'uninflected', uninflected, 'plurality', plurality)) ORDER BY homonym) AS idents
+		SELECT source, JSON_ARRAYAGG(JSON_OBJECT('id', external_id, 'parentId', external_parent_id, 'groupId', COALESCE(group_id, ''), 'groupOrder', group_order, 'homonym', homonym, 'key', JSON_OBJECT('pos', pos, 'gender', COALESCE(gender, ''), 'aspect', COALESCE(aspect, ''), 'uninflected', uninflected, 'plurality', plurality)) ORDER BY homonym) AS idents
 		FROM lex_dictionary
 		WHERE ` + strings.Join(where, " AND ") + `
 		GROUP BY source
@@ -363,7 +363,7 @@ func SearchLexItemID(ctx context.Context, db *sql.DB, lexKey LexKey, source Sour
 	where = append(where, "source = ?")
 	args = append(args, source)
 
-	query := "SELECT external_id, external_parent_id, group_order, homonym, pos, gender, aspect, uninflected, plurality FROM lex_dictionary WHERE " + strings.Join(where, " AND ")
+	query := "SELECT external_id, external_parent_id, group_id, group_order, homonym, pos, gender, aspect, uninflected, plurality FROM lex_dictionary WHERE " + strings.Join(where, " AND ")
 
 	row, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -375,14 +375,16 @@ func SearchLexItemID(ctx context.Context, db *sql.DB, lexKey LexKey, source Sour
 	for row.Next() {
 		var lexId LexID
 		var externalParentID sql.NullString
+		var groupID sql.NullString
 		var genderArg, aspectArg sql.NullString
-		if err := row.Scan(&lexId.ID, &externalParentID, &lexId.GroupOrder, &lexId.Homonym, &lexId.Key.Pos, &genderArg, &aspectArg, &lexId.Key.Uninflected, &lexId.Key.Plurality); err != nil {
+		if err := row.Scan(&lexId.ID, &externalParentID, &groupID, &lexId.GroupOrder, &lexId.Homonym, &lexId.Key.Pos, &genderArg, &aspectArg, &lexId.Key.Uninflected, &lexId.Key.Plurality); err != nil {
 			if err == sql.ErrNoRows {
 				return lexIds, nil
 			}
 			return nil, fmt.Errorf("failed to scan the lex id: %w", err)
 		}
 		lexId.ParentID = externalParentID.String
+		lexId.GroupID = groupID.String
 		if genderArg.Valid {
 			lexId.Key.Gender = genderArg.String
 		}

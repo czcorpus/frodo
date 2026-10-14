@@ -22,6 +22,7 @@ import (
 	"fmt"
 
 	"github.com/czcorpus/cnc-gokit/collections"
+	"github.com/czcorpus/cnc-gokit/util"
 	"github.com/rs/zerolog/log"
 )
 
@@ -79,6 +80,66 @@ func SortTransformation(sortBySource Source) func(ctx context.Context, db *sql.D
 	return func(ctx context.Context, db *sql.DB, sourcePriority []Source, variantSource Source, variants []LexItem) ([]LexItem, error) {
 		return sortVariants2(variants, sortBySource), nil
 	}
+}
+
+func ResolveGroups(ctx context.Context, db *sql.DB, sourcePriority []Source, variantSource Source, variants []LexItem) ([]LexItem, error) {
+	groupIndex := make(map[string]int)
+	groupAssignments := make(map[int]string)
+	nextGroupID := 1
+
+	for i := range variants {
+		variant := &variants[i]
+		for _, id := range variant.Sources[variantSource] {
+			groupId := util.Ternary(id.GroupID == "", string(variantSource)+"-"+id.ID, id.GroupID)
+			if gid, ok := groupIndex[groupId]; ok {
+				variant.Group = gid
+				if current, exists := groupAssignments[gid]; exists && current != groupId {
+					for otherID, otherGroup := range groupAssignments {
+						if otherGroup == groupId {
+							groupAssignments[otherID] = current
+						}
+					}
+				}
+				continue
+			}
+			groupIndex[groupId] = nextGroupID
+			groupAssignments[nextGroupID] = groupId
+			variant.Group = nextGroupID
+			nextGroupID++
+		}
+
+		if variant.Group == 0 {
+			continue
+		}
+
+		for j := range variants {
+			if i == j || variants[j].Group != 0 {
+				continue
+			}
+			for _, id := range variants[j].Sources[variantSource] {
+				candidateGroupID := util.Ternary(id.GroupID == "", string(variantSource)+"-"+id.ID, id.GroupID)
+				if groupAssignments[variant.Group] == candidateGroupID {
+					variants[j].Group = variant.Group
+					break
+				}
+			}
+		}
+	}
+
+	groupRemap := make(map[int]int)
+	newGroupID := 1
+	for i := range variants {
+		if variants[i].Group == 0 {
+			continue
+		}
+		if _, exists := groupRemap[variants[i].Group]; !exists {
+			groupRemap[variants[i].Group] = newGroupID
+			newGroupID++
+		}
+		variants[i].Group = groupRemap[variants[i].Group]
+	}
+
+	return variants, nil
 }
 
 func DTIJCR__MergeItems(ctx context.Context, db *sql.DB, sourcePriority []Source, variantSource Source, variants []LexItem) ([]LexItem, error) {
