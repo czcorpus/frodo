@@ -201,32 +201,6 @@ func JoinToIJP_C_To_NAP(ctx context.Context, db *sql.DB, variantSource Source, v
 	return variants, nil
 }
 
-func JoinFromSSC_M_To_IB(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
-	// if data gender == I || B and no SSC source
-	// add to data SSC source with gender M
-	// (SSC source does not distinct masculine genders)
-	for i, item := range variants {
-		if !item.HasSource(SourceSSC) && (item.Key.Gender == GenderMascInan || item.Key.Gender == GenderMascAnimInan) {
-			search := LexKey{
-				Lemma:       item.Key.Lemma,
-				Pos:         item.Key.Pos,
-				Gender:      GenderMascAnim,
-				Aspect:      item.Key.Aspect,
-				Uninflected: item.Key.Uninflected,
-				Plurality:   0,
-			}
-			ids, err := SearchLexItemID(ctx, db, search, SourceSSC)
-			if err != nil {
-				return nil, fmt.Errorf("failed to join masculine gender SSC data: %w", err)
-			}
-			if len(ids) != 0 {
-				variants[i].Sources[SourceSSC] = ids
-			}
-		}
-	}
-	return variants, nil
-}
-
 func IJP_RemoveUninflected(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
 	// remove ijp source from uninflected data if inflected variant exists
 	if variantSource != SourceIJP {
@@ -238,19 +212,6 @@ func IJP_RemoveUninflected(ctx context.Context, db *sql.DB, variantSource Source
 					delete(variants[i].Sources, SourceIJP)
 				}
 			}
-		}
-	}
-	return variants, nil
-}
-
-func SSC_ResolveGenderMX(ctx context.Context, db *sql.DB, variantSource Source, variants []LexItem) ([]LexItem, error) {
-	// SSC does not distinguish masculine genders, replace M, I, B with MX
-	for i, item := range variants {
-		if item.HasSource(SourceSSC) && (item.Key.Gender == GenderMascAnim || item.Key.Gender == GenderMascInan || item.Key.Gender == GenderMascAnimInan) {
-			variants[i].Sources[SourceSSC] = collections.SliceMap(variants[i].Sources[SourceSSC], func(v LexID, i int) LexID {
-				v.Key.Gender = GenderMascUnknown
-				return v
-			})
 		}
 	}
 	return variants, nil

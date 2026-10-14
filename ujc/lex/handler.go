@@ -170,12 +170,8 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 		util.Ternary(actions.sourceHasHigherPriority(SourceIJP, usedCandidate.Source),
 			Identity,
 			util.Ternary(usedCandidate.Source == SourceIJP, JoinToIJP_C_To_NAP, JoinFromIJP_NAP_To_C)),
-		util.Ternary(actions.sourceHasHigherPriority(SourceSSC, usedCandidate.Source),
-			Identity,
-			JoinFromSSC_M_To_IB),
 		IJP_RemoveUninflected,
 		IJP_ResolveVariantKey(actions.sourcePriority),
-		SSC_ResolveGenderMX,
 		SortTransformation(usedCandidate.Source),
 	)
 	if err != nil {
@@ -192,7 +188,7 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 			uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 			return
 		}
-		// corpus entry needs to replace "B" gender with "MI"
+		// corpus entry needs to replace "B" and "U" gender with "MI"
 		lexSpecifier := cmp.Or(util.Ternary(item.Key.Gender == GenderMascAnimInan || item.Key.Gender == GenderMascUnknown, "MI", item.Key.Gender), item.Key.Aspect)
 		if corpusEntry == nil {
 			corpusEntry = &dictionary.Lemma{
