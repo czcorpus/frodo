@@ -36,9 +36,10 @@ import (
 type cmdAction string
 
 const (
-	cmdActionImport      cmdAction = "import"
-	cmdActionUpdate      cmdAction = "update"
-	cmdActionVariantTest cmdAction = "variant-test"
+	cmdActionImport   cmdAction = "import"
+	cmdActionUpdate   cmdAction = "update"
+	cmdActionTest     cmdAction = "test"
+	cmdActionTestSave cmdAction = "test-save"
 )
 
 // Import subcommand flags
@@ -58,6 +59,10 @@ type updateArgs struct {
 
 type testArgs struct {
 	verbose bool
+}
+
+type saveArgs struct {
+	term string
 }
 
 func runIjpImport(args importArgs) {
@@ -207,14 +212,15 @@ func runSscUpdate(args updateArgs) error {
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Fprintf(os.Stderr, "Usage: %s <command> [options]\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "Commands: %s, %s, %s\n", cmdActionImport, cmdActionUpdate, cmdActionVariantTest)
+		fmt.Fprintf(os.Stderr, "Commands: %s, %s, %s, %s\n", cmdActionImport, cmdActionUpdate, cmdActionTest, cmdActionTestSave)
 		os.Exit(1)
 	}
 
 	// Create subcommand flag sets
 	importCmd := flag.NewFlagSet(string(cmdActionImport), flag.ExitOnError)
 	updateCmd := flag.NewFlagSet(string(cmdActionUpdate), flag.ExitOnError)
-	testCmd := flag.NewFlagSet(string(cmdActionVariantTest), flag.ExitOnError)
+	testCmd := flag.NewFlagSet(string(cmdActionTest), flag.ExitOnError)
+	saveCmd := flag.NewFlagSet(string(cmdActionTestSave), flag.ExitOnError)
 
 	// Define flags for import subcommand
 	var importOpts importArgs
@@ -227,9 +233,12 @@ func main() {
 	updateCmd.StringVar(&updateOpts.targetID, "id", "", "target ID to update")
 	updateCmd.BoolVar(&updateOpts.force, "force", false, "force update even if conflicts exist")
 
-	// Define flags for test subcommand
+	// Define flags for test variant subcommand
 	var testOpts testArgs
 	testCmd.BoolVar(&testOpts.verbose, "verbose", false, "display expected/actual on fail")
+
+	// Define flags for save variant subcommand
+	var saveOpts saveArgs
 
 	// Parse based on subcommand
 	switch cmdAction(os.Args[1]) {
@@ -279,7 +288,7 @@ func main() {
 			os.Exit(1)
 		}
 
-	case cmdActionVariantTest:
+	case cmdActionTest:
 		if err := testCmd.Parse(os.Args[2:]); err != nil {
 			os.Exit(1)
 		}
@@ -288,9 +297,23 @@ func main() {
 			os.Exit(1)
 		}
 
+	case cmdActionTestSave:
+		if err := saveCmd.Parse(os.Args[2:]); err != nil {
+			os.Exit(1)
+		}
+		saveOpts.term = saveCmd.Arg(1)
+		if saveOpts.term == "" {
+			fmt.Fprintf(os.Stderr, "term must be provided\n")
+			os.Exit(1)
+		}
+		if err := saveVariantData(saveCmd.Arg(0), saveOpts.term); err != nil {
+			fmt.Fprintf(os.Stderr, "saving test data failed: %v\n", err)
+			os.Exit(1)
+		}
+
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", os.Args[1])
-		fmt.Fprintf(os.Stderr, "Commands: %s, %s, %s\n", cmdActionImport, cmdActionUpdate, cmdActionVariantTest)
+		fmt.Fprintf(os.Stderr, "Commands: %s, %s, %s, %s\n", cmdActionImport, cmdActionUpdate, cmdActionTest, cmdActionTestSave)
 		os.Exit(1)
 	}
 }
