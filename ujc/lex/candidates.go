@@ -20,6 +20,7 @@ import (
 	"context"
 	"frodo/dictionary"
 	"sort"
+	"strings"
 
 	"github.com/agnivade/levenshtein"
 	"github.com/czcorpus/cnc-gokit/collections"
@@ -104,4 +105,25 @@ func (actions *Handler) getSearchCandidates(ctx context.Context, corpusId string
 	return collections.SliceFilter(searchCandidates, func(item SearchCandidate, i int) bool {
 		return item.Source != ""
 	}), nil
+}
+
+func (actions *Handler) lemmatizeMultiWordTerm(ctx context.Context, corpusId, term string) ([]string, error) {
+	words := strings.Fields(term)
+	if len(words) < 2 {
+		return words, nil
+	}
+
+	newWords := make([]string, 0, len(words))
+	for _, word := range words {
+		matches, err := actions.getLematizedSearchCandidates(ctx, corpusId, word)
+		if err != nil {
+			return nil, err
+		}
+		if len(matches) == 0 {
+			newWords = append(newWords, word)
+			continue
+		}
+		newWords = append(newWords, matches[0].Value)
+	}
+	return newWords, nil
 }

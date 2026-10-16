@@ -183,7 +183,11 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 	// if not found, create a new entry with minimal data
 	variants := make([]dictionary.Lemma, 0, len(lexItems))
 	for i, item := range lexItems {
-		terms := strings.Split(item.Key.Lemma, " ")
+		terms, err := actions.lemmatizeMultiWordTerm(ctx, corpusId, item.Key.Lemma)
+		if err != nil {
+			uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
+			return
+		}
 		specifier := util.Ternary(len(terms) > 1, "", cmp.Or(
 			// corpus entry needs to replace "B" and "U" gender with "MI"
 			util.Ternary(item.Key.Gender == GenderMascAnimInan || item.Key.Gender == GenderMascUnknown, "MI", item.Key.Gender),
