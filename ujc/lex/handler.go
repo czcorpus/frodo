@@ -24,6 +24,7 @@ import (
 	"frodo/dictionary"
 	dictActions "frodo/dictionary/actions"
 	"net/http"
+	"strings"
 
 	"github.com/czcorpus/cnc-gokit/collections"
 	"github.com/czcorpus/cnc-gokit/uniresp"
@@ -175,11 +176,12 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 		// corpus entry needs to replace "B" and "U" gender with "MI"
 		lexSpecifier := cmp.Or(util.Ternary(item.Key.Gender == GenderMascAnimInan || item.Key.Gender == GenderMascUnknown, "MI", item.Key.Gender), item.Key.Aspect)
 		if corpusEntry == nil {
+			lemmas := strings.Split(item.Key.Lemma, " ")
 			corpusEntry = &dictionary.Lemma{
 				ID:        fmt.Sprintf("lex-%d", i),
 				Lemma:     item.Key.Lemma,
-				PoS:       item.Key.Pos,
-				Specifier: lexSpecifier,
+				PoS:       util.Ternary(len(lemmas) > 1, strings.Repeat(" ", len(lemmas)-1), item.Key.Pos),
+				Specifier: util.Ternary(len(lemmas) > 1, strings.Repeat(" ", len(lemmas)-1), lexSpecifier),
 				Forms:     []dictionary.Form{{Value: item.Key.Lemma, Sublemma: item.Key.Lemma}},
 				Sublemmas: []dictionary.Sublemma{{Value: item.Key.Lemma}},
 			}
