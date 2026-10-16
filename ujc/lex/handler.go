@@ -24,6 +24,7 @@ import (
 	"frodo/dictionary"
 	dictActions "frodo/dictionary/actions"
 	"net/http"
+	"strings"
 
 	"github.com/czcorpus/cnc-gokit/collections"
 	"github.com/czcorpus/cnc-gokit/uniresp"
@@ -77,7 +78,22 @@ func (actions *Handler) searchCorpusEntry(ctx context.Context, corpusId, sublemm
 	}
 	if len(ans) > 0 {
 		if len(ans) > 1 {
-			log.Warn().Str("sublemma", sublemma).Str("pos", pos).Int("numMatches", len(ans)).Msg("Multiple matches found for sublemma in corpus")
+			variantInfo := make([]string, 0, len(ans))
+			for _, item := range ans {
+				variantInfo = append(variantInfo, fmt.Sprintf("%s/%s", item.Lemma, item.PoS))
+			}
+			log.Warn().
+				Str("sublemma", sublemma).
+				Str("pos", pos).
+				Strs("variants", variantInfo).
+				Int("numMatches", len(ans)).
+				Msg("Multiple matches found for sublemma in corpus")
+			entry := ans[0]
+			for _, item := range ans[1:] {
+				entry.PoS += item.PoS
+				entry.Specifier += item.Specifier
+			}
+			return &entry, nil
 		}
 		return &ans[0], nil
 	}
@@ -167,34 +183,91 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 	// if not found, create a new entry with minimal data
 	variants := make([]dictionary.Lemma, 0, len(lexItems))
 	for i, item := range lexItems {
-		corpusEntry, err := actions.searchCorpusEntry(ctx, corpusId, item.Key.Lemma, item.Key.Pos)
+		terms, err := actions.lemmatizeMultiWordTerm(ctx, corpusId, item.Key.Lemma)
 		if err != nil {
 			uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 			return
 		}
-		// corpus entry needs to replace "B" and "U" gender with "MI"
-		lexSpecifier := cmp.Or(util.Ternary(item.Key.Gender == GenderMascAnimInan || item.Key.Gender == GenderMascUnknown, "MI", item.Key.Gender), item.Key.Aspect)
-		if corpusEntry == nil {
-			corpusEntry = &dictionary.Lemma{
-				ID:        fmt.Sprintf("lex-%d", i),
-				Lemma:     item.Key.Lemma,
-				PoS:       item.Key.Pos,
-				Specifier: lexSpecifier,
-				Forms:     []dictionary.Form{{Value: item.Key.Lemma, Sublemma: item.Key.Lemma}},
-				Sublemmas: []dictionary.Sublemma{{Value: item.Key.Lemma}},
-			}
-		} else {
-			corpusEntry.ID = fmt.Sprintf("corp-%d", i)
-			corpusEntry.Specifier = cmp.Or(corpusEntry.Specifier, lexSpecifier)
-			item.Sources[SourceCorpus] = []LexID{
-				{Key: LexKey{Pos: corpusEntry.PoS}},
+		specifier := util.Ternary(len(terms) > 1, "", cmp.Or(
+			// corpus entry needs to replace "B" and "U" gender with "MI"
+			util.Ternary(item.Key.Gender == GenderMascAnimInan || item.Key.Gender == GenderMascUnknown, "MI", item.Key.Gender),
+			item.Key.Aspect,
+		))
+		pos := util.Ternary(len(terms) > 1, "", item.Key.Pos)
+
+		var corpusEntries []*dictionary.Lemma
+		var corpusEntry *dictionary.Lemma
+		for _, term := range terms {
+			corpusEntry, err = actions.searchCorpusEntry(ctx, corpusId, term, pos)
+			if err != nil {
+				uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
+				return
 			}
 
-			// use corpus PoS if pos source is unknown
-			if item.PosSource == SourceEmpty {
-				item.PosSource = SourceCorpus
+			if corpusEntry == nil {
+				corpusEntry = &dictionary.Lemma{
+					ID:        "lex",
+					Lemma:     term,
+					PoS:       pos,
+					Specifier: specifier,
+					Forms:     []dictionary.Form{{Value: term, Sublemma: term}},
+					Sublemmas: []dictionary.Sublemma{{Value: term}},
+				}
+
+			} else {
+				corpusEntry.ID = "corp"
+				corpusEntry.Specifier = cmp.Or(corpusEntry.Specifier, specifier)
+				if len(terms) == 1 {
+					item.Sources[SourceCorpus] = []LexID{
+						{Key: LexKey{Pos: corpusEntry.PoS}},
+					}
+
+					// use corpus PoS if pos source is unknown
+					if item.PosSource == SourceEmpty {
+						item.PosSource = SourceCorpus
+					}
+				}
 			}
+			corpusEntries = append(corpusEntries, corpusEntry)
 		}
+
+		if len(corpusEntries) > 1 {
+			mergedSublemmas := make([]string, 0, len(corpusEntries))
+			mergedLemmas := make([]string, 0, len(corpusEntries))
+			mergedPos := make([]string, 0, len(corpusEntries))
+			mergedSpecifiers := make([]string, 0, len(corpusEntries))
+			allCorp := true
+			for _, subentry := range corpusEntries {
+				if !strings.HasPrefix(subentry.ID, "corp") {
+					allCorp = false
+				}
+				mergedLemmas = append(mergedLemmas, subentry.Lemma)
+				mergedPos = append(mergedPos, subentry.PoS)
+				mergedSpecifiers = append(mergedSpecifiers, subentry.Specifier)
+				if len(subentry.Sublemmas) > 0 && subentry.Sublemmas[0].Value != "" {
+					mergedSublemmas = append(mergedSublemmas, subentry.Sublemmas[0].Value)
+				} else if subentry.Lemma != "" {
+					mergedSublemmas = append(mergedSublemmas, subentry.Lemma)
+				}
+			}
+			mergedLemmaText := strings.Join(mergedLemmas, " ")
+			mergedSublemmaText := strings.Join(mergedSublemmas, " ")
+			corpusEntry = &dictionary.Lemma{
+				ID:        fmt.Sprintf("corp-%d", i),
+				Lemma:     mergedLemmaText,
+				PoS:       strings.Join(mergedPos, " "),
+				Specifier: strings.Join(mergedSpecifiers, " "),
+				Forms:     []dictionary.Form{{Value: item.Key.Lemma, Sublemma: mergedSublemmaText}},
+				Sublemmas: []dictionary.Sublemma{{Value: mergedSublemmaText}},
+			}
+			if !allCorp {
+				corpusEntry.ID = fmt.Sprintf("lex-%d", i)
+			}
+
+		} else {
+			corpusEntry.ID = fmt.Sprintf("%s-%d", corpusEntry.ID, i)
+		}
+
 		corpusEntry.ExtraData = LexExtraData{
 			CorpusId:      corpusId,
 			VariantSource: usedCandidate.Source,
