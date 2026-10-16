@@ -131,8 +131,8 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 	}
 
 	// apply special transformations before getting source data
-	lexItems, err = ApplyTransformations(ctx, actions.db.DB(), usedCandidate.Source, lexItems,
-		DTIJCR_MergeItems,
+	lexItems, err = ApplyTransformations(ctx, actions.db.DB(), actions.sourcePriority, usedCandidate.Source, lexItems,
+		DTIJCR__MergeItems,
 	)
 	if err != nil {
 		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
@@ -150,15 +150,13 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 	}
 
 	// apply special transformations after getting source data
-	lexItems, err = ApplyTransformations(ctx, actions.db.DB(), usedCandidate.Source, lexItems,
-		DTIJCR_ResolvePos(actions.sourcePriority),
-		JoinFromIJPToASSC_Uninflected,
-		JoinFromIJP_NAP_To_C,
-		JoinToIJP_C_To_NAP,
-		JoinFromSSC_M_To_IB,
-		IJP_ResolvePos(actions.sourcePriority),
-		SSC_ResolveGenderMX,
+	lexItems, err = ApplyTransformations(ctx, actions.db.DB(), actions.sourcePriority, usedCandidate.Source, lexItems,
+		DTIJCR__ResolvePos,
+		IJP__C_Is_NAP,
+		IJP__RemoveUninflected,
+		IJP__ResolveVariantKey,
 		SortTransformation(usedCandidate.Source),
+		ResolveGroups,
 	)
 	if err != nil {
 		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
@@ -174,7 +172,7 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 			uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 			return
 		}
-		// corpus entry needs to replace "B" gender with "MI"
+		// corpus entry needs to replace "B" and "U" gender with "MI"
 		lexSpecifier := cmp.Or(util.Ternary(item.Key.Gender == GenderMascAnimInan || item.Key.Gender == GenderMascUnknown, "MI", item.Key.Gender), item.Key.Aspect)
 		if corpusEntry == nil {
 			corpusEntry = &dictionary.Lemma{

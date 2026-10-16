@@ -60,7 +60,7 @@ const (
 	GenderMascAnim     = "M"
 	GenderMascInan     = "I"
 	GenderMascAnimInan = "B"
-	GenderMascUnknown  = "MX"
+	GenderMascUnknown  = "U"
 	GenderFem          = "F"
 	GenderNeut         = "N"
 	GenderUnknown      = "X" // mainly for search purposes
@@ -92,8 +92,8 @@ CREATE TABLE lex_dictionary (
 	pos VARCHAR(4) NOT NULL,
 	gender VARCHAR(1),
 	aspect VARCHAR(1),
-	uninflected TINYINT DEFAULT 0 NOT NULL,
-	plurality TINYINT DEFAULT 0 NOT NULL,
+	uninflected TINYINT DEFAULT 2 NOT NULL,
+	plurality TINYINT DEFAULT 5 NOT NULL,
 	
 	source VARCHAR(8) NOT NULL,
 	external_id VARCHAR(100) NOT NULL,
@@ -243,41 +243,47 @@ func SearchVariants(ctx context.Context, db *sql.DB, lemma string, variantSource
 
 func SearchSources(ctx context.Context, db *sql.DB, lexKey LexKey) (map[Source][]LexID, error) {
 	// if lexItem.Pos is 'X', do not filter by pos (accept any pos)
-	whereParts := []string{"lemma = ?"}
+	where := []string{"lemma = ?"}
 	args := []any{lexKey.Lemma}
 	if lexKey.Pos == PosDTIJCR {
-		whereParts = append(whereParts, "pos IN (?, ?, ?, ?, ?, ?, ?, ?)")
+		where = append(where, "pos IN (?, ?, ?, ?, ?, ?, ?, ?)")
 		args = append(args, PosDTIJ, PosAdv, PosPart, PosInter, PosConj, PosNum, PosPrep, PosUnkn)
 	} else if lexKey.Pos != PosUnkn {
-		whereParts = append(whereParts, "pos IN (?, ?)")
+		where = append(where, "pos IN (?, ?)")
 		args = append(args, lexKey.Pos, PosUnkn)
 	}
 
 	if lexKey.Gender == "" {
-		whereParts = append(whereParts, "gender is NULL")
+		where = append(where, "gender is NULL")
+	} else if lexKey.Gender == GenderMascUnknown {
+		where = append(where, "gender IN (?, ?, ?, ?)")
+		args = append(args, GenderMascUnknown, GenderMascAnim, GenderMascInan, GenderMascAnimInan)
+	} else if lexKey.Gender == GenderMascAnim || lexKey.Gender == GenderMascInan || lexKey.Gender == GenderMascAnimInan {
+		where = append(where, "gender IN (?, ?)")
+		args = append(args, GenderMascUnknown, lexKey.Gender)
 	} else if lexKey.Gender != GenderUnknown {
-		whereParts = append(whereParts, "gender = ?")
-		args = append(args, lexKey.Gender)
+		where = append(where, "gender IN (?, ?)")
+		args = append(args, lexKey.Gender, GenderUnknown)
 	}
 	if lexKey.Aspect == "" {
-		whereParts = append(whereParts, "aspect is NULL")
+		where = append(where, "aspect is NULL")
 	} else if lexKey.Aspect != AspectUnknown {
-		whereParts = append(whereParts, "aspect = ?")
+		where = append(where, "aspect = ?")
 		args = append(args, lexKey.Aspect)
 	}
 	if lexKey.Uninflected != UninflectedUnknown {
-		whereParts = append(whereParts, "(uninflected = ? OR uninflected = ?)")
+		where = append(where, "(uninflected = ? OR uninflected = ?)")
 		args = append(args, lexKey.Uninflected, UninflectedUnknown)
 	}
 	if lexKey.Plurality != PluralityUnknown {
-		whereParts = append(whereParts, "(plurality = ? OR plurality = ?)")
+		where = append(where, "(plurality = ? OR plurality = ?)")
 		args = append(args, lexKey.Plurality, PluralityUnknown)
 	}
 
 	query := `
-		SELECT source, JSON_ARRAYAGG(JSON_OBJECT('id', external_id, 'parentId', external_parent_id, 'groupOrder', group_order, 'homonym', homonym, 'key', JSON_OBJECT('pos', pos, 'gender', COALESCE(gender, ''), 'aspect', COALESCE(aspect, ''), 'uninflected', uninflected, 'plurality', plurality)) ORDER BY homonym) AS idents
+		SELECT source, JSON_ARRAYAGG(JSON_OBJECT('id', external_id, 'parentId', external_parent_id, 'groupId', COALESCE(group_id, ''), 'groupOrder', group_order, 'homonym', homonym, 'key', JSON_OBJECT('pos', pos, 'gender', COALESCE(gender, ''), 'aspect', COALESCE(aspect, ''), 'uninflected', uninflected, 'plurality', plurality)) ORDER BY homonym) AS idents
 		FROM lex_dictionary
-		WHERE ` + strings.Join(whereParts, " AND ") + `
+		WHERE ` + strings.Join(where, " AND ") + `
 		GROUP BY source
 		`
 
@@ -328,10 +334,16 @@ func SearchLexItemID(ctx context.Context, db *sql.DB, lexKey LexKey, source Sour
 	args = append(args, lexKey.Pos)
 
 	if lexKey.Gender == "" {
-		where = append(where, "gender IS NULL")
+		where = append(where, "gender is NULL")
+	} else if lexKey.Gender == GenderMascUnknown {
+		where = append(where, "gender IN (?, ?, ?, ?)")
+		args = append(args, GenderMascUnknown, GenderMascAnim, GenderMascInan, GenderMascAnimInan)
+	} else if lexKey.Gender == GenderMascAnim || lexKey.Gender == GenderMascInan || lexKey.Gender == GenderMascAnimInan {
+		where = append(where, "gender IN (?, ?)")
+		args = append(args, GenderMascUnknown, lexKey.Gender)
 	} else if lexKey.Gender != GenderUnknown {
-		where = append(where, "gender = ?")
-		args = append(args, lexKey.Gender)
+		where = append(where, "gender IN (?, ?)")
+		args = append(args, lexKey.Gender, GenderUnknown)
 	}
 	if lexKey.Aspect == "" {
 		where = append(where, "aspect IS NULL")
@@ -351,7 +363,7 @@ func SearchLexItemID(ctx context.Context, db *sql.DB, lexKey LexKey, source Sour
 	where = append(where, "source = ?")
 	args = append(args, source)
 
-	query := "SELECT external_id, external_parent_id, group_order, homonym, pos, gender, aspect, uninflected, plurality FROM lex_dictionary WHERE " + strings.Join(where, " AND ")
+	query := "SELECT external_id, external_parent_id, group_id, group_order, homonym, pos, gender, aspect, uninflected, plurality FROM lex_dictionary WHERE " + strings.Join(where, " AND ")
 
 	row, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -363,14 +375,16 @@ func SearchLexItemID(ctx context.Context, db *sql.DB, lexKey LexKey, source Sour
 	for row.Next() {
 		var lexId LexID
 		var externalParentID sql.NullString
+		var groupID sql.NullString
 		var genderArg, aspectArg sql.NullString
-		if err := row.Scan(&lexId.ID, &externalParentID, &lexId.GroupOrder, &lexId.Homonym, &lexId.Key.Pos, &genderArg, &aspectArg, &lexId.Key.Uninflected, &lexId.Key.Plurality); err != nil {
+		if err := row.Scan(&lexId.ID, &externalParentID, &groupID, &lexId.GroupOrder, &lexId.Homonym, &lexId.Key.Pos, &genderArg, &aspectArg, &lexId.Key.Uninflected, &lexId.Key.Plurality); err != nil {
 			if err == sql.ErrNoRows {
 				return lexIds, nil
 			}
 			return nil, fmt.Errorf("failed to scan the lex id: %w", err)
 		}
 		lexId.ParentID = externalParentID.String
+		lexId.GroupID = groupID.String
 		if genderArg.Valid {
 			lexId.Key.Gender = genderArg.String
 		}

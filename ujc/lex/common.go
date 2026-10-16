@@ -17,8 +17,9 @@
 package lex
 
 type LexID struct {
-	ParentID   string `json:"parentId"`
 	ID         string `json:"id"`
+	ParentID   string `json:"parentId"`
+	GroupID    string `json:"groupId"`
 	GroupOrder int    `json:"groupOrder"`
 	Homonym    int    `json:"homonym"`
 	Key        LexKey `json:"key"`
@@ -33,6 +34,7 @@ type LexKey struct {
 	Plurality   int    `json:"plurality"`
 }
 
+// if som key has plurality/uninflected unknown, don't take them into account
 func (a *LexKey) UnknownEqual(o *LexKey) bool {
 	if a.Lemma != o.Lemma {
 		return false
@@ -59,6 +61,7 @@ type LexItem struct {
 	Key       LexKey             `json:"key"`
 	PosSource Source             `json:"posSource"`
 	Sources   map[Source][]LexID `json:"sources"`
+	Group     int                `json:"group"`
 }
 
 func (li *LexItem) Equal(item *LexItem) bool {

@@ -96,7 +96,7 @@ func ReadTSV(ctx context.Context, path string) (<-chan importDataChunk, error) {
 				LemmaType:   fields[5],
 				Homonymy:    util.Ternary(fields[6] == "", "0", fields[6]),
 				Pos:         fields[7],
-				Gender:      fields[8],
+				Gender:      util.Ternary(fields[8] == "M", "U", fields[8]),
 				Aspect:      fields[9],
 				Uninflected: util.Ternary(fields[10] == "", "0", "1"),
 				Plurality:   strconv.Itoa(plurality),
