@@ -64,7 +64,7 @@ func (actions *Handler) getLematizedSearchCandidates(ctx context.Context, corpus
 	searchCandidates := make([]SearchCandidate, 0, 10)
 	for _, match := range matches {
 		for _, sublemma := range match.Sublemmas {
-			searchCandidates = append(searchCandidates, SearchCandidate{Value: sublemma.Value, Score: levenshtein.ComputeDistance(term, match.Lemma)})
+			searchCandidates = append(searchCandidates, SearchCandidate{Value: sublemma.Value, Score: levenshtein.ComputeDistance(term, sublemma.Value)})
 		}
 	}
 	// sort matches by their similarity to the query term using Levenshtein distance
