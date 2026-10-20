@@ -27,6 +27,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+
+	"github.com/czcorpus/cnc-gokit/collections"
 )
 
 // Test config structures
@@ -39,6 +41,7 @@ type testConfig struct {
 	Server       testServerConf    `json:"server"`
 	CorpusID     string            `json:"corpusId"`
 	Path         string            `json:"path"`
+	Skip         []string          `json:"skip"`
 	Descriptions map[string]string `json:"descriptions"`
 }
 
@@ -64,11 +67,18 @@ func runVariantTest(cfgPath string, verbose bool) error {
 		return fmt.Errorf("cannot read path %q: %w", cfg.Path, err)
 	}
 	failed := 0
+	skipped := 0
 
 tests:
 	for i, t := range testFiles {
 		term := strings.TrimSuffix(t.Name(), ".json")
 		description := cfg.Descriptions[term]
+		if collections.SliceContains(cfg.Skip, term) {
+			skipped++
+			fmt.Printf("[%d] SKIP term=%s | %s\n", i, term, description)
+			continue tests
+		}
+
 		u := fmt.Sprintf("%s/dictionary/lex/%s/search/%s", base, url.PathEscape(cfg.CorpusID), url.PathEscape(term))
 		resp, err := http.Get(u)
 		if err != nil {
@@ -140,9 +150,9 @@ tests:
 		fmt.Printf("[%d] PASS term=%s | %s\n", i, term, description)
 	}
 	if failed > 0 {
-		return fmt.Errorf("%d/%d tests failed", failed, len(testFiles))
+		return fmt.Errorf("%d/%d tests failed (%d skipped)", failed, len(testFiles)-skipped, skipped)
 	}
-	fmt.Printf("All %d tests passed\n", len(testFiles))
+	fmt.Printf("All %d tests passed (%d skipped)\n", len(testFiles)-skipped, skipped)
 	return nil
 }
 
