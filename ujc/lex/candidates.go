@@ -27,9 +27,13 @@ import (
 )
 
 type SearchCandidate struct {
-	Value  string
-	Score  int
-	Source Source
+	Value    string
+	Distance int
+	Source   Source
+}
+
+func (sc *SearchCandidate) isMultiWord() bool {
+	return strings.Contains(sc.Value, " ")
 }
 
 func (actions *Handler) findMainSource(ctx context.Context, searchTerm string) (Source, error) {
@@ -46,32 +50,52 @@ func (actions *Handler) findMainSource(ctx context.Context, searchTerm string) (
 	return "", nil
 }
 
-func (actions *Handler) getLematizedSearchCandidates(ctx context.Context, corpusId, term string) ([]SearchCandidate, error) {
-	datasetSize, err := actions.dictActions.GetDatasetSize(corpusId)
-	if err != nil {
-		return []SearchCandidate{}, err
-	}
-
-	matches, err := dictionary.Search(
-		ctx,
-		actions.db,
-		corpusId,
-		dictionary.SearchWithAnyValue(term),
-		dictionary.SearchWithDatasetSizeForIPM(int(datasetSize)),
-	)
-	if err != nil {
-		return []SearchCandidate{}, err
-	}
-	searchCandidates := make([]SearchCandidate, 0, 10)
-	for _, match := range matches {
-		for _, sublemma := range match.Sublemmas {
-			searchCandidates = append(searchCandidates, SearchCandidate{Value: sublemma.Value, Score: levenshtein.ComputeDistance(term, sublemma.Value)})
+func (actions *Handler) getLematizedTerms(ctx context.Context, corpusId, term string) ([]string, error) {
+	lemmatizedTerms := make([]string, 0, 10)
+	for _, word := range strings.Fields(term) {
+		matches, err := dictionary.Search(
+			ctx,
+			actions.db,
+			corpusId,
+			dictionary.SearchWithAnyValue(word),
+		)
+		if err != nil {
+			return []string{}, err
 		}
+		newLemmatizedTerms := make([]string, 0, 10)
+		for _, match := range matches {
+			for _, sublemma := range match.Sublemmas {
+				if len(lemmatizedTerms) == 0 {
+					newLemmatizedTerms = append(newLemmatizedTerms, sublemma.Value)
+				} else {
+					for _, lemmatizedPart := range lemmatizedTerms {
+						newLemmatizedTerms = append(newLemmatizedTerms, lemmatizedPart+" "+sublemma.Value)
+					}
+				}
+			}
+		}
+		lemmatizedTerms = newLemmatizedTerms
 	}
-	// sort matches by their similarity to the query term using Levenshtein distance
-	sort.Slice(searchCandidates, func(i, j int) bool {
-		return searchCandidates[i].Score < searchCandidates[j].Score
-	})
+	return lemmatizedTerms, nil
+}
+
+func (actions *Handler) getLematizedSearchCandidates(ctx context.Context, corpusId, term string) ([]SearchCandidate, error) {
+	lemmatizedTerms, err := actions.getLematizedTerms(ctx, corpusId, term)
+	if err != nil {
+		return nil, err
+	}
+	searchCandidates := make([]SearchCandidate, 0, max(len(lemmatizedTerms), 1))
+	if len(lemmatizedTerms) == 0 {
+		searchCandidates = append(searchCandidates, SearchCandidate{Value: term, Distance: 0})
+	} else {
+		for _, lemmatizedTerm := range lemmatizedTerms {
+			searchCandidates = append(searchCandidates, SearchCandidate{Value: lemmatizedTerm, Distance: levenshtein.ComputeDistance(term, lemmatizedTerm)})
+		}
+		// sort matches by their similarity to the query term using Levenshtein distance
+		sort.Slice(searchCandidates, func(i, j int) bool {
+			return searchCandidates[i].Distance < searchCandidates[j].Distance
+		})
+	}
 	return searchCandidates, nil
 }
 
@@ -82,7 +106,7 @@ func (actions *Handler) getSearchCandidates(ctx context.Context, corpusId string
 	}
 
 	// merge seach candidates, first is exact match, then corpus lematized candidates, remove duplicates
-	searchCandidates := append([]SearchCandidate{{Value: term, Score: levenshtein.ComputeDistance(term, term)}}, corpusSearchCandidates...)
+	searchCandidates := append([]SearchCandidate{{Value: term, Distance: levenshtein.ComputeDistance(term, term)}}, corpusSearchCandidates...)
 	searchCandidates = collections.SliceReduce(searchCandidates, func(acc []SearchCandidate, curr SearchCandidate, i int) []SearchCandidate {
 		if collections.SliceFindIndex(acc, func(item SearchCandidate) bool {
 			return item.Value == curr.Value
@@ -105,25 +129,4 @@ func (actions *Handler) getSearchCandidates(ctx context.Context, corpusId string
 	return collections.SliceFilter(searchCandidates, func(item SearchCandidate, i int) bool {
 		return item.Source != ""
 	}), nil
-}
-
-func (actions *Handler) lemmatizeMultiWordTerm(ctx context.Context, corpusId, term string) ([]string, error) {
-	words := strings.Fields(term)
-	if len(words) < 2 {
-		return words, nil
-	}
-
-	newWords := make([]string, 0, len(words))
-	for _, word := range words {
-		matches, err := actions.getLematizedSearchCandidates(ctx, corpusId, word)
-		if err != nil {
-			return nil, err
-		}
-		if len(matches) == 0 {
-			newWords = append(newWords, word)
-			continue
-		}
-		newWords = append(newWords, matches[0].Value)
-	}
-	return newWords, nil
 }

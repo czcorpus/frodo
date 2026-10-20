@@ -102,15 +102,15 @@ func (actions *Handler) searchCorpusEntry(ctx context.Context, corpusId, sublemm
 
 func (actions *Handler) SearchWord(ctx *gin.Context) {
 	corpusId := ctx.Param("corpusId")
-	term := ctx.Param("term")
+	searchTerm := ctx.Param("term")
 
-	typoSuggestions, err := SearchTypoSuggestions(ctx, actions.db.DB(), term)
+	typoSuggestions, err := SearchTypoSuggestions(ctx, actions.db.DB(), searchTerm)
 	if err != nil {
 		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 		return
 	}
 
-	searchCandidates, err := actions.getSearchCandidates(ctx, corpusId, term)
+	searchCandidates, err := actions.getSearchCandidates(ctx, corpusId, searchTerm)
 	if err != nil {
 		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 		return
@@ -183,21 +183,23 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 	// if not found, create a new entry with minimal data
 	variants := make([]dictionary.Lemma, 0, len(lexItems))
 	for i, item := range lexItems {
-		terms, err := actions.lemmatizeMultiWordTerm(ctx, corpusId, item.Key.Lemma)
+		lemmatizedTerms, err := actions.getLematizedSearchCandidates(ctx, corpusId, item.Key.Lemma)
 		if err != nil {
 			uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 			return
 		}
-		specifier := util.Ternary(len(terms) > 1, "", cmp.Or(
+		// select the most similar candidate
+		usedLemmatizedTerm := lemmatizedTerms[0]
+		specifier := util.Ternary(usedLemmatizedTerm.isMultiWord(), "", cmp.Or(
 			// corpus entry needs to replace "B" and "U" gender with "MI"
 			util.Ternary(item.Key.Gender == GenderMascAnimInan || item.Key.Gender == GenderMascUnknown, "MI", item.Key.Gender),
 			item.Key.Aspect,
 		))
-		pos := util.Ternary(len(terms) > 1, "", item.Key.Pos)
+		pos := util.Ternary(usedLemmatizedTerm.isMultiWord(), "", item.Key.Pos)
 
 		var corpusEntries []*dictionary.Lemma
 		var corpusEntry *dictionary.Lemma
-		for _, term := range terms {
+		for _, term := range strings.Fields(usedLemmatizedTerm.Value) {
 			corpusEntry, err = actions.searchCorpusEntry(ctx, corpusId, term, pos)
 			if err != nil {
 				uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
@@ -217,16 +219,6 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 			} else {
 				corpusEntry.ID = "corp"
 				corpusEntry.Specifier = cmp.Or(corpusEntry.Specifier, specifier)
-				if len(terms) == 1 {
-					item.Sources[SourceCorpus] = []LexID{
-						{Key: LexKey{Pos: corpusEntry.PoS}},
-					}
-
-					// use corpus PoS if pos source is unknown
-					if item.PosSource == SourceEmpty {
-						item.PosSource = SourceCorpus
-					}
-				}
 			}
 			corpusEntries = append(corpusEntries, corpusEntry)
 		}
@@ -238,7 +230,7 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 			mergedSpecifiers := make([]string, 0, len(corpusEntries))
 			allCorp := true
 			for _, subentry := range corpusEntries {
-				if !strings.HasPrefix(subentry.ID, "corp") {
+				if allCorp && !strings.HasPrefix(subentry.ID, "corp") {
 					allCorp = false
 				}
 				mergedLemmas = append(mergedLemmas, subentry.Lemma)
@@ -265,6 +257,20 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 			}
 
 		} else {
+			if corpusEntry.ID == "corp" {
+				item.Sources[SourceCorpus] = []LexID{
+					{Key: LexKey{
+						Lemma:  corpusEntry.Lemma,
+						Pos:    corpusEntry.PoS,
+						Gender: util.Ternary(corpusEntry.PoS == PosNoun, corpusEntry.Specifier, ""),
+						Aspect: util.Ternary(corpusEntry.PoS == PosVerb, corpusEntry.Specifier, ""),
+					}},
+				}
+				// use corpus PoS if pos source is unknown
+				if item.PosSource == SourceEmpty {
+					item.PosSource = SourceCorpus
+				}
+			}
 			corpusEntry.ID = fmt.Sprintf("%s-%d", corpusEntry.ID, i)
 		}
 
