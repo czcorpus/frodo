@@ -260,8 +260,9 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 			if corpusEntry.ID == "corp" {
 				item.Sources[SourceCorpus] = []LexID{
 					{Key: LexKey{
-						Lemma:  corpusEntry.Lemma,
-						Pos:    corpusEntry.PoS,
+						Lemma: corpusEntry.Lemma,
+						Pos:   corpusEntry.PoS,
+						// TODO, get specifier from corpus
 						Gender: util.Ternary(corpusEntry.PoS == PosNoun, corpusEntry.Specifier, ""),
 						Aspect: util.Ternary(corpusEntry.PoS == PosVerb, corpusEntry.Specifier, ""),
 					}},
@@ -272,6 +273,14 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 				}
 			}
 			corpusEntry.ID = fmt.Sprintf("%s-%d", corpusEntry.ID, i)
+		}
+
+		if collections.SliceFindIndex(corpusEntry.Sublemmas, func(sublemma dictionary.Sublemma) bool {
+			return sublemma.Value == usedCandidate.Value
+		}) != -1 && collections.SliceFindIndex(corpusEntry.Forms, func(form dictionary.Form) bool {
+			return form.Value == searchTerm
+		}) == -1 {
+			corpusEntry.Forms = append(corpusEntry.Forms, dictionary.Form{Value: searchTerm, Sublemma: usedLemmatizedTerm.Value})
 		}
 
 		corpusEntry.ExtraData = LexExtraData{

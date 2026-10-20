@@ -106,7 +106,7 @@ func (actions *Handler) getSearchCandidates(ctx context.Context, corpusId string
 	}
 
 	// merge seach candidates, first is exact match, then corpus lematized candidates, remove duplicates
-	searchCandidates := append([]SearchCandidate{{Value: term, Distance: levenshtein.ComputeDistance(term, term)}}, corpusSearchCandidates...)
+	searchCandidates := append([]SearchCandidate{{Value: term, Distance: 0}}, corpusSearchCandidates...)
 	searchCandidates = collections.SliceReduce(searchCandidates, func(acc []SearchCandidate, curr SearchCandidate, i int) []SearchCandidate {
 		if collections.SliceFindIndex(acc, func(item SearchCandidate) bool {
 			return item.Value == curr.Value
