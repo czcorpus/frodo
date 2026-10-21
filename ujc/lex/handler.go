@@ -122,15 +122,16 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 		})
 		return
 	}
+	log.Debug().Any("sc", searchCandidates).Send()
 
 	// first candidate will be used for search, the rest will be used as suggestions
 	usedCandidate := searchCandidates[0]
-	suggestions := append(collections.SliceMap(searchCandidates[1:], func(item SearchCandidate, i int) string {
-		return item.Value
+	suggestions := append(collections.SliceMap(searchCandidates[1:], func(item LemmatizedTerm, i int) string {
+		return item.Term
 	}), typoSuggestions...)
 
 	// get variants from one source
-	lexItems, err := SearchVariants(ctx, actions.db.DB(), usedCandidate.Value, usedCandidate.Source)
+	lexItems, err := SearchVariants(ctx, actions.db.DB(), usedCandidate.Term, usedCandidate.Source)
 	if err != nil {
 		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 		return
@@ -183,13 +184,24 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 	// if not found, create a new entry with minimal data
 	variants := make([]dictionary.Lemma, 0, len(lexItems))
 	for i, item := range lexItems {
-		lemmatizedTerms, err := actions.getLematizedSearchCandidates(ctx, corpusId, item.Key.Lemma)
+		usedLemmatizedTerm, err := LemmatizeLexTerm(ctx, actions.db.DB(), item.Key.Lemma)
 		if err != nil {
 			uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 			return
 		}
-		// select the most similar candidate
-		usedLemmatizedTerm := lemmatizedTerms[0]
+		if usedLemmatizedTerm == nil {
+			lemmatizedTerms, err := LemmatizeTermWithCorpus(ctx, actions.db.DB(), corpusId, item.Key.Lemma)
+			if err != nil {
+				uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
+				return
+			}
+			if len(lemmatizedTerms) > 0 {
+				usedLemmatizedTerm = &lemmatizedTerms[0]
+			} else {
+				usedLemmatizedTerm = &LemmatizedTerm{Term: item.Key.Lemma, Lemma: item.Key.Lemma, Sublemma: item.Key.Lemma}
+			}
+		}
+
 		specifier := util.Ternary(usedLemmatizedTerm.isMultiWord(), "", cmp.Or(
 			// corpus entry needs to replace "B" and "U" gender with "MI"
 			util.Ternary(item.Key.Gender == GenderMascAnimInan || item.Key.Gender == GenderMascUnknown, "MI", item.Key.Gender),
@@ -199,8 +211,8 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 
 		var corpusEntries []*dictionary.Lemma
 		var corpusEntry *dictionary.Lemma
-		for _, term := range strings.Fields(usedLemmatizedTerm.Value) {
-			corpusEntry, err = actions.searchCorpusEntry(ctx, corpusId, term, pos)
+		for _, sublemma := range strings.Fields(usedLemmatizedTerm.Sublemma) {
+			corpusEntry, err = actions.searchCorpusEntry(ctx, corpusId, sublemma, pos)
 			if err != nil {
 				uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 				return
@@ -209,11 +221,11 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 			if corpusEntry == nil {
 				corpusEntry = &dictionary.Lemma{
 					ID:        "lex",
-					Lemma:     term,
+					Lemma:     sublemma,
 					PoS:       pos,
 					Specifier: specifier,
-					Forms:     []dictionary.Form{{Value: term, Sublemma: term}},
-					Sublemmas: []dictionary.Sublemma{{Value: term}},
+					Forms:     []dictionary.Form{{Value: sublemma, Sublemma: sublemma}},
+					Sublemmas: []dictionary.Sublemma{{Value: sublemma}},
 				}
 
 			} else {
@@ -221,6 +233,16 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 				corpusEntry.Specifier = cmp.Or(corpusEntry.Specifier, specifier)
 			}
 			corpusEntries = append(corpusEntries, corpusEntry)
+		}
+		if corpusEntry == nil {
+			corpusEntry = &dictionary.Lemma{
+				ID:        "lex",
+				Lemma:     item.Key.Lemma,
+				PoS:       pos,
+				Specifier: specifier,
+				Forms:     []dictionary.Form{{Value: item.Key.Lemma, Sublemma: item.Key.Lemma}},
+				Sublemmas: []dictionary.Sublemma{{Value: item.Key.Lemma}},
+			}
 		}
 
 		if len(corpusEntries) > 1 {
@@ -276,11 +298,11 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 		}
 
 		if collections.SliceFindIndex(corpusEntry.Sublemmas, func(sublemma dictionary.Sublemma) bool {
-			return sublemma.Value == usedCandidate.Value
+			return sublemma.Value == usedCandidate.Sublemma
 		}) != -1 && collections.SliceFindIndex(corpusEntry.Forms, func(form dictionary.Form) bool {
 			return form.Value == searchTerm
 		}) == -1 {
-			corpusEntry.Forms = append(corpusEntry.Forms, dictionary.Form{Value: searchTerm, Sublemma: usedLemmatizedTerm.Value})
+			corpusEntry.Forms = append(corpusEntry.Forms, dictionary.Form{Value: searchTerm, Sublemma: usedLemmatizedTerm.Sublemma})
 		}
 
 		corpusEntry.ExtraData = LexExtraData{
