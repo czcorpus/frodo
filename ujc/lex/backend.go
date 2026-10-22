@@ -98,8 +98,8 @@ CREATE TABLE lex_dictionary (
 	plurality TINYINT DEFAULT 5 NOT NULL,
 	
 	source VARCHAR(8) NOT NULL,
-	external_id VARCHAR(100) NOT NULL,
-	external_parent_id VARCHAR(100),
+	external_id TEXT NOT NULL,
+	external_parent_id TEXT,
 
 	INDEX idx_lex_dictionary_lemma_source_group_id (lemma, source, group_id),
 	INDEX idx_lex_dictionary_lemma_pos_source (lemma, pos, source),
@@ -108,9 +108,9 @@ CREATE TABLE lex_dictionary (
 
 var suggestionsTable = `
 CREATE TABLE lex_suggestions (
-	lemma VARCHAR(100) NOT NULL,
+	lemma TEXT NOT NULL,
 	-- This column automatically calculates the normalized search key
-	search_key VARCHAR(100) COLLATE utf8mb4_unicode_ci GENERATED ALWAYS AS (
+	search_key TEXT COLLATE utf8mb4_unicode_ci GENERATED ALWAYS AS (
 		REPLACE(REPLACE(REPLACE(LOWER(lemma), 'y', 'i'), 'z', 's'), 'ž', 'š')
 	) STORED,
 
@@ -123,9 +123,9 @@ CREATE TABLE lex_search (
 	term TEXT NOT NULL,
 	lemma TEXT,
 	sublemma TEXT,
-	lemma_lc TEXT GENERATED ALWAYS AS (LOWER(lemma)) STORED,
-	sublemma_lc TEXT GENERATED ALWAYS AS (LOWER(sublemma)) STORED,
-	term_lc TEXT NOT NULL GENERATED ALWAYS AS (LOWER(term)) STORED,
+	term_lc TEXT NOT NULL,
+	lemma_lc TEXT,
+	sublemma_lc TEXT,
 
 	CONSTRAINT unique_lex_search_term UNIQUE (term),
 	INDEX idx_lex_search_lemma_lc (lemma_lc),

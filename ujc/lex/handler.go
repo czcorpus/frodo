@@ -100,6 +100,37 @@ func (actions *Handler) searchCorpusEntry(ctx context.Context, corpusId, sublemm
 	return nil, nil
 }
 
+func (actions *Handler) mergeMultiWordCorpusEntries(item LexItem, corpusEntries []*dictionary.Lemma) *dictionary.Lemma {
+	mergedSublemmas := make([]string, 0, len(corpusEntries))
+	mergedLemmas := make([]string, 0, len(corpusEntries))
+	mergedPos := make([]string, 0, len(corpusEntries))
+	mergedSpecifiers := make([]string, 0, len(corpusEntries))
+	allCorp := true
+	for _, subentry := range corpusEntries {
+		if allCorp && !strings.HasPrefix(subentry.ID, "corp") {
+			allCorp = false
+		}
+		mergedLemmas = append(mergedLemmas, subentry.Lemma)
+		mergedPos = append(mergedPos, subentry.PoS)
+		mergedSpecifiers = append(mergedSpecifiers, subentry.Specifier)
+		if len(subentry.Sublemmas) > 0 && subentry.Sublemmas[0].Value != "" {
+			mergedSublemmas = append(mergedSublemmas, subentry.Sublemmas[0].Value)
+		} else if subentry.Lemma != "" {
+			mergedSublemmas = append(mergedSublemmas, subentry.Lemma)
+		}
+	}
+	mergedLemmaText := strings.Join(mergedLemmas, " ")
+	mergedSublemmaText := strings.Join(mergedSublemmas, " ")
+	return &dictionary.Lemma{
+		ID:        util.Ternary(allCorp, "corp", "lex"),
+		Lemma:     mergedLemmaText,
+		PoS:       strings.Join(mergedPos, " "),
+		Specifier: strings.Join(mergedSpecifiers, " "),
+		Forms:     []dictionary.Form{{Value: item.Key.Lemma, Sublemma: mergedSublemmaText}},
+		Sublemmas: []dictionary.Sublemma{{Value: mergedSublemmaText}},
+	}
+}
+
 func (actions *Handler) SearchWord(ctx *gin.Context) {
 	corpusId := ctx.Param("corpusId")
 	searchTerm := ctx.Param("term")
@@ -244,50 +275,21 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 
 		// create multi word corpus entry from multiple single word entries
 		if len(corpusEntries) > 1 {
-			mergedSublemmas := make([]string, 0, len(corpusEntries))
-			mergedLemmas := make([]string, 0, len(corpusEntries))
-			mergedPos := make([]string, 0, len(corpusEntries))
-			mergedSpecifiers := make([]string, 0, len(corpusEntries))
-			allCorp := true
-			for _, subentry := range corpusEntries {
-				if allCorp && !strings.HasPrefix(subentry.ID, "corp") {
-					allCorp = false
-				}
-				mergedLemmas = append(mergedLemmas, subentry.Lemma)
-				mergedPos = append(mergedPos, subentry.PoS)
-				mergedSpecifiers = append(mergedSpecifiers, subentry.Specifier)
-				if len(subentry.Sublemmas) > 0 && subentry.Sublemmas[0].Value != "" {
-					mergedSublemmas = append(mergedSublemmas, subentry.Sublemmas[0].Value)
-				} else if subentry.Lemma != "" {
-					mergedSublemmas = append(mergedSublemmas, subentry.Lemma)
-				}
-			}
-			mergedLemmaText := strings.Join(mergedLemmas, " ")
-			mergedSublemmaText := strings.Join(mergedSublemmas, " ")
-			corpusEntry = &dictionary.Lemma{
-				ID:        util.Ternary(allCorp, "corp", "lex"),
-				Lemma:     mergedLemmaText,
-				PoS:       strings.Join(mergedPos, " "),
-				Specifier: strings.Join(mergedSpecifiers, " "),
-				Forms:     []dictionary.Form{{Value: item.Key.Lemma, Sublemma: mergedSublemmaText}},
-				Sublemmas: []dictionary.Sublemma{{Value: mergedSublemmaText}},
-			}
+			corpusEntry = actions.mergeMultiWordCorpusEntries(item, corpusEntries)
 
-		} else {
-			if corpusEntry.ID == "corp" {
-				item.Sources[SourceCorpus] = []LexID{
-					{Key: LexKey{
-						Lemma: corpusEntry.Lemma,
-						Pos:   corpusEntry.PoS,
-						// TODO, get specifier from corpus
-						Gender: util.Ternary(corpusEntry.PoS == PosNoun, corpusEntry.Specifier, ""),
-						Aspect: util.Ternary(corpusEntry.PoS == PosVerb, corpusEntry.Specifier, ""),
-					}},
-				}
-				// use corpus PoS if pos source is unknown
-				if item.PosSource == SourceEmpty {
-					item.PosSource = SourceCorpus
-				}
+		} else if corpusEntry.ID == "corp" {
+			item.Sources[SourceCorpus] = []LexID{
+				{Key: LexKey{
+					Lemma: corpusEntry.Lemma,
+					Pos:   corpusEntry.PoS,
+					// TODO, get specifier from corpus
+					Gender: util.Ternary(corpusEntry.PoS == PosNoun, corpusEntry.Specifier, ""),
+					Aspect: util.Ternary(corpusEntry.PoS == PosVerb, corpusEntry.Specifier, ""),
+				}},
+			}
+			// use corpus PoS if pos source is unknown
+			if item.PosSource == SourceEmpty {
+				item.PosSource = SourceCorpus
 			}
 		}
 		corpusEntry.ID = fmt.Sprintf("%s-%d", corpusEntry.ID, i)

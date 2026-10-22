@@ -156,7 +156,10 @@ func GenerateLexSearchTable(ctx context.Context, tx *sql.Tx, corpname string) er
 		sublemmaNullString.Valid = lTerm.Sublemma != ""
 		if _, err := tx.ExecContext(
 			ctx,
-			"INSERT INTO lex_search (term, lemma, sublemma) VALUES (?, ?, ?)",
+			"INSERT INTO lex_search (term, lemma, sublemma, term_lc, lemma_lc, sublemma_lc) VALUES (?, ?, ?, LOWER(?), LOWER(?), LOWER(?))",
+			lTerm.Term,
+			lemmaNullString,
+			sublemmaNullString,
 			lTerm.Term,
 			lemmaNullString,
 			sublemmaNullString,

@@ -83,7 +83,7 @@ func TestGenerateLexSearchTable(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit())
 
-	rows, err := db.Query(`SELECT term, lemma, sublemma, LOWER(sublemma) AS sublemma_lc, LOWER(term) AS term_lc FROM lex_search ORDER BY term`)
+	rows, err := db.Query(`SELECT term, lemma, sublemma, term_lc, lemma_lc, sublemma_lc FROM lex_search ORDER BY term`)
 	require.NoError(t, err)
 	defer rows.Close()
 
@@ -94,8 +94,8 @@ func TestGenerateLexSearchTable(t *testing.T) {
 		term_lc     string
 	}{}
 	for rows.Next() {
-		var term, lemma, sublemma, sublemma_lc, term_lc string
-		require.NoError(t, rows.Scan(&term, &lemma, &sublemma, &sublemma_lc, &term_lc))
+		var term, lemma, sublemma, term_lc, lemma_lc, sublemma_lc string
+		require.NoError(t, rows.Scan(&term, &lemma, &sublemma, &term_lc, &lemma_lc, &sublemma_lc))
 		got[term] = struct {
 			lemma       string
 			sublemma    string
