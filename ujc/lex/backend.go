@@ -558,3 +558,37 @@ func SearchLexTerms(ctx context.Context, db *sql.DB, searchTerm LemmatizedTerm) 
 	})
 	return result, nil
 }
+
+func GetCorpusSublemmata(ctx context.Context, db *sql.DB, corpname string, term LemmatizedTerm) ([]LemmatizedTerm, error) {
+	if term.isMultiWord() {
+		return []LemmatizedTerm{}, nil
+	}
+
+	result := make([]LemmatizedTerm, 0, 10)
+	rows, err := db.QueryContext(
+		ctx,
+		fmt.Sprintf(
+			"SELECT DISTINCT sublemma "+
+				"FROM %s_term_search AS ts "+
+				"JOIN %s_word AS w ON ts.word_id = w.id "+
+				"WHERE ts.value = ? ",
+			corpname, corpname,
+		),
+		term.Lemma,
+	)
+	if err != nil {
+		return result, fmt.Errorf("failed to get corpus sublemmata for %q: %w", term.Lemma, err)
+	}
+
+	for rows.Next() {
+		newTerm := LemmatizedTerm{Lemma: term.Lemma}
+		if err := rows.Scan(&newTerm.Sublemma); err != nil {
+			return result, fmt.Errorf("failed to get corpus sublemmata for %q: %w", term.Lemma, err)
+		}
+		result = append(result, newTerm)
+	}
+	if err := rows.Err(); err != nil {
+		return result, fmt.Errorf("failed to get corpus sublemmata for %q: %w", term.Lemma, err)
+	}
+	return result, nil
+}
