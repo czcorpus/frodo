@@ -41,17 +41,22 @@ func (actions *Handler) getSearchCandidates(ctx context.Context, corpusId string
 	if err != nil {
 		return nil, err
 	}
-	if lemmatizedSearchTerms == nil {
-		return nil, nil
-	}
 
 	lexTerms := make([]LemmatizedTerm, 0, 10)
-	for _, lsTerm := range lemmatizedSearchTerms {
+	for _, lsTerm := range append(
+		// add just the term itself, in case it is not found in corpus
+		[]LemmatizedTerm{{Term: searchTerm, Lemma: searchTerm, Sublemma: searchTerm}},
+		lemmatizedSearchTerms...,
+	) {
 		data, err := SearchLexTerms(ctx, actions.db.DB(), lsTerm)
 		if err != nil {
 			return nil, err
 		}
-		lexTerms = append(lexTerms, data...)
+		for _, d := range data {
+			if !collections.SliceContains(lexTerms, d) {
+				lexTerms = append(lexTerms, d)
+			}
+		}
 	}
 
 	// find main source for each candidate

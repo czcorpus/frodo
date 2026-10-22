@@ -436,7 +436,7 @@ func (lt *LemmatizedTerm) isMultiWord() bool {
 func LemmatizeTermWithCorpus(ctx context.Context, db *sql.DB, corpname, term string) ([]LemmatizedTerm, error) {
 	parts := strings.Fields(term)
 	if len(parts) == 0 {
-		return nil, nil
+		return []LemmatizedTerm{}, nil
 	}
 
 	result := make([]LemmatizedTerm, 0, 10)
@@ -477,7 +477,7 @@ func LemmatizeTermWithCorpus(ctx context.Context, db *sql.DB, corpname, term str
 			return result, fmt.Errorf("failed to lemmatize part %q: %w", part, err)
 		}
 		if len(newResult) == 0 {
-			return nil, nil
+			return []LemmatizedTerm{}, nil
 		}
 		result = newResult
 	}
