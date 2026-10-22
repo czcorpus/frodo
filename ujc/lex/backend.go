@@ -217,7 +217,7 @@ func SearchAvailableSources(ctx context.Context, db *sql.DB, lemma string) ([]So
 	return sources, nil
 }
 
-func SearchVariants(ctx context.Context, db *sql.DB, lemma string, variantSource Source) ([]LexItem, error) {
+func SearchVariants(ctx context.Context, db *sql.DB, lemmatizedTerm LemmatizedTerm) ([]LexItem, error) {
 	row, err := db.QueryContext(
 		ctx,
 		`
@@ -235,7 +235,7 @@ func SearchVariants(ctx context.Context, db *sql.DB, lemma string, variantSource
 			FROM lex_dictionary AS l
 			WHERE lemma = ? AND source = ? AND group_id IS NULL
 		`,
-		lemma, variantSource, lemma, variantSource,
+		lemmatizedTerm.Term, lemmatizedTerm.Source, lemmatizedTerm.Term, lemmatizedTerm.Source,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search variants: %w", err)
@@ -258,7 +258,7 @@ func SearchVariants(ctx context.Context, db *sql.DB, lemma string, variantSource
 		if aspectArg.Valid {
 			key.Aspect = aspectArg.String
 		}
-		data = append(data, LexItem{Key: key, PosSource: variantSource})
+		data = append(data, LexItem{Key: key, PosSource: lemmatizedTerm.Source})
 	}
 
 	return data, nil

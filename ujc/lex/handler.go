@@ -160,7 +160,7 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 	}), typoSuggestions...)
 
 	// get term variants for selected candidate
-	lexItems, err := SearchVariants(ctx, actions.db.DB(), usedCandidate.Term, usedCandidate.Source)
+	lexItems, err := SearchVariants(ctx, actions.db.DB(), usedCandidate)
 	if err != nil {
 		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 		return
