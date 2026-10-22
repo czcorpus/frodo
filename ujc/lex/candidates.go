@@ -41,6 +41,10 @@ func (actions *Handler) getSearchCandidates(ctx context.Context, corpusId string
 	if err != nil {
 		return nil, err
 	}
+	if lemmatizedSearchTerms == nil {
+		return nil, nil
+	}
+
 	lexTerms := make([]LemmatizedTerm, 0, 10)
 	for _, lsTerm := range lemmatizedSearchTerms {
 		data, err := SearchLexTerms(ctx, actions.db.DB(), lsTerm)

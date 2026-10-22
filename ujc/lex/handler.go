@@ -114,15 +114,13 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 	if err != nil {
 		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 		return
-	}
-	if len(searchCandidates) == 0 {
+	} else if len(searchCandidates) == 0 {
 		uniresp.WriteJSONResponse(ctx.Writer, LexDictResponse{
 			Matches:     []dictionary.Lemma{},
 			Suggestions: typoSuggestions,
 		})
 		return
 	}
-	log.Debug().Any("sc", searchCandidates).Send()
 
 	// first candidate will be used for search, the rest will be used as suggestions
 	usedCandidate := searchCandidates[0]
@@ -130,7 +128,7 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 		return item.Term
 	}), typoSuggestions...)
 
-	// get variants from one source
+	// get term variants for selected candidate
 	lexItems, err := SearchVariants(ctx, actions.db.DB(), usedCandidate.Term, usedCandidate.Source)
 	if err != nil {
 		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
@@ -184,7 +182,7 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 	// if not found, create a new entry with minimal data
 	variants := make([]dictionary.Lemma, 0, len(lexItems))
 	for i, item := range lexItems {
-		usedLemmatizedTerm, err := LemmatizeLexTerm(ctx, actions.db.DB(), item.Key.Lemma)
+		usedLemmatizedTerm, err := LemmatizeTermWithLex(ctx, actions.db.DB(), item.Key.Lemma)
 		if err != nil {
 			uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 			return
@@ -194,11 +192,10 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 			if err != nil {
 				uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 				return
-			}
-			if len(lemmatizedTerms) > 0 {
-				usedLemmatizedTerm = &lemmatizedTerms[0]
-			} else {
+			} else if len(lemmatizedTerms) == 0 {
 				usedLemmatizedTerm = &LemmatizedTerm{Term: item.Key.Lemma, Lemma: item.Key.Lemma, Sublemma: item.Key.Lemma}
+			} else {
+				usedLemmatizedTerm = &lemmatizedTerms[0]
 			}
 		}
 
@@ -245,6 +242,7 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 			}
 		}
 
+		// create multi word corpus entry from multiple single word entries
 		if len(corpusEntries) > 1 {
 			mergedSublemmas := make([]string, 0, len(corpusEntries))
 			mergedLemmas := make([]string, 0, len(corpusEntries))
@@ -267,15 +265,12 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 			mergedLemmaText := strings.Join(mergedLemmas, " ")
 			mergedSublemmaText := strings.Join(mergedSublemmas, " ")
 			corpusEntry = &dictionary.Lemma{
-				ID:        fmt.Sprintf("corp-%d", i),
+				ID:        util.Ternary(allCorp, "corp", "lex"),
 				Lemma:     mergedLemmaText,
 				PoS:       strings.Join(mergedPos, " "),
 				Specifier: strings.Join(mergedSpecifiers, " "),
 				Forms:     []dictionary.Form{{Value: item.Key.Lemma, Sublemma: mergedSublemmaText}},
 				Sublemmas: []dictionary.Sublemma{{Value: mergedSublemmaText}},
-			}
-			if !allCorp {
-				corpusEntry.ID = fmt.Sprintf("lex-%d", i)
 			}
 
 		} else {
@@ -294,8 +289,8 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 					item.PosSource = SourceCorpus
 				}
 			}
-			corpusEntry.ID = fmt.Sprintf("%s-%d", corpusEntry.ID, i)
 		}
+		corpusEntry.ID = fmt.Sprintf("%s-%d", corpusEntry.ID, i)
 
 		if collections.SliceFindIndex(corpusEntry.Sublemmas, func(sublemma dictionary.Sublemma) bool {
 			return sublemma.Value == usedCandidate.Sublemma

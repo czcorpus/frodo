@@ -434,12 +434,12 @@ func (lt *LemmatizedTerm) isMultiWord() bool {
 }
 
 func LemmatizeTermWithCorpus(ctx context.Context, db *sql.DB, corpname, term string) ([]LemmatizedTerm, error) {
-	result := []LemmatizedTerm{}
 	parts := strings.Fields(term)
 	if len(parts) == 0 {
-		return result, nil
+		return nil, nil
 	}
 
+	result := make([]LemmatizedTerm, 0, 10)
 	for _, part := range parts {
 		rows, err := db.QueryContext(
 			ctx,
@@ -477,14 +477,14 @@ func LemmatizeTermWithCorpus(ctx context.Context, db *sql.DB, corpname, term str
 			return result, fmt.Errorf("failed to lemmatize part %q: %w", part, err)
 		}
 		if len(newResult) == 0 {
-			return []LemmatizedTerm{}, nil
+			return nil, nil
 		}
 		result = newResult
 	}
 	return result, nil
 }
 
-func LemmatizeLexTerm(ctx context.Context, db *sql.DB, term string) (*LemmatizedTerm, error) {
+func LemmatizeTermWithLex(ctx context.Context, db *sql.DB, term string) (*LemmatizedTerm, error) {
 	var lemmaNull, sublemmaNull sql.NullString
 	row := db.QueryRowContext(
 		ctx,
@@ -503,44 +503,58 @@ func LemmatizeLexTerm(ctx context.Context, db *sql.DB, term string) (*Lemmatized
 	return &LemmatizedTerm{Term: term, Lemma: lemmaNull.String, Sublemma: sublemmaNull.String}, nil
 }
 
-func SearchLexTerms(ctx context.Context, db *sql.DB, searchLTerm LemmatizedTerm) ([]LemmatizedTerm, error) {
+func SearchLexTerms(ctx context.Context, db *sql.DB, searchTerm LemmatizedTerm) ([]LemmatizedTerm, error) {
 	result := make([]LemmatizedTerm, 0, 4)
 
 	var term string
 	var lemmaNull, sublemmaNull sql.NullString
-	row := db.QueryRowContext(
-		ctx,
-		"SELECT term, lemma, sublemma "+
-			"FROM lex_search "+
-			"WHERE term_lc = LOWER(?)",
-		searchLTerm.Term,
-	)
-	err := row.Scan(&term, &lemmaNull, &sublemmaNull)
-	if err != nil && err != sql.ErrNoRows {
-		return result, fmt.Errorf("failed to search exact lex term %q: %w", searchLTerm, err)
-	} else if err == nil {
-		result = append(result, LemmatizedTerm{Term: term, Lemma: lemmaNull.String, Sublemma: sublemmaNull.String})
-	}
-
 	rows, err := db.QueryContext(
 		ctx,
-		"SELECT term, lemma, sublemma "+
+		"SELECT DISTINCT term, lemma, sublemma "+
 			"FROM lex_search "+
-			"WHERE sublemma_lc = LOWER(?)",
-		searchLTerm.Sublemma,
+			"WHERE term_lc = LOWER(?) OR lemma_lc = LOWER(?) OR sublemma_lc = LOWER(?)",
+		searchTerm.Term,
+		searchTerm.Lemma,
+		searchTerm.Sublemma,
 	)
 	if err != nil {
-		return result, fmt.Errorf("failed to search lex term by sublemma %q: %w", searchLTerm, err)
+		return result, fmt.Errorf("failed to search lex term by sublemma %q: %w", searchTerm, err)
 	}
 	for rows.Next() {
 		err := rows.Scan(&term, &lemmaNull, &sublemmaNull)
 		if err != nil {
-			return result, fmt.Errorf("failed to search lex term by sublemma %q: %w", searchLTerm, err)
+			return result, fmt.Errorf("failed to search lex term by sublemma %q: %w", searchTerm, err)
 		}
-		result = append(result, LemmatizedTerm{Term: term, Lemma: lemmaNull.String, Sublemma: sublemmaNull.String, Distance: levenshtein.ComputeDistance(term, searchLTerm.Term)})
+		result = append(result, LemmatizedTerm{
+			Term:     term,
+			Lemma:    lemmaNull.String,
+			Sublemma: sublemmaNull.String,
+			Distance: levenshtein.ComputeDistance(term, searchTerm.Term),
+		})
 	}
 	sort.Slice(result, func(i, j int) bool {
-		return result[i].Distance < result[j].Distance
+		if result[i].Term == searchTerm.Term && result[j].Term != searchTerm.Term {
+			return true
+		}
+		if result[i].Term != searchTerm.Term && result[j].Term == searchTerm.Term {
+			return false
+		}
+		if result[i].Sublemma == searchTerm.Sublemma && result[j].Sublemma != searchTerm.Sublemma {
+			return true
+		}
+		if result[i].Sublemma != searchTerm.Sublemma && result[j].Sublemma == searchTerm.Sublemma {
+			return false
+		}
+		if result[i].Lemma == searchTerm.Lemma && result[j].Lemma != searchTerm.Lemma {
+			return true
+		}
+		if result[i].Lemma != searchTerm.Lemma && result[j].Lemma == searchTerm.Lemma {
+			return false
+		}
+		if result[i].Distance != result[j].Distance {
+			return result[i].Distance < result[j].Distance
+		}
+		return result[i].Term < result[j].Term
 	})
 	return result, nil
 }
