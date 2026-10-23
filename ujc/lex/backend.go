@@ -21,8 +21,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
+	"github.com/agnivade/levenshtein"
 	"github.com/czcorpus/cnc-gokit/collections"
 )
 
@@ -96,8 +98,8 @@ CREATE TABLE lex_dictionary (
 	plurality TINYINT DEFAULT 5 NOT NULL,
 	
 	source VARCHAR(8) NOT NULL,
-	external_id VARCHAR(100) NOT NULL,
-	external_parent_id VARCHAR(100),
+	external_id TEXT NOT NULL,
+	external_parent_id TEXT,
 
 	INDEX idx_lex_dictionary_lemma_source_group_id (lemma, source, group_id),
 	INDEX idx_lex_dictionary_lemma_pos_source (lemma, pos, source),
@@ -106,14 +108,29 @@ CREATE TABLE lex_dictionary (
 
 var suggestionsTable = `
 CREATE TABLE lex_suggestions (
-	lemma VARCHAR(100) NOT NULL,
+	lemma TEXT NOT NULL,
 	-- This column automatically calculates the normalized search key
-	search_key VARCHAR(100) COLLATE utf8mb4_unicode_ci GENERATED ALWAYS AS (
+	search_key TEXT COLLATE utf8mb4_unicode_ci GENERATED ALWAYS AS (
 		REPLACE(REPLACE(REPLACE(LOWER(lemma), 'y', 'i'), 'z', 's'), 'ž', 'š')
 	) STORED,
 
 	CONSTRAINT unique_lex_suggestions_lemma UNIQUE (lemma),
 	INDEX idx_lex_suggestions_search_key (search_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;`
+
+var searchTable = `
+CREATE TABLE lex_search (
+	term TEXT NOT NULL,
+	lemma TEXT,
+	sublemma TEXT,
+	term_lc TEXT NOT NULL,
+	lemma_lc TEXT,
+	sublemma_lc TEXT,
+
+	CONSTRAINT unique_lex_search_term UNIQUE (term),
+	INDEX idx_lex_search_lemma_lc (lemma_lc),
+	INDEX idx_lex_search_sublemma_lc (sublemma_lc),
+	INDEX idx_lex_search_term_lc (term_lc)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;`
 
 func CreateTables(ctx context.Context, db *sql.DB) (*sql.Tx, error) {
@@ -131,6 +148,12 @@ func CreateTables(ctx context.Context, db *sql.DB) (*sql.Tx, error) {
 		return nil, fmt.Errorf("failed to create table: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, suggestionsTable); err != nil {
+		return nil, fmt.Errorf("failed to create table: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, "DROP TABLE IF EXISTS lex_search"); err != nil {
+		return nil, fmt.Errorf("failed to create table: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, searchTable); err != nil {
 		return nil, fmt.Errorf("failed to create table: %w", err)
 	}
 	return tx, nil
@@ -194,7 +217,7 @@ func SearchAvailableSources(ctx context.Context, db *sql.DB, lemma string) ([]So
 	return sources, nil
 }
 
-func SearchVariants(ctx context.Context, db *sql.DB, lemma string, variantSource Source) ([]LexItem, error) {
+func SearchVariants(ctx context.Context, db *sql.DB, lemmatizedTerm LemmatizedTerm) ([]LexItem, error) {
 	row, err := db.QueryContext(
 		ctx,
 		`
@@ -212,7 +235,7 @@ func SearchVariants(ctx context.Context, db *sql.DB, lemma string, variantSource
 			FROM lex_dictionary AS l
 			WHERE lemma = ? AND source = ? AND group_id IS NULL
 		`,
-		lemma, variantSource, lemma, variantSource,
+		lemmatizedTerm.Term, lemmatizedTerm.Source, lemmatizedTerm.Term, lemmatizedTerm.Source,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search variants: %w", err)
@@ -235,7 +258,7 @@ func SearchVariants(ctx context.Context, db *sql.DB, lemma string, variantSource
 		if aspectArg.Valid {
 			key.Aspect = aspectArg.String
 		}
-		data = append(data, LexItem{Key: key, PosSource: variantSource})
+		data = append(data, LexItem{Key: key, PosSource: lemmatizedTerm.Source})
 	}
 
 	return data, nil
@@ -395,4 +418,177 @@ func SearchLexItemID(ctx context.Context, db *sql.DB, lexKey LexKey, source Sour
 	}
 
 	return lexIds, nil
+}
+
+type LemmatizedTerm struct {
+	Term     string
+	Lemma    string
+	Sublemma string
+
+	Source   Source
+	Distance int
+}
+
+func (lt *LemmatizedTerm) isMultiWord() bool {
+	return strings.Contains(lt.Term, " ")
+}
+
+func LemmatizeTermWithCorpus(ctx context.Context, db *sql.DB, corpname, term string) ([]LemmatizedTerm, error) {
+	parts := strings.Fields(term)
+	if len(parts) == 0 {
+		return []LemmatizedTerm{}, nil
+	}
+
+	result := make([]LemmatizedTerm, 0, 10)
+	for _, part := range parts {
+		rows, err := db.QueryContext(
+			ctx,
+			fmt.Sprintf(
+				"SELECT DISTINCT lemma, sublemma "+
+					"FROM %s_term_search AS ts "+
+					"JOIN %s_word AS w ON ts.word_id = w.id "+
+					"WHERE ts.value_lc = LOWER(?) "+
+					"ORDER BY count DESC",
+				corpname, corpname,
+			),
+			part,
+		)
+		if err != nil {
+			return result, fmt.Errorf("failed to lemmatize part %q: %w", part, err)
+		}
+
+		var lemma, sublemma string
+		newResult := make([]LemmatizedTerm, 0, 10)
+		for rows.Next() {
+			if err := rows.Scan(&lemma, &sublemma); err != nil {
+				return result, fmt.Errorf("failed to lemmatize part %q: %w", part, err)
+			}
+			if len(result) == 0 {
+				newResult = append(newResult, LemmatizedTerm{Term: term, Lemma: lemma, Sublemma: sublemma})
+			} else {
+				for _, r := range result {
+					r.Lemma += " " + lemma
+					r.Sublemma += " " + sublemma
+					newResult = append(newResult, r)
+				}
+			}
+		}
+		if err := rows.Err(); err != nil {
+			return result, fmt.Errorf("failed to lemmatize part %q: %w", part, err)
+		}
+		if len(newResult) == 0 {
+			return []LemmatizedTerm{}, nil
+		}
+		result = newResult
+	}
+	return result, nil
+}
+
+func LemmatizeTermWithLex(ctx context.Context, db *sql.DB, term string) (*LemmatizedTerm, error) {
+	var lemmaNull, sublemmaNull sql.NullString
+	row := db.QueryRowContext(
+		ctx,
+		"SELECT lemma, sublemma "+
+			"FROM lex_search "+
+			"WHERE term = ?",
+		term,
+	)
+	err := row.Scan(&lemmaNull, &sublemmaNull)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to lemmatize lex term %q: %w", term, err)
+	}
+	return &LemmatizedTerm{Term: term, Lemma: lemmaNull.String, Sublemma: sublemmaNull.String}, nil
+}
+
+func SearchLexTerms(ctx context.Context, db *sql.DB, searchTerm LemmatizedTerm) ([]LemmatizedTerm, error) {
+	result := make([]LemmatizedTerm, 0, 4)
+
+	var term string
+	var lemmaNull, sublemmaNull sql.NullString
+	rows, err := db.QueryContext(
+		ctx,
+		"SELECT DISTINCT term, lemma, sublemma "+
+			"FROM lex_search "+
+			"WHERE term_lc = LOWER(?) OR lemma_lc = LOWER(?) OR sublemma_lc = LOWER(?)",
+		searchTerm.Term,
+		searchTerm.Lemma,
+		searchTerm.Sublemma,
+	)
+	if err != nil {
+		return result, fmt.Errorf("failed to search lex term by sublemma %q: %w", searchTerm, err)
+	}
+	for rows.Next() {
+		err := rows.Scan(&term, &lemmaNull, &sublemmaNull)
+		if err != nil {
+			return result, fmt.Errorf("failed to search lex term by sublemma %q: %w", searchTerm, err)
+		}
+		result = append(result, LemmatizedTerm{
+			Term:     term,
+			Lemma:    lemmaNull.String,
+			Sublemma: sublemmaNull.String,
+			Distance: levenshtein.ComputeDistance(term, searchTerm.Term),
+		})
+	}
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].Term == searchTerm.Term && result[j].Term != searchTerm.Term {
+			return true
+		}
+		if result[i].Term != searchTerm.Term && result[j].Term == searchTerm.Term {
+			return false
+		}
+		if result[i].Sublemma == searchTerm.Sublemma && result[j].Sublemma != searchTerm.Sublemma {
+			return true
+		}
+		if result[i].Sublemma != searchTerm.Sublemma && result[j].Sublemma == searchTerm.Sublemma {
+			return false
+		}
+		if result[i].Lemma == searchTerm.Lemma && result[j].Lemma != searchTerm.Lemma {
+			return true
+		}
+		if result[i].Lemma != searchTerm.Lemma && result[j].Lemma == searchTerm.Lemma {
+			return false
+		}
+		if result[i].Distance != result[j].Distance {
+			return result[i].Distance < result[j].Distance
+		}
+		return result[i].Term < result[j].Term
+	})
+	return result, nil
+}
+
+func GetCorpusSublemmata(ctx context.Context, db *sql.DB, corpname string, term LemmatizedTerm) ([]LemmatizedTerm, error) {
+	if term.isMultiWord() {
+		return []LemmatizedTerm{}, nil
+	}
+
+	result := make([]LemmatizedTerm, 0, 10)
+	rows, err := db.QueryContext(
+		ctx,
+		fmt.Sprintf(
+			"SELECT DISTINCT sublemma "+
+				"FROM %s_term_search AS ts "+
+				"JOIN %s_word AS w ON ts.word_id = w.id "+
+				"WHERE ts.value = ? ",
+			corpname, corpname,
+		),
+		term.Lemma,
+	)
+	if err != nil {
+		return result, fmt.Errorf("failed to get corpus sublemmata for %q: %w", term.Lemma, err)
+	}
+
+	for rows.Next() {
+		newTerm := LemmatizedTerm{Lemma: term.Lemma}
+		if err := rows.Scan(&newTerm.Sublemma); err != nil {
+			return result, fmt.Errorf("failed to get corpus sublemmata for %q: %w", term.Lemma, err)
+		}
+		result = append(result, newTerm)
+	}
+	if err := rows.Err(); err != nil {
+		return result, fmt.Errorf("failed to get corpus sublemmata for %q: %w", term.Lemma, err)
+	}
+	return result, nil
 }

@@ -100,20 +100,73 @@ func (actions *Handler) searchCorpusEntry(ctx context.Context, corpusId, sublemm
 	return nil, nil
 }
 
+func (actions *Handler) mergeMultiWordCorpusEntries(item LexItem, corpusEntries []*dictionary.Lemma) *dictionary.Lemma {
+	mergedSublemmas := make([]string, 0, len(corpusEntries))
+	mergedLemmas := make([]string, 0, len(corpusEntries))
+	mergedPos := make([]string, 0, len(corpusEntries))
+	mergedSpecifiers := make([]string, 0, len(corpusEntries))
+	allCorp := true
+	for _, subentry := range corpusEntries {
+		if allCorp && !strings.HasPrefix(subentry.ID, "corp") {
+			allCorp = false
+		}
+		mergedLemmas = append(mergedLemmas, subentry.Lemma)
+		mergedPos = append(mergedPos, subentry.PoS)
+		mergedSpecifiers = append(mergedSpecifiers, subentry.Specifier)
+		if len(subentry.Sublemmas) > 0 && subentry.Sublemmas[0].Value != "" {
+			mergedSublemmas = append(mergedSublemmas, subentry.Sublemmas[0].Value)
+		} else if subentry.Lemma != "" {
+			mergedSublemmas = append(mergedSublemmas, subentry.Lemma)
+		}
+	}
+	mergedLemmaText := strings.Join(mergedLemmas, " ")
+	mergedSublemmaText := strings.Join(mergedSublemmas, " ")
+	return &dictionary.Lemma{
+		ID:        util.Ternary(allCorp, "corp", "lex"),
+		Lemma:     mergedLemmaText,
+		PoS:       strings.Join(mergedPos, " "),
+		Specifier: strings.Join(mergedSpecifiers, " "),
+		Forms:     []dictionary.Form{{Value: item.Key.Lemma, Sublemma: mergedSublemmaText}},
+		Sublemmas: []dictionary.Sublemma{{Value: mergedSublemmaText}},
+	}
+}
+
+func (actions *Handler) generatePossibleSearchTerms(searchTerm string) []string {
+	values := []string{searchTerm}
+	parts := strings.Fields(searchTerm)
+	if len(parts) > 1 {
+		lastPart := parts[len(parts)-1]
+		if collections.SliceContains([]string{"si", "sis", "se", "ses"}, lastPart) {
+			values = append(values, strings.Join(parts[:len(parts)-1], " "))
+		}
+	} else {
+		values = append(values, searchTerm+" se")
+	}
+	return values
+}
+
 func (actions *Handler) SearchWord(ctx *gin.Context) {
 	corpusId := ctx.Param("corpusId")
-	term := ctx.Param("term")
+	searchTerm := ctx.Param("term")
 
-	typoSuggestions, err := SearchTypoSuggestions(ctx, actions.db.DB(), term)
-	if err != nil {
-		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
-		return
-	}
+	var err error
+	var searchCandidates []LemmatizedTerm
+	typoSuggestions := make([]string, 0, 10)
+	for _, searchTermVariant := range actions.generatePossibleSearchTerms(searchTerm) {
+		if values, err := SearchTypoSuggestions(ctx, actions.db.DB(), searchTerm); err != nil {
+			uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
+			return
+		} else {
+			typoSuggestions = append(typoSuggestions, values...)
+		}
 
-	searchCandidates, err := actions.getSearchCandidates(ctx, corpusId, term)
-	if err != nil {
-		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
-		return
+		if values, err := actions.getSearchCandidates(ctx, corpusId, searchTermVariant); err != nil {
+			uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
+			return
+		} else if len(values) > 0 {
+			searchCandidates = values
+			break
+		}
 	}
 	if len(searchCandidates) == 0 {
 		uniresp.WriteJSONResponse(ctx.Writer, LexDictResponse{
@@ -125,12 +178,12 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 
 	// first candidate will be used for search, the rest will be used as suggestions
 	usedCandidate := searchCandidates[0]
-	suggestions := append(collections.SliceMap(searchCandidates[1:], func(item SearchCandidate, i int) string {
-		return item.Value
+	suggestions := append(collections.SliceMap(searchCandidates[1:], func(item LemmatizedTerm, i int) string {
+		return item.Term
 	}), typoSuggestions...)
 
-	// get variants from one source
-	lexItems, err := SearchVariants(ctx, actions.db.DB(), usedCandidate.Value, usedCandidate.Source)
+	// get term variants for selected candidate
+	lexItems, err := SearchVariants(ctx, actions.db.DB(), usedCandidate)
 	if err != nil {
 		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 		return
@@ -183,22 +236,34 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 	// if not found, create a new entry with minimal data
 	variants := make([]dictionary.Lemma, 0, len(lexItems))
 	for i, item := range lexItems {
-		terms, err := actions.lemmatizeMultiWordTerm(ctx, corpusId, item.Key.Lemma)
+		usedLemmatizedTerm, err := LemmatizeTermWithLex(ctx, actions.db.DB(), item.Key.Lemma)
 		if err != nil {
 			uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 			return
 		}
-		specifier := util.Ternary(len(terms) > 1, "", cmp.Or(
+		if usedLemmatizedTerm == nil {
+			lemmatizedTerms, err := LemmatizeTermWithCorpus(ctx, actions.db.DB(), corpusId, item.Key.Lemma)
+			if err != nil {
+				uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
+				return
+			} else if len(lemmatizedTerms) == 0 {
+				usedLemmatizedTerm = &LemmatizedTerm{Term: item.Key.Lemma, Lemma: item.Key.Lemma, Sublemma: item.Key.Lemma}
+			} else {
+				usedLemmatizedTerm = &lemmatizedTerms[0]
+			}
+		}
+
+		specifier := util.Ternary(usedLemmatizedTerm.isMultiWord(), "", cmp.Or(
 			// corpus entry needs to replace "B" and "U" gender with "MI"
 			util.Ternary(item.Key.Gender == GenderMascAnimInan || item.Key.Gender == GenderMascUnknown, "MI", item.Key.Gender),
 			item.Key.Aspect,
 		))
-		pos := util.Ternary(len(terms) > 1, "", item.Key.Pos)
+		pos := util.Ternary(usedLemmatizedTerm.isMultiWord(), "", item.Key.Pos)
 
 		var corpusEntries []*dictionary.Lemma
 		var corpusEntry *dictionary.Lemma
-		for _, term := range terms {
-			corpusEntry, err = actions.searchCorpusEntry(ctx, corpusId, term, pos)
+		for _, sublemma := range strings.Fields(usedLemmatizedTerm.Sublemma) {
+			corpusEntry, err = actions.searchCorpusEntry(ctx, corpusId, sublemma, pos)
 			if err != nil {
 				uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 				return
@@ -207,65 +272,57 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 			if corpusEntry == nil {
 				corpusEntry = &dictionary.Lemma{
 					ID:        "lex",
-					Lemma:     term,
+					Lemma:     sublemma,
 					PoS:       pos,
 					Specifier: specifier,
-					Forms:     []dictionary.Form{{Value: term, Sublemma: term}},
-					Sublemmas: []dictionary.Sublemma{{Value: term}},
+					Forms:     []dictionary.Form{{Value: sublemma, Sublemma: sublemma}},
+					Sublemmas: []dictionary.Sublemma{{Value: sublemma}},
 				}
 
 			} else {
 				corpusEntry.ID = "corp"
 				corpusEntry.Specifier = cmp.Or(corpusEntry.Specifier, specifier)
-				if len(terms) == 1 {
-					item.Sources[SourceCorpus] = []LexID{
-						{Key: LexKey{Pos: corpusEntry.PoS}},
-					}
-
-					// use corpus PoS if pos source is unknown
-					if item.PosSource == SourceEmpty {
-						item.PosSource = SourceCorpus
-					}
-				}
 			}
 			corpusEntries = append(corpusEntries, corpusEntry)
 		}
-
-		if len(corpusEntries) > 1 {
-			mergedSublemmas := make([]string, 0, len(corpusEntries))
-			mergedLemmas := make([]string, 0, len(corpusEntries))
-			mergedPos := make([]string, 0, len(corpusEntries))
-			mergedSpecifiers := make([]string, 0, len(corpusEntries))
-			allCorp := true
-			for _, subentry := range corpusEntries {
-				if !strings.HasPrefix(subentry.ID, "corp") {
-					allCorp = false
-				}
-				mergedLemmas = append(mergedLemmas, subentry.Lemma)
-				mergedPos = append(mergedPos, subentry.PoS)
-				mergedSpecifiers = append(mergedSpecifiers, subentry.Specifier)
-				if len(subentry.Sublemmas) > 0 && subentry.Sublemmas[0].Value != "" {
-					mergedSublemmas = append(mergedSublemmas, subentry.Sublemmas[0].Value)
-				} else if subentry.Lemma != "" {
-					mergedSublemmas = append(mergedSublemmas, subentry.Lemma)
-				}
-			}
-			mergedLemmaText := strings.Join(mergedLemmas, " ")
-			mergedSublemmaText := strings.Join(mergedSublemmas, " ")
+		if corpusEntry == nil {
 			corpusEntry = &dictionary.Lemma{
-				ID:        fmt.Sprintf("corp-%d", i),
-				Lemma:     mergedLemmaText,
-				PoS:       strings.Join(mergedPos, " "),
-				Specifier: strings.Join(mergedSpecifiers, " "),
-				Forms:     []dictionary.Form{{Value: item.Key.Lemma, Sublemma: mergedSublemmaText}},
-				Sublemmas: []dictionary.Sublemma{{Value: mergedSublemmaText}},
+				ID:        "lex",
+				Lemma:     item.Key.Lemma,
+				PoS:       pos,
+				Specifier: specifier,
+				Forms:     []dictionary.Form{{Value: item.Key.Lemma, Sublemma: item.Key.Lemma}},
+				Sublemmas: []dictionary.Sublemma{{Value: item.Key.Lemma}},
 			}
-			if !allCorp {
-				corpusEntry.ID = fmt.Sprintf("lex-%d", i)
-			}
+		}
 
-		} else {
-			corpusEntry.ID = fmt.Sprintf("%s-%d", corpusEntry.ID, i)
+		// create multi word corpus entry from multiple single word entries
+		if len(corpusEntries) > 1 {
+			corpusEntry = actions.mergeMultiWordCorpusEntries(item, corpusEntries)
+
+		} else if corpusEntry.ID == "corp" {
+			item.Sources[SourceCorpus] = []LexID{
+				{Key: LexKey{
+					Lemma: corpusEntry.Lemma,
+					Pos:   corpusEntry.PoS,
+					// TODO, get specifier from corpus
+					Gender: util.Ternary(corpusEntry.PoS == PosNoun, corpusEntry.Specifier, ""),
+					Aspect: util.Ternary(corpusEntry.PoS == PosVerb, corpusEntry.Specifier, ""),
+				}},
+			}
+			// use corpus PoS if pos source is unknown
+			if item.PosSource == SourceEmpty {
+				item.PosSource = SourceCorpus
+			}
+		}
+		corpusEntry.ID = fmt.Sprintf("%s-%d", corpusEntry.ID, i)
+
+		if collections.SliceFindIndex(corpusEntry.Sublemmas, func(sublemma dictionary.Sublemma) bool {
+			return sublemma.Value == usedCandidate.Sublemma
+		}) != -1 && collections.SliceFindIndex(corpusEntry.Forms, func(form dictionary.Form) bool {
+			return form.Value == searchTerm
+		}) == -1 {
+			corpusEntry.Forms = append(corpusEntry.Forms, dictionary.Form{Value: searchTerm, Sublemma: usedLemmatizedTerm.Sublemma})
 		}
 
 		corpusEntry.ExtraData = LexExtraData{

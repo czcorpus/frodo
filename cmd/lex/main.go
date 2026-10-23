@@ -24,6 +24,7 @@ import (
 	"frodo/db/mysql"
 	"frodo/ujc/lex"
 	"frodo/ujc/lex/assc"
+	"frodo/ujc/lex/general"
 	"frodo/ujc/lex/ijp"
 	"frodo/ujc/lex/ssc"
 	"os"
@@ -36,10 +37,11 @@ import (
 type cmdAction string
 
 const (
-	cmdActionImport   cmdAction = "import"
-	cmdActionUpdate   cmdAction = "update"
-	cmdActionTest     cmdAction = "test"
-	cmdActionTestSave cmdAction = "test-save"
+	cmdActionImport         cmdAction = "import"
+	cmdActionUpdate         cmdAction = "update"
+	cmdActionGenerateSearch cmdAction = "generate-search"
+	cmdActionTest           cmdAction = "test"
+	cmdActionTestSave       cmdAction = "test-save"
 )
 
 // Import subcommand flags
@@ -55,6 +57,12 @@ type updateArgs struct {
 	targetID    string
 	serviceType string
 	force       bool
+}
+
+// GenerateSearch subcommand flags
+type generateSearchArgs struct {
+	configPath string
+	corpname   string
 }
 
 type testArgs struct {
@@ -209,6 +217,31 @@ func runSscUpdate(args updateArgs) error {
 	return nil
 }
 
+func runGenerateLexSearchTable(args generateSearchArgs) {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	conf := cnf.LoadConfig(args.configPath)
+	db, err := mysql.OpenDB(*conf.LiveAttrs.DB)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to generate lex_search table data")
+	}
+
+	tx, err := db.DB().BeginTx(ctx, nil)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to generate lex_search table data")
+	}
+
+	err = general.GenerateLexSearchTable(ctx, tx, args.corpname)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to generate lex_search table data")
+	}
+	tx.Commit()
+	if err == nil {
+		log.Info().Msg("...DONE")
+	}
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Fprintf(os.Stderr, "Usage: %s <command> [options]\n", os.Args[0])
@@ -219,6 +252,7 @@ func main() {
 	// Create subcommand flag sets
 	importCmd := flag.NewFlagSet(string(cmdActionImport), flag.ExitOnError)
 	updateCmd := flag.NewFlagSet(string(cmdActionUpdate), flag.ExitOnError)
+	generateSearchCmd := flag.NewFlagSet(string(cmdActionGenerateSearch), flag.ExitOnError)
 	testCmd := flag.NewFlagSet(string(cmdActionTest), flag.ExitOnError)
 	saveCmd := flag.NewFlagSet(string(cmdActionTestSave), flag.ExitOnError)
 
@@ -232,6 +266,10 @@ func main() {
 	updateCmd.StringVar(&updateOpts.serviceType, "service", "", "type of service data to import (required)")
 	updateCmd.StringVar(&updateOpts.targetID, "id", "", "target ID to update")
 	updateCmd.BoolVar(&updateOpts.force, "force", false, "force update even if conflicts exist")
+
+	// Define flags for update subcommand
+	var generateSearchOpts generateSearchArgs
+	generateSearchCmd.StringVar(&generateSearchOpts.corpname, "corpname", "", "corpus used for term lemmatization (required)")
 
 	// Define flags for test variant subcommand
 	var testOpts testArgs
@@ -287,6 +325,13 @@ func main() {
 			fmt.Fprintf(os.Stderr, "update failed: %v\n", err)
 			os.Exit(1)
 		}
+
+	case cmdActionGenerateSearch:
+		if err := generateSearchCmd.Parse(os.Args[2:]); err != nil {
+			os.Exit(1)
+		}
+		generateSearchOpts.configPath = generateSearchCmd.Arg(0)
+		runGenerateLexSearchTable(generateSearchOpts)
 
 	case cmdActionTest:
 		if err := testCmd.Parse(os.Args[2:]); err != nil {
