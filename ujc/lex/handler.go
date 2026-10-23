@@ -131,21 +131,44 @@ func (actions *Handler) mergeMultiWordCorpusEntries(item LexItem, corpusEntries 
 	}
 }
 
+func (actions *Handler) generatePossibleSearchTerms(searchTerm string) []string {
+	values := []string{searchTerm}
+	parts := strings.Fields(searchTerm)
+	if len(parts) > 1 {
+		lastPart := parts[len(parts)-1]
+		if collections.SliceContains([]string{"si", "sis", "se", "ses"}, lastPart) {
+			values = append(values, strings.Join(parts[:len(parts)-1], " "))
+		}
+	} else {
+		values = append(values, searchTerm+" se")
+	}
+	return values
+}
+
 func (actions *Handler) SearchWord(ctx *gin.Context) {
 	corpusId := ctx.Param("corpusId")
 	searchTerm := ctx.Param("term")
 
-	typoSuggestions, err := SearchTypoSuggestions(ctx, actions.db.DB(), searchTerm)
-	if err != nil {
-		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
-		return
-	}
+	var err error
+	var searchCandidates []LemmatizedTerm
+	typoSuggestions := make([]string, 0, 10)
+	for _, searchTermVariant := range actions.generatePossibleSearchTerms(searchTerm) {
+		if values, err := SearchTypoSuggestions(ctx, actions.db.DB(), searchTerm); err != nil {
+			uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
+			return
+		} else {
+			typoSuggestions = append(typoSuggestions, values...)
+		}
 
-	searchCandidates, err := actions.getSearchCandidates(ctx, corpusId, searchTerm)
-	if err != nil {
-		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
-		return
-	} else if len(searchCandidates) == 0 {
+		if values, err := actions.getSearchCandidates(ctx, corpusId, searchTermVariant); err != nil {
+			uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
+			return
+		} else if len(values) > 0 {
+			searchCandidates = values
+			break
+		}
+	}
+	if len(searchCandidates) == 0 {
 		uniresp.WriteJSONResponse(ctx.Writer, LexDictResponse{
 			Matches:     []dictionary.Lemma{},
 			Suggestions: typoSuggestions,
