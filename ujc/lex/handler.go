@@ -258,12 +258,14 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 			util.Ternary(item.Key.Gender == GenderMascAnimInan || item.Key.Gender == GenderMascUnknown, "MI", item.Key.Gender),
 			item.Key.Aspect,
 		))
-		pos := util.Ternary(usedLemmatizedTerm.isMultiWord(), "", item.Key.Pos)
 
 		var corpusEntries []*dictionary.Lemma
 		var corpusEntry *dictionary.Lemma
-		for _, sublemma := range strings.Fields(usedLemmatizedTerm.Sublemma) {
-			corpusEntry, err = actions.searchCorpusEntry(ctx, corpusId, sublemma, pos)
+		// use lemmatized term only for multi-word terms, otherwise use the lemma from lexicon
+		searchSublemma := util.Ternary(usedLemmatizedTerm.isMultiWord(), usedLemmatizedTerm.Sublemma, item.Key.Lemma)
+		searchPos := util.Ternary(usedLemmatizedTerm.isMultiWord(), "", item.Key.Pos)
+		for _, sublemma := range strings.Fields(searchSublemma) {
+			corpusEntry, err = actions.searchCorpusEntry(ctx, corpusId, sublemma, searchPos)
 			if err != nil {
 				uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 				return
@@ -273,7 +275,7 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 				corpusEntry = &dictionary.Lemma{
 					ID:        "lex",
 					Lemma:     sublemma,
-					PoS:       pos,
+					PoS:       searchPos,
 					Specifier: specifier,
 					Forms:     []dictionary.Form{{Value: sublemma, Sublemma: sublemma}},
 					Sublemmas: []dictionary.Sublemma{{Value: sublemma}},
@@ -289,7 +291,7 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 			corpusEntry = &dictionary.Lemma{
 				ID:        "lex",
 				Lemma:     item.Key.Lemma,
-				PoS:       pos,
+				PoS:       searchPos,
 				Specifier: specifier,
 				Forms:     []dictionary.Form{{Value: item.Key.Lemma, Sublemma: item.Key.Lemma}},
 				Sublemmas: []dictionary.Sublemma{{Value: item.Key.Lemma}},
