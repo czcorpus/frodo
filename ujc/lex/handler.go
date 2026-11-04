@@ -50,14 +50,9 @@ type Handler struct {
 	sourcePriority []Source
 }
 
-func (actions *Handler) searchCorpusEntry(ctx context.Context, corpusId, sublemma, pos string) (*dictionary.Lemma, error) {
-	if sublemma == "" {
+func (actions *Handler) searchCorpusEntry(ctx context.Context, corpusId, lemma, sublemma, pos string) (*dictionary.Lemma, error) {
+	if sublemma == "" && lemma != "" {
 		return nil, nil
-	}
-
-	posArg := dictionary.SearchWithNoOp()
-	if pos != "" {
-		posArg = dictionary.SearchWithPoS(pos)
 	}
 
 	datasetSize, err := actions.dictActions.GetDatasetSize(corpusId)
@@ -69,9 +64,10 @@ func (actions *Handler) searchCorpusEntry(ctx context.Context, corpusId, sublemm
 		ctx,
 		actions.db,
 		corpusId,
-		dictionary.SearchWithSublemma(sublemma),
+		util.Ternary(lemma != "", dictionary.SearchWithLemma(lemma), dictionary.SearchWithNoOp()),
+		util.Ternary(sublemma != "", dictionary.SearchWithSublemma(sublemma), dictionary.SearchWithNoOp()),
+		util.Ternary(pos != "", dictionary.SearchWithPoS(pos), dictionary.SearchWithNoOp()),
 		dictionary.SearchWithDatasetSizeForIPM(int(datasetSize)),
-		posArg,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find sublemma: %w", err)
@@ -270,10 +266,18 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 		var corpusEntries []*dictionary.Lemma
 		var corpusEntry *dictionary.Lemma
 		// use lemmatized term only for multi-word terms, otherwise use the lemma from lexicon
+		searchLemma := util.Ternary(usedLemmatizedTerm.isMultiWord(), usedLemmatizedTerm.Lemma, item.Key.Lemma)
 		searchSublemma := util.Ternary(usedLemmatizedTerm.isMultiWord(), usedLemmatizedTerm.Sublemma, item.Key.Lemma)
 		searchPos := util.Ternary(usedLemmatizedTerm.isMultiWord(), "", item.Key.Pos)
-		for _, sublemma := range strings.Fields(searchSublemma) {
-			corpusEntry, err = actions.searchCorpusEntry(ctx, corpusId, sublemma, searchPos)
+		lemmaValues := strings.Fields(searchLemma)
+		sublemmaValues := strings.Fields(searchSublemma)
+		for i, sublemma := range sublemmaValues {
+			lemma := sublemma
+			if i < len(lemmaValues) {
+				lemma = lemmaValues[i]
+			}
+
+			corpusEntry, err = actions.searchCorpusEntry(ctx, corpusId, lemma, sublemma, searchPos)
 			if err != nil {
 				uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 				return
@@ -313,7 +317,7 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 		} else if corpusEntry.ID == "corp" {
 			item.Sources[SourceCorpus] = []LexID{
 				{Key: LexKey{
-					Lemma: corpusEntry.Lemma,
+					Lemma: corpusEntry.Sublemmas[0].Value,
 					Pos:   corpusEntry.PoS,
 					// TODO, get specifier from corpus
 					Gender: util.Ternary(corpusEntry.PoS == PosNoun, corpusEntry.Specifier, ""),
