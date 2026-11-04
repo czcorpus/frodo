@@ -313,8 +313,9 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 		// create multi word corpus entry from multiple single word entries
 		if len(corpusEntries) > 1 {
 			corpusEntry = actions.mergeMultiWordCorpusEntries(item, corpusEntries)
+		}
 
-		} else if corpusEntry.ID == "corp" {
+		if corpusEntry.ID == "corp" {
 			item.Sources[SourceCorpus] = []LexID{
 				{Key: LexKey{
 					Lemma: corpusEntry.Sublemmas[0].Value,
@@ -325,7 +326,7 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 				}},
 			}
 			// use corpus PoS if pos source is unknown
-			if item.PosSource == SourceEmpty {
+			if item.PosSource == SourceEmpty && len(corpusEntries) > 0 {
 				item.PosSource = SourceCorpus
 			}
 		}
