@@ -132,17 +132,19 @@ func (actions *Handler) mergeMultiWordCorpusEntries(item LexItem, corpusEntries 
 }
 
 func (actions *Handler) generatePossibleSearchTerms(searchTerm string) []string {
-	values := []string{searchTerm}
+	baseTerm := searchTerm
 	parts := strings.Fields(searchTerm)
 	if len(parts) > 1 {
 		lastPart := parts[len(parts)-1]
 		if collections.SliceContains([]string{"si", "sis", "se", "ses"}, lastPart) {
-			values = append(values, strings.Join(parts[:len(parts)-1], " "))
+			baseTerm = strings.Join(parts[:len(parts)-1], " ")
 		}
-	} else {
-		values = append(values, searchTerm+" se")
 	}
-	return values
+	return []string{
+		baseTerm,
+		baseTerm + " se",
+		baseTerm + " si",
+	}
 }
 
 func (actions *Handler) SearchWord(ctx *gin.Context) {
@@ -182,11 +184,17 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 		return item.Term
 	}), typoSuggestions...)
 
+	var lexItems []LexItem
 	// get term variants for selected candidate
-	lexItems, err := SearchVariants(ctx, actions.db.DB(), usedCandidate)
-	if err != nil {
-		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
-		return
+	for _, searchTermVariant := range actions.generatePossibleSearchTerms(usedCandidate.Term) {
+		searchCandidat := usedCandidate
+		searchCandidat.Term = searchTermVariant
+		data, err := SearchVariants(ctx, actions.db.DB(), searchCandidat)
+		if err != nil {
+			uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
+			return
+		}
+		lexItems = append(lexItems, data...)
 	}
 
 	// just in case..., should not happen, since searched item is certainly in dictionary, `variantSource` exists
