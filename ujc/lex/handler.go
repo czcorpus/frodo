@@ -51,7 +51,7 @@ type Handler struct {
 }
 
 func (actions *Handler) searchCorpusEntry(ctx context.Context, corpusId, lemma, sublemma, pos string) (*dictionary.Lemma, error) {
-	if sublemma == "" && lemma != "" {
+	if sublemma == "" {
 		return nil, nil
 	}
 
@@ -64,8 +64,8 @@ func (actions *Handler) searchCorpusEntry(ctx context.Context, corpusId, lemma, 
 		ctx,
 		actions.db,
 		corpusId,
+		dictionary.SearchWithSublemma(sublemma),
 		util.Ternary(lemma != "", dictionary.SearchWithLemma(lemma), dictionary.SearchWithNoOp()),
-		util.Ternary(sublemma != "", dictionary.SearchWithSublemma(sublemma), dictionary.SearchWithNoOp()),
 		util.Ternary(pos != "", dictionary.SearchWithPoS(pos), dictionary.SearchWithNoOp()),
 		dictionary.SearchWithDatasetSizeForIPM(int(datasetSize)),
 	)
@@ -94,6 +94,112 @@ func (actions *Handler) searchCorpusEntry(ctx context.Context, corpusId, lemma, 
 		return &ans[0], nil
 	}
 	return nil, nil
+}
+
+func (actions *Handler) searchOtherSublemmata(ctx context.Context, corpusId, lemma, sublemma, pos string) ([]dictionary.Lemma, error) {
+	if sublemma == "" {
+		return nil, nil
+	}
+
+	datasetSize, err := actions.dictActions.GetDatasetSize(corpusId)
+	if err != nil {
+		return nil, err
+	}
+
+	ans, err := dictionary.Search(
+		ctx,
+		actions.db,
+		corpusId,
+		util.Ternary(lemma != "", dictionary.SearchWithLemma(lemma), dictionary.SearchWithNoOp()),
+		dictionary.SearchWithoutSublemma(sublemma),
+		util.Ternary(pos != "", dictionary.SearchWithPoS(pos), dictionary.SearchWithNoOp()),
+		dictionary.SearchWithDatasetSizeForIPM(int(datasetSize)),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find sublemma: %w", err)
+	}
+
+	// expand results to have one entry per sublemma, with forms filtered to only those matching the sublemma
+	results := make([]dictionary.Lemma, 0, len(ans))
+	for _, item := range ans {
+		for _, sublemma := range item.Sublemmas {
+			entry := item
+			entry.Sublemmas = []dictionary.Sublemma{sublemma}
+			if len(entry.Forms) > 0 {
+				filteredForms := make([]dictionary.Form, 0, len(entry.Forms))
+				for _, form := range entry.Forms {
+					if form.Sublemma == "" || form.Sublemma == sublemma.Value {
+						filteredForms = append(filteredForms, form)
+					}
+				}
+				entry.Forms = filteredForms
+			}
+			results = append(results, entry)
+		}
+	}
+
+	return results, nil
+}
+
+func (actions *Handler) addOtherSublemmaVariants(ctx context.Context, corpusId string, variants []dictionary.Lemma) ([]dictionary.Lemma, error) {
+	result := make([]dictionary.Lemma, 0, len(variants))
+	result = append(result, variants...)
+
+	for _, variant := range variants {
+		currentSublemma := variant.Lemma
+		if len(variant.Sublemmas) > 0 && variant.Sublemmas[0].Value != "" {
+			currentSublemma = variant.Sublemmas[0].Value
+		}
+		otherVariants, err := actions.searchOtherSublemmata(ctx, corpusId, variant.Lemma, currentSublemma, variant.PoS)
+		if err != nil {
+			return nil, err
+		}
+		for _, otherVariant := range otherVariants {
+			candidateSublemma := otherVariant.Lemma
+			if len(otherVariant.Sublemmas) > 0 && otherVariant.Sublemmas[0].Value != "" {
+				candidateSublemma = otherVariant.Sublemmas[0].Value
+			}
+			if collections.SliceFindIndex(result, func(item dictionary.Lemma) bool {
+				if item.Lemma != otherVariant.Lemma || item.PoS != otherVariant.PoS {
+					return false
+				}
+				if len(item.Sublemmas) == 0 {
+					return false
+				}
+				return item.Sublemmas[0].Value == candidateSublemma
+			}) != -1 {
+				continue
+			}
+			candidate := otherVariant
+			candidate.ID = fmt.Sprintf("corp-%s", candidateSublemma)
+			candidate.ExtraData = LexExtraData{
+				CorpusId:      corpusId,
+				VariantSource: SourceCorpus,
+				Variant: LexItem{
+					Key: LexKey{
+						Lemma:  candidateSublemma,
+						Pos:    candidate.PoS,
+						Gender: util.Ternary(candidate.PoS == PosNoun, candidate.Specifier, ""),
+						Aspect: util.Ternary(candidate.PoS == PosVerb, candidate.Specifier, ""),
+					},
+					PosSource: SourceCorpus,
+					Sources: map[Source][]LexID{
+						SourceCorpus: {{
+							Key: LexKey{
+								Lemma:  candidateSublemma,
+								Pos:    candidate.PoS,
+								Gender: util.Ternary(candidate.PoS == PosNoun, candidate.Specifier, ""),
+								Aspect: util.Ternary(candidate.PoS == PosVerb, candidate.Specifier, ""),
+							},
+						}},
+					},
+					Group: 9,
+				},
+			}
+			result = append(result, candidate)
+		}
+	}
+	return result, nil
 }
 
 func (actions *Handler) mergeMultiWordCorpusEntries(item LexItem, corpusEntries []*dictionary.Lemma) *dictionary.Lemma {
@@ -350,6 +456,11 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 		suggestions = collections.SliceFilter(suggestions, func(v string, i int) bool { return v != item.Key.Lemma })
 	}
 
+	variants, err = actions.addOtherSublemmaVariants(ctx, corpusId, variants)
+	if err != nil {
+		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
+		return
+	}
 	uniresp.WriteJSONResponse(ctx.Writer, LexDictResponse{
 		Matches:     variants,
 		Suggestions: suggestions,
