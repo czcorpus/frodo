@@ -41,7 +41,7 @@ swagger:
 	@echo "Generating swagger docs..."
 	@mkdir -p ./docs
 	@go install -v github.com/swaggo/swag/cmd/swag@latest
-	@swag init --parseDependency -g frodo.go --dir ./cmd/server --output ./docs --parseDepth 10
+	@swag init --parseDependencyLevel 3 -g frodo.go --dir ./cmd/server --output ./docs --parseDepth 10
 
 clean:
 	@echo "Cleaning build artifacts..."
