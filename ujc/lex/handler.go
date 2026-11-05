@@ -39,9 +39,8 @@ type LexDictResponse struct {
 }
 
 type LexExtraData struct {
-	CorpusId      string  `json:"corpusId"`
-	VariantSource Source  `json:"variantSource"`
-	Variant       LexItem `json:"variant"`
+	CorpusId string  `json:"corpusId"`
+	Variant  LexItem `json:"variant"`
 }
 
 type Handler struct {
@@ -146,54 +145,47 @@ func (actions *Handler) addOtherSublemmaVariants(ctx context.Context, corpusId s
 	result = append(result, variants...)
 
 	for _, variant := range variants {
-		currentSublemma := variant.Lemma
-		if len(variant.Sublemmas) > 0 && variant.Sublemmas[0].Value != "" {
-			currentSublemma = variant.Sublemmas[0].Value
-		}
+		currentSublemma := variant.Sublemmas[0].Value
 		otherVariants, err := actions.searchOtherSublemmata(ctx, corpusId, variant.Lemma, currentSublemma, variant.PoS)
 		if err != nil {
 			return nil, err
 		}
-		for _, otherVariant := range otherVariants {
-			candidateSublemma := otherVariant.Lemma
-			if len(otherVariant.Sublemmas) > 0 && otherVariant.Sublemmas[0].Value != "" {
-				candidateSublemma = otherVariant.Sublemmas[0].Value
-			}
+		for i, otherVariant := range otherVariants {
+			otherSublemma := otherVariant.Sublemmas[0].Value
+			// lemma is not compared - entries not found in corpus use lexicon lemma,
+			// which may differ from corpus lemma (e.g. lex "rekursivní" vs. corp "rekurzivní")
 			if collections.SliceFindIndex(result, func(item dictionary.Lemma) bool {
-				if item.Lemma != otherVariant.Lemma || item.PoS != otherVariant.PoS {
-					return false
-				}
-				if len(item.Sublemmas) == 0 {
-					return false
-				}
-				return item.Sublemmas[0].Value == candidateSublemma
+				return item.PoS == otherVariant.PoS &&
+					len(item.Sublemmas) > 0 && item.Sublemmas[0].Value == otherSublemma
 			}) != -1 {
 				continue
 			}
 			candidate := otherVariant
-			candidate.ID = fmt.Sprintf("corp-%s", candidateSublemma)
+			candidate.ID = fmt.Sprintf("corp-999-%d", i)
 			candidate.ExtraData = LexExtraData{
-				CorpusId:      corpusId,
-				VariantSource: SourceCorpus,
+				CorpusId: corpusId,
 				Variant: LexItem{
 					Key: LexKey{
-						Lemma:  candidateSublemma,
+						Lemma:  otherSublemma,
 						Pos:    candidate.PoS,
 						Gender: util.Ternary(candidate.PoS == PosNoun, candidate.Specifier, ""),
 						Aspect: util.Ternary(candidate.PoS == PosVerb, candidate.Specifier, ""),
 					},
-					PosSource: SourceCorpus,
+					PosSource:     SourceCorpus,
+					VariantSource: SourceCorpus,
 					Sources: map[Source][]LexID{
 						SourceCorpus: {{
 							Key: LexKey{
-								Lemma:  candidateSublemma,
+								Lemma:  otherSublemma,
 								Pos:    candidate.PoS,
 								Gender: util.Ternary(candidate.PoS == PosNoun, candidate.Specifier, ""),
 								Aspect: util.Ternary(candidate.PoS == PosVerb, candidate.Specifier, ""),
 							},
 						}},
 					},
-					Group: 9,
+					// corpus variants are special group
+					// set to something high, but different than other variants
+					Group: 999,
 				},
 			}
 			result = append(result, candidate)
@@ -447,9 +439,8 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 		}
 
 		corpusEntry.ExtraData = LexExtraData{
-			CorpusId:      corpusId,
-			VariantSource: usedCandidate.Source,
-			Variant:       item,
+			CorpusId: corpusId,
+			Variant:  item,
 		}
 		variants = append(variants, *corpusEntry)
 		// remove variant from suggestions if present

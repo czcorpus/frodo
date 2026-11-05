@@ -258,7 +258,7 @@ func SearchVariants(ctx context.Context, db *sql.DB, lemmatizedTerm LemmatizedTe
 		if aspectArg.Valid {
 			key.Aspect = aspectArg.String
 		}
-		data = append(data, LexItem{Key: key, PosSource: lemmatizedTerm.Source})
+		data = append(data, LexItem{Key: key, PosSource: lemmatizedTerm.Source, VariantSource: lemmatizedTerm.Source})
 	}
 
 	return data, nil
