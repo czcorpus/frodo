@@ -241,6 +241,19 @@ func (actions *Handler) generatePossibleSearchTerms(searchTerm string) []string 
 	}
 }
 
+// SearchWord godoc
+// @Summary      Search a term in the lexicon and corresponding corpus
+// @Description  Searches the term (including its "se"/"si" variants) in the lexicon sources,
+// @Description  resolves all variants of the found entry and joins them with corpus data
+// @Description  (frequencies, forms, sublemmas). Corpus-only sublemma variants of the found
+// @Description  lemmas are appended as well. Additional lexicon candidates and typo corrections
+// @Description  are returned as suggestions.
+// @Produce      json
+// @Param        corpusId path string true "Used corpus"
+// @Param        term path string true "Searched term"
+// @Success      200 {object} LexDictResponse{matches=[]dictionary.Lemma{extraData=LexExtraData}}
+// @Failure      500 {object} uniresp.ActionError
+// @Router       /dictionary/lex/{corpusId}/search/{term} [get]
 func (actions *Handler) SearchWord(ctx *gin.Context) {
 	corpusId := ctx.Param("corpusId")
 	searchTerm := ctx.Param("term")
