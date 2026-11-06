@@ -22,7 +22,7 @@ import (
 	"github.com/czcorpus/cnc-gokit/collections"
 )
 
-func (actions *Handler) findMainSource(ctx context.Context, searchTerm string) (Source, error) {
+func (actions *Actions) findMainSource(ctx context.Context, searchTerm string) (Source, error) {
 	// find available sources for the best match, and select the main source based on the priority list
 	sources, err := SearchAvailableSources(ctx, actions.db.DB(), searchTerm)
 	if err != nil {
@@ -36,7 +36,7 @@ func (actions *Handler) findMainSource(ctx context.Context, searchTerm string) (
 	return "", nil
 }
 
-func (actions *Handler) getSearchCandidates(ctx context.Context, corpusId string, searchTerm string) ([]LemmatizedTerm, error) {
+func (actions *Actions) getSearchCandidates(ctx context.Context, corpusId string, searchTerm string) ([]LemmatizedTerm, error) {
 	lemmatizedSearchTerms, err := LemmatizeTermWithCorpus(ctx, actions.db.DB(), corpusId, searchTerm)
 	if err != nil {
 		return nil, err

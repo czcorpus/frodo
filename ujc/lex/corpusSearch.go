@@ -26,7 +26,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-func (actions *Handler) searchCorpusEntry(ctx context.Context, corpusId, lemma, sublemma, pos string) (*dictionary.Lemma, error) {
+func (actions *Actions) searchCorpusEntry(ctx context.Context, corpusId, lemma, sublemma, pos string) (*dictionary.Lemma, error) {
 	if sublemma == "" {
 		return nil, nil
 	}
@@ -72,7 +72,7 @@ func (actions *Handler) searchCorpusEntry(ctx context.Context, corpusId, lemma, 
 	return nil, nil
 }
 
-func (actions *Handler) searchOtherSublemmata(ctx context.Context, corpusId, lemma, sublemma, pos string) ([]dictionary.Lemma, error) {
+func (actions *Actions) searchOtherSublemmata(ctx context.Context, corpusId, lemma, sublemma, pos string) ([]dictionary.Lemma, error) {
 	if sublemma == "" {
 		return nil, nil
 	}
@@ -117,7 +117,7 @@ func (actions *Handler) searchOtherSublemmata(ctx context.Context, corpusId, lem
 	return results, nil
 }
 
-func (actions *Handler) mergeMultiWordCorpusEntries(item LexItem, corpusEntries []*dictionary.Lemma) *dictionary.Lemma {
+func (actions *Actions) mergeMultiWordCorpusEntries(item LexItem, corpusEntries []*dictionary.Lemma) *dictionary.Lemma {
 	mergedSublemmas := make([]string, 0, len(corpusEntries))
 	mergedLemmas := make([]string, 0, len(corpusEntries))
 	mergedPos := make([]string, 0, len(corpusEntries))

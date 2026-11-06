@@ -32,7 +32,7 @@ import (
 //  2. resolve lex items (variants) of the main candidate, including their source data
 //  3. join each lex item with corpus data
 //  4. append corpus-only sublemma variants
-func (actions *Handler) search(ctx context.Context, corpusId, searchTerm string) (LexDictResponse, error) {
+func (actions *Actions) search(ctx context.Context, corpusId, searchTerm string) (LexDictResponse, error) {
 	if err := ValidateCorpusName(corpusId); err != nil {
 		return LexDictResponse{}, err
 	}
@@ -79,7 +79,7 @@ func (actions *Handler) search(ctx context.Context, corpusId, searchTerm string)
 	return LexDictResponse{Matches: variants, Suggestions: suggestions}, nil
 }
 
-func (actions *Handler) generatePossibleSearchTerms(searchTerm string) []string {
+func (actions *Actions) generatePossibleSearchTerms(searchTerm string) []string {
 	baseTerm := searchTerm
 	parts := strings.Fields(searchTerm)
 	if len(parts) > 1 {
@@ -97,7 +97,7 @@ func (actions *Handler) generatePossibleSearchTerms(searchTerm string) []string 
 
 // findCandidates tries the term and its "se"/"si" variants and returns lexicon candidates
 // of the first variant with any match, together with typo suggestions of all tried variants.
-func (actions *Handler) findCandidates(ctx context.Context, corpusId, searchTerm string) ([]LemmatizedTerm, []string, error) {
+func (actions *Actions) findCandidates(ctx context.Context, corpusId, searchTerm string) ([]LemmatizedTerm, []string, error) {
 	typoSuggestions := make([]string, 0, 10)
 	for _, searchTermVariant := range actions.generatePossibleSearchTerms(searchTerm) {
 		values, err := SearchTypoSuggestions(ctx, actions.db.DB(), searchTermVariant)
@@ -123,7 +123,7 @@ func (actions *Handler) findCandidates(ctx context.Context, corpusId, searchTerm
 
 // resolveLexItems finds all lexicon variants of the candidate, joins their source data
 // and applies source-specific transformations.
-func (actions *Handler) resolveLexItems(ctx context.Context, candidate LemmatizedTerm) ([]LexItem, error) {
+func (actions *Actions) resolveLexItems(ctx context.Context, candidate LemmatizedTerm) ([]LexItem, error) {
 	db := actions.db.DB()
 
 	var lexItems []LexItem
@@ -170,7 +170,7 @@ func (actions *Handler) resolveLexItems(ctx context.Context, candidate Lemmatize
 
 // buildCorpusEntries searches corpus entry for each lex item,
 // if not found, a new entry with minimal data is created
-func (actions *Handler) buildCorpusEntries(
+func (actions *Actions) buildCorpusEntries(
 	ctx context.Context,
 	corpusId string,
 	searchTerm string,
@@ -286,7 +286,7 @@ func (actions *Handler) buildCorpusEntries(
 	return variants, nil
 }
 
-func (actions *Handler) addOtherSublemmaVariants(ctx context.Context, corpusId string, variants []dictionary.Lemma) ([]dictionary.Lemma, error) {
+func (actions *Actions) addOtherSublemmaVariants(ctx context.Context, corpusId string, variants []dictionary.Lemma) ([]dictionary.Lemma, error) {
 	result := make([]dictionary.Lemma, 0, len(variants))
 	result = append(result, variants...)
 

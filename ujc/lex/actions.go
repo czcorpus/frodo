@@ -37,7 +37,7 @@ type LexExtraData struct {
 	Variant  LexItem `json:"variant"`
 }
 
-type Handler struct {
+type Actions struct {
 	db             *mysql.Adapter
 	dictActions    *dictActions.Actions
 	sourcePriority []Source
@@ -57,7 +57,7 @@ type Handler struct {
 // @Failure      400 {object} uniresp.ActionError
 // @Failure      500 {object} uniresp.ActionError
 // @Router       /dictionary/lex/{corpusId}/search/{term} [get]
-func (actions *Handler) SearchWord(ctx *gin.Context) {
+func (actions *Actions) SearchWord(ctx *gin.Context) {
 	resp, err := actions.search(ctx, ctx.Param("corpusId"), ctx.Param("term"))
 	if errors.Is(err, ErrInvalidCorpusName) {
 		uniresp.RespondWithErrorJSON(ctx, err, http.StatusBadRequest)
@@ -70,8 +70,8 @@ func (actions *Handler) SearchWord(ctx *gin.Context) {
 	uniresp.WriteJSONResponse(ctx.Writer, resp)
 }
 
-func NewHandler(db *mysql.Adapter, dictActions *dictActions.Actions, sourcePriority []Source) *Handler {
-	return &Handler{
+func NewActions(db *mysql.Adapter, dictActions *dictActions.Actions, sourcePriority []Source) *Actions {
+	return &Actions{
 		db:             db,
 		dictActions:    dictActions,
 		sourcePriority: sourcePriority,
