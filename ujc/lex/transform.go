@@ -100,7 +100,7 @@ func ApplyTransformations(ctx context.Context, env TransformEnv, variants []LexI
 
 // SortVariants sorts variants by data of the main source
 func SortVariants(ctx context.Context, env TransformEnv, variants []LexItem) ([]LexItem, error) {
-	return sortVariants2(variants, env.VariantSource), nil
+	return sortVariants(variants, env.VariantSource), nil
 }
 
 func ResolveGroups(ctx context.Context, env TransformEnv, variants []LexItem) ([]LexItem, error) {
