@@ -489,23 +489,40 @@ func LemmatizeTermWithCorpus(ctx context.Context, db *sql.DB, corpname, term str
 	return result, nil
 }
 
-func LemmatizeTermWithLex(ctx context.Context, db *sql.DB, term string) (*LemmatizedTerm, error) {
-	var lemmaNull, sublemmaNull sql.NullString
-	row := db.QueryRowContext(
-		ctx,
-		"SELECT lemma, sublemma "+
-			"FROM lex_search "+
-			"WHERE term = ?",
-		term,
-	)
-	err := row.Scan(&lemmaNull, &sublemmaNull)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to lemmatize lex term %q: %w", term, err)
+// LemmatizeTermsWithLex finds lemma and sublemma of the terms in the lexicon,
+// terms not found in the lexicon are missing in the result
+func LemmatizeTermsWithLex(ctx context.Context, db *sql.DB, terms []string) (map[string]LemmatizedTerm, error) {
+	result := make(map[string]LemmatizedTerm, len(terms))
+	if len(terms) == 0 {
+		return result, nil
 	}
-	return &LemmatizedTerm{Term: term, Lemma: lemmaNull.String, Sublemma: sublemmaNull.String}, nil
+	args := make([]any, len(terms))
+	for i, term := range terms {
+		args[i] = term
+	}
+	rows, err := db.QueryContext(
+		ctx,
+		"SELECT term, lemma, sublemma "+
+			"FROM lex_search "+
+			"WHERE term IN (?"+strings.Repeat(", ?", len(terms)-1)+")",
+		args...,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to lemmatize lex terms: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var term string
+		var lemmaNull, sublemmaNull sql.NullString
+		if err := rows.Scan(&term, &lemmaNull, &sublemmaNull); err != nil {
+			return nil, fmt.Errorf("failed to lemmatize lex terms: %w", err)
+		}
+		result[term] = LemmatizedTerm{Term: term, Lemma: lemmaNull.String, Sublemma: sublemmaNull.String}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to lemmatize lex terms: %w", err)
+	}
+	return result, nil
 }
 
 func SearchLexTerms(ctx context.Context, db *sql.DB, searchTerm LemmatizedTerm) ([]LemmatizedTerm, error) {

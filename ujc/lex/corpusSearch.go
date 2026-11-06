@@ -38,6 +38,20 @@ const (
 	corpusOnlyGroup = 999
 )
 
+// corpusRef identifies the searched corpus, dataset size is loaded once per request
+type corpusRef struct {
+	ID          string
+	DatasetSize int
+}
+
+func (actions *Actions) loadCorpusRef(corpusId string) (corpusRef, error) {
+	datasetSize, err := actions.dictActions.GetDatasetSize(corpusId)
+	if err != nil {
+		return corpusRef{}, err
+	}
+	return corpusRef{ID: corpusId, DatasetSize: int(datasetSize)}, nil
+}
+
 func entryID(origin string, idx int) string {
 	return fmt.Sprintf("%s-%d", origin, idx)
 }
@@ -53,24 +67,19 @@ func corpusLexKey(lemma, pos, specifier string) LexKey {
 	}
 }
 
-func (actions *Actions) searchCorpusEntry(ctx context.Context, corpusId, lemma, sublemma, pos string) (*dictionary.Lemma, error) {
+func (actions *Actions) searchCorpusEntry(ctx context.Context, corpus corpusRef, lemma, sublemma, pos string) (*dictionary.Lemma, error) {
 	if sublemma == "" {
 		return nil, nil
-	}
-
-	datasetSize, err := actions.dictActions.GetDatasetSize(corpusId)
-	if err != nil {
-		return nil, err
 	}
 
 	ans, err := dictionary.Search(
 		ctx,
 		actions.db,
-		corpusId,
+		corpus.ID,
 		dictionary.SearchWithSublemma(sublemma),
 		util.Ternary(lemma != "", dictionary.SearchWithLemma(lemma), dictionary.SearchWithNoOp()),
 		util.Ternary(pos != "", dictionary.SearchWithPoS(pos), dictionary.SearchWithNoOp()),
-		dictionary.SearchWithDatasetSizeForIPM(int(datasetSize)),
+		dictionary.SearchWithDatasetSizeForIPM(corpus.DatasetSize),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find sublemma: %w", err)
@@ -99,24 +108,19 @@ func (actions *Actions) searchCorpusEntry(ctx context.Context, corpusId, lemma, 
 	return nil, nil
 }
 
-func (actions *Actions) searchOtherSublemmata(ctx context.Context, corpusId, lemma, sublemma, pos string) ([]dictionary.Lemma, error) {
+func (actions *Actions) searchOtherSublemmata(ctx context.Context, corpus corpusRef, lemma, sublemma, pos string) ([]dictionary.Lemma, error) {
 	if sublemma == "" {
 		return nil, nil
-	}
-
-	datasetSize, err := actions.dictActions.GetDatasetSize(corpusId)
-	if err != nil {
-		return nil, err
 	}
 
 	ans, err := dictionary.Search(
 		ctx,
 		actions.db,
-		corpusId,
+		corpus.ID,
 		util.Ternary(lemma != "", dictionary.SearchWithLemma(lemma), dictionary.SearchWithNoOp()),
 		dictionary.SearchWithoutSublemma(sublemma),
 		util.Ternary(pos != "", dictionary.SearchWithPoS(pos), dictionary.SearchWithNoOp()),
-		dictionary.SearchWithDatasetSizeForIPM(int(datasetSize)),
+		dictionary.SearchWithDatasetSizeForIPM(corpus.DatasetSize),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find sublemma: %w", err)
@@ -176,16 +180,12 @@ func (actions *Actions) mergeMultiWordCorpusEntries(item LexItem, corpusEntries 
 }
 
 // lemmatizeLexItem finds lemma and sublemma of the lexicon lemma,
-// lexicon lemmatization is preferred, corpus is used as a fallback
-func (actions *Actions) lemmatizeLexItem(ctx context.Context, corpusId, lemma string) (LemmatizedTerm, error) {
-	lemmatized, err := LemmatizeTermWithLex(ctx, actions.db.DB(), lemma)
-	if err != nil {
-		return LemmatizedTerm{}, err
+// lexicon lemmatization (loaded in advance) is preferred, corpus is used as a fallback
+func (actions *Actions) lemmatizeLexItem(ctx context.Context, corpus corpusRef, lemma string, lexLemmatized map[string]LemmatizedTerm) (LemmatizedTerm, error) {
+	if lemmatized, ok := lexLemmatized[lemma]; ok {
+		return lemmatized, nil
 	}
-	if lemmatized != nil {
-		return *lemmatized, nil
-	}
-	lemmatizedTerms, err := LemmatizeTermWithCorpus(ctx, actions.db.DB(), corpusId, lemma)
+	lemmatizedTerms, err := LemmatizeTermWithCorpus(ctx, actions.db.DB(), corpus.ID, lemma)
 	if err != nil {
 		return LemmatizedTerm{}, err
 	}
@@ -198,7 +198,7 @@ func (actions *Actions) lemmatizeLexItem(ctx context.Context, corpusId, lemma st
 // findCorpusEntry finds corpus entry for the lex item. Multi-word terms are searched
 // word by word and merged into a single entry. Words not found in corpus are replaced
 // with minimal entries created from lexicon data.
-func (actions *Actions) findCorpusEntry(ctx context.Context, corpusId string, item LexItem, lemmatized LemmatizedTerm) (*dictionary.Lemma, error) {
+func (actions *Actions) findCorpusEntry(ctx context.Context, corpus corpusRef, item LexItem, lemmatized LemmatizedTerm) (*dictionary.Lemma, error) {
 	multiWord := lemmatized.isMultiWord()
 	specifier := util.Ternary(multiWord, "", corpusSpecifier(item.Key))
 	// use lemmatized term only for multi-word terms, otherwise use the lemma from lexicon
@@ -216,7 +216,7 @@ func (actions *Actions) findCorpusEntry(ctx context.Context, corpusId string, it
 		if i < len(lemmas) {
 			lemma = lemmas[i]
 		}
-		entry, err := actions.searchCorpusEntry(ctx, corpusId, lemma, sublemma, pos)
+		entry, err := actions.searchCorpusEntry(ctx, corpus, lemma, sublemma, pos)
 		if err != nil {
 			return nil, err
 		}

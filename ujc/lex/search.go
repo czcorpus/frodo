@@ -58,19 +58,29 @@ func (actions *Actions) search(ctx context.Context, corpusId, searchTerm string)
 		return LexDictResponse{Matches: []dictionary.Lemma{}, Suggestions: suggestions}, nil
 	}
 
-	variants, err := actions.buildCorpusEntries(ctx, corpusId, searchTerm, usedCandidate, lexItems)
+	corpus, err := actions.loadCorpusRef(corpusId)
 	if err != nil {
 		return LexDictResponse{}, err
 	}
 
-	variants, err = actions.addOtherSublemmaVariants(ctx, corpusId, variants)
+	variants, err := actions.buildCorpusEntries(ctx, corpus, searchTerm, usedCandidate, lexItems)
+	if err != nil {
+		return LexDictResponse{}, err
+	}
+
+	variants, err = actions.addOtherSublemmaVariants(ctx, corpus, variants)
 	if err != nil {
 		return LexDictResponse{}, err
 	}
 
 	// remove found variants from suggestions
+	foundLemmas := make(map[string]struct{}, len(lexItems))
+	for _, item := range lexItems {
+		foundLemmas[item.Key.Lemma] = struct{}{}
+	}
 	suggestions = collections.SliceFilter(suggestions, func(v string, i int) bool {
-		return collections.SliceFindIndex(lexItems, func(item LexItem) bool { return item.Key.Lemma == v }) == -1
+		_, found := foundLemmas[v]
+		return !found
 	})
 
 	return LexDictResponse{Matches: variants, Suggestions: suggestions}, nil
@@ -164,19 +174,28 @@ func (actions *Actions) resolveLexItems(ctx context.Context, candidate Lemmatize
 // if not found, a new entry with minimal data is created
 func (actions *Actions) buildCorpusEntries(
 	ctx context.Context,
-	corpusId string,
+	corpus corpusRef,
 	searchTerm string,
 	usedCandidate LemmatizedTerm,
 	lexItems []LexItem,
 ) ([]dictionary.Lemma, error) {
+	lexLemmatized, err := LemmatizeTermsWithLex(
+		ctx,
+		actions.db.DB(),
+		collections.SliceMap(lexItems, func(item LexItem, i int) string { return item.Key.Lemma }),
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	variants := make([]dictionary.Lemma, 0, len(lexItems))
 	for i, item := range lexItems {
-		lemmatized, err := actions.lemmatizeLexItem(ctx, corpusId, item.Key.Lemma)
+		lemmatized, err := actions.lemmatizeLexItem(ctx, corpus, item.Key.Lemma, lexLemmatized)
 		if err != nil {
 			return nil, err
 		}
 
-		entry, err := actions.findCorpusEntry(ctx, corpusId, item, lemmatized)
+		entry, err := actions.findCorpusEntry(ctx, corpus, item, lemmatized)
 		if err != nil {
 			return nil, err
 		}
@@ -187,7 +206,7 @@ func (actions *Actions) buildCorpusEntries(
 		entry.ID = entryID(entry.ID, i)
 		ensureSearchedForm(entry, usedCandidate.Sublemma, searchTerm, lemmatized.Sublemma)
 		entry.ExtraData = LexExtraData{
-			CorpusId: corpusId,
+			CorpusId: corpus.ID,
 			Variant:  item,
 		}
 		variants = append(variants, *entry)
@@ -195,16 +214,26 @@ func (actions *Actions) buildCorpusEntries(
 	return variants, nil
 }
 
-func (actions *Actions) addOtherSublemmaVariants(ctx context.Context, corpusId string, variants []dictionary.Lemma) ([]dictionary.Lemma, error) {
+func (actions *Actions) addOtherSublemmaVariants(ctx context.Context, corpus corpusRef, variants []dictionary.Lemma) ([]dictionary.Lemma, error) {
 	result := make([]dictionary.Lemma, 0, len(variants))
 	result = append(result, variants...)
+
+	// variants may share lemma, sublemma and PoS (e.g. homonyms),
+	// repeated search would only find already added variants
+	type searchKey struct{ lemma, sublemma, pos string }
+	searched := make(map[searchKey]struct{}, len(variants))
 
 	for _, variant := range variants {
 		if len(variant.Sublemmas) == 0 {
 			continue
 		}
 		currentSublemma := variant.Sublemmas[0].Value
-		otherVariants, err := actions.searchOtherSublemmata(ctx, corpusId, variant.Lemma, currentSublemma, variant.PoS)
+		key := searchKey{variant.Lemma, currentSublemma, variant.PoS}
+		if _, ok := searched[key]; ok {
+			continue
+		}
+		searched[key] = struct{}{}
+		otherVariants, err := actions.searchOtherSublemmata(ctx, corpus, variant.Lemma, currentSublemma, variant.PoS)
 		if err != nil {
 			return nil, err
 		}
@@ -226,7 +255,7 @@ func (actions *Actions) addOtherSublemmaVariants(ctx context.Context, corpusId s
 			candidate.ID = entryID(entryOriginCorpus, len(result))
 			key := corpusLexKey(otherSublemma, candidate.PoS, candidate.Specifier)
 			candidate.ExtraData = LexExtraData{
-				CorpusId: corpusId,
+				CorpusId: corpus.ID,
 				Variant: LexItem{
 					Key:           key,
 					PosSource:     SourceCorpus,
