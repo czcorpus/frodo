@@ -58,10 +58,11 @@ func (a *LexKey) UnknownEqual(o *LexKey) bool {
 }
 
 type LexItem struct {
-	Key       LexKey             `json:"key"`
-	PosSource Source             `json:"posSource"`
-	Sources   map[Source][]LexID `json:"sources"`
-	Group     int                `json:"group"`
+	Key           LexKey             `json:"key"`
+	PosSource     Source             `json:"posSource"`
+	VariantSource Source             `json:"variantSource"`
+	Sources       map[Source][]LexID `json:"sources"`
+	Group         int                `json:"group"`
 }
 
 func (li *LexItem) Equal(item *LexItem) bool {

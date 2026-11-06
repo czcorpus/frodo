@@ -282,6 +282,7 @@ func processRowsSync(rows *sql.Rows, datasetSizeForIPM int, enableMultivalues bo
 type SearchOptions struct {
 	Lemma                       string
 	Sublemma                    string
+	NotSublemma                 string
 	Word                        string
 	PoS                         string
 	AnyValue                    string
@@ -302,6 +303,12 @@ type SearchOption func(c *SearchOptions)
 func SearchWithSublemma(v string) SearchOption {
 	return func(c *SearchOptions) {
 		c.Sublemma = v
+	}
+}
+
+func SearchWithoutSublemma(v string) SearchOption {
+	return func(c *SearchOptions) {
+		c.NotSublemma = v
 	}
 }
 
@@ -463,6 +470,10 @@ func Search(
 	if srchOpts.Sublemma != "" {
 		whereSQL = append(whereSQL, "w.sublemma = ?")
 		whereArgs = append(whereArgs, srchOpts.Sublemma)
+	}
+	if srchOpts.NotSublemma != "" {
+		whereSQL = append(whereSQL, "w.sublemma <> ?")
+		whereArgs = append(whereArgs, srchOpts.NotSublemma)
 	}
 	if srchOpts.Word != "" {
 		whereSQL = append(whereSQL, "w.value = ?")

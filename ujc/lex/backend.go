@@ -17,11 +17,14 @@
 package lex
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"sort"
+	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/agnivade/levenshtein"
@@ -176,12 +179,12 @@ func SearchTypoSuggestions(ctx context.Context, db *sql.DB, term string) ([]stri
 	for row.Next() {
 		var lemma string
 		if err := row.Scan(&lemma); err != nil {
-			if err == sql.ErrNoRows {
-				return suggestions, nil
-			}
 			return nil, fmt.Errorf("failed to scan suggestions: %w", err)
 		}
 		suggestions = append(suggestions, lemma)
+	}
+	if err := row.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read suggestions: %w", err)
 	}
 	suggestions = collections.SliceFilter(suggestions, func(v string, i int) bool {
 		return !strings.EqualFold(v, term)
@@ -206,14 +209,13 @@ func SearchAvailableSources(ctx context.Context, db *sql.DB, lemma string) ([]So
 	for row.Next() {
 		var source Source
 		if err := row.Scan(&source); err != nil {
-			if err == sql.ErrNoRows {
-				return nil, nil
-			}
 			return nil, fmt.Errorf("failed to scan available source: %w", err)
 		}
 		sources = append(sources, source)
 	}
-
+	if err := row.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read available sources: %w", err)
+	}
 	return sources, nil
 }
 
@@ -247,9 +249,6 @@ func SearchVariants(ctx context.Context, db *sql.DB, lemmatizedTerm LemmatizedTe
 		var genderArg, aspectArg sql.NullString
 		key := LexKey{}
 		if err := row.Scan(&key.Lemma, &key.Pos, &genderArg, &aspectArg, &key.Uninflected, &key.Plurality); err != nil {
-			if err == sql.ErrNoRows {
-				return nil, nil
-			}
 			return nil, fmt.Errorf("failed to scan variants: %w", err)
 		}
 		if genderArg.Valid {
@@ -258,104 +257,20 @@ func SearchVariants(ctx context.Context, db *sql.DB, lemmatizedTerm LemmatizedTe
 		if aspectArg.Valid {
 			key.Aspect = aspectArg.String
 		}
-		data = append(data, LexItem{Key: key, PosSource: lemmatizedTerm.Source})
+		data = append(data, LexItem{Key: key, PosSource: lemmatizedTerm.Source, VariantSource: lemmatizedTerm.Source})
 	}
-
+	if err := row.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read variants: %w", err)
+	}
 	return data, nil
 }
 
-func SearchSources(ctx context.Context, db *sql.DB, lexKey LexKey) (map[Source][]LexID, error) {
-	// if lexItem.Pos is 'X', do not filter by pos (accept any pos)
-	where := []string{"lemma = ?"}
-	args := []any{lexKey.Lemma}
-	if lexKey.Pos == PosDTIJCR {
-		where = append(where, "pos IN (?, ?, ?, ?, ?, ?, ?, ?)")
-		args = append(args, PosDTIJ, PosAdv, PosPart, PosInter, PosConj, PosNum, PosPrep, PosUnkn)
-	} else if lexKey.Pos != PosUnkn {
-		where = append(where, "pos IN (?, ?)")
-		args = append(args, lexKey.Pos, PosUnkn)
-	}
-
-	if lexKey.Gender == "" {
-		where = append(where, "gender is NULL")
-	} else if lexKey.Gender == GenderMascUnknown {
-		where = append(where, "gender IN (?, ?, ?, ?)")
-		args = append(args, GenderMascUnknown, GenderMascAnim, GenderMascInan, GenderMascAnimInan)
-	} else if lexKey.Gender == GenderMascAnim || lexKey.Gender == GenderMascInan || lexKey.Gender == GenderMascAnimInan {
-		where = append(where, "gender IN (?, ?)")
-		args = append(args, GenderMascUnknown, lexKey.Gender)
-	} else if lexKey.Gender != GenderUnknown {
-		where = append(where, "gender IN (?, ?)")
-		args = append(args, lexKey.Gender, GenderUnknown)
-	}
-	if lexKey.Aspect == "" {
-		where = append(where, "aspect is NULL")
-	} else if lexKey.Aspect != AspectUnknown {
-		where = append(where, "aspect = ?")
-		args = append(args, lexKey.Aspect)
-	}
-	if lexKey.Uninflected != UninflectedUnknown {
-		where = append(where, "(uninflected = ? OR uninflected = ?)")
-		args = append(args, lexKey.Uninflected, UninflectedUnknown)
-	}
-	if lexKey.Plurality != PluralityUnknown {
-		where = append(where, "(plurality = ? OR plurality = ?)")
-		args = append(args, lexKey.Plurality, PluralityUnknown)
-	}
-
-	query := `
-		SELECT source, JSON_ARRAYAGG(JSON_OBJECT('id', external_id, 'parentId', external_parent_id, 'groupId', COALESCE(group_id, ''), 'groupOrder', group_order, 'homonym', homonym, 'key', JSON_OBJECT('pos', pos, 'gender', COALESCE(gender, ''), 'aspect', COALESCE(aspect, ''), 'uninflected', uninflected, 'plurality', plurality)) ORDER BY homonym) AS idents
-		FROM lex_dictionary
-		WHERE ` + strings.Join(where, " AND ") + `
-		GROUP BY source
-		`
-
-	row, err := db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to search sources: %w", err)
-	}
-	defer row.Close()
-
-	sources := make(map[Source][]LexID)
-	for row.Next() {
-		var source Source
-		var jsonIdents string
-		if err := row.Scan(&source, &jsonIdents); err != nil {
-			if err == sql.ErrNoRows {
-				return sources, nil
-			}
-			return nil, fmt.Errorf("failed to scan sources: %w", err)
-		}
-		var idents []LexID
-		if err := json.Unmarshal([]byte(jsonIdents), &idents); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal sources: %w", err)
-		}
-		sources[source] = idents
-	}
-	return sources, nil
-}
-
-func PruneData(ctx context.Context, tx *sql.Tx, source Source) error {
-	_, err := tx.ExecContext(
-		ctx,
-		"DELETE FROM lex_dictionary WHERE source = ?",
-		source,
-	)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func SearchLexItemID(ctx context.Context, db *sql.DB, lexKey LexKey, source Source) ([]LexID, error) {
-	// Build WHERE clause dynamically so empty Gender/Aspect are searched as NULL
-	where := make([]string, 0, 8)
-	args := make([]interface{}, 0, 8)
-	where = append(where, "lemma = ?")
-	args = append(args, lexKey.Lemma)
-	where = append(where, "pos = ?")
-	args = append(args, lexKey.Pos)
-
+// lexKeyConditions creates WHERE conditions matching gender, aspect, uninflected and plurality
+// of the lex key. Empty gender/aspect is searched as NULL, unknown values match anything
+// and masculine genders also match the unknown masculine gender.
+func lexKeyConditions(lexKey LexKey) ([]string, []any) {
+	where := make([]string, 0, 4)
+	args := make([]any, 0, 8)
 	if lexKey.Gender == "" {
 		where = append(where, "gender is NULL")
 	} else if lexKey.Gender == GenderMascUnknown {
@@ -382,6 +297,76 @@ func SearchLexItemID(ctx context.Context, db *sql.DB, lexKey LexKey, source Sour
 		where = append(where, "(plurality = ? OR plurality = ?)")
 		args = append(args, lexKey.Plurality, PluralityUnknown)
 	}
+	return where, args
+}
+
+func SearchSources(ctx context.Context, db *sql.DB, lexKey LexKey) (map[Source][]LexID, error) {
+	// if lexItem.Pos is 'X', do not filter by pos (accept any pos)
+	where := []string{"lemma = ?"}
+	args := []any{lexKey.Lemma}
+	if lexKey.Pos == PosDTIJCR {
+		where = append(where, "pos IN (?, ?, ?, ?, ?, ?, ?, ?)")
+		args = append(args, PosDTIJ, PosAdv, PosPart, PosInter, PosConj, PosNum, PosPrep, PosUnkn)
+	} else if lexKey.Pos != PosUnkn {
+		where = append(where, "pos IN (?, ?)")
+		args = append(args, lexKey.Pos, PosUnkn)
+	}
+
+	keyWhere, keyArgs := lexKeyConditions(lexKey)
+	where = append(where, keyWhere...)
+	args = append(args, keyArgs...)
+
+	query := `
+		SELECT source, JSON_ARRAYAGG(JSON_OBJECT('id', external_id, 'parentId', external_parent_id, 'groupId', COALESCE(group_id, ''), 'groupOrder', group_order, 'homonym', homonym, 'key', JSON_OBJECT('pos', pos, 'gender', COALESCE(gender, ''), 'aspect', COALESCE(aspect, ''), 'uninflected', uninflected, 'plurality', plurality)) ORDER BY homonym) AS idents
+		FROM lex_dictionary
+		WHERE ` + strings.Join(where, " AND ") + `
+		GROUP BY source
+		`
+
+	row, err := db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search sources: %w", err)
+	}
+	defer row.Close()
+
+	sources := make(map[Source][]LexID)
+	for row.Next() {
+		var source Source
+		var jsonIdents string
+		if err := row.Scan(&source, &jsonIdents); err != nil {
+			return nil, fmt.Errorf("failed to scan sources: %w", err)
+		}
+		var idents []LexID
+		if err := json.Unmarshal([]byte(jsonIdents), &idents); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal sources: %w", err)
+		}
+		sources[source] = idents
+	}
+	if err := row.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read sources: %w", err)
+	}
+	return sources, nil
+}
+
+func PruneData(ctx context.Context, tx *sql.Tx, source Source) error {
+	_, err := tx.ExecContext(
+		ctx,
+		"DELETE FROM lex_dictionary WHERE source = ?",
+		source,
+	)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func SearchLexItemID(ctx context.Context, db *sql.DB, lexKey LexKey, source Source) ([]LexID, error) {
+	where := []string{"lemma = ?", "pos = ?"}
+	args := []any{lexKey.Lemma, lexKey.Pos}
+
+	keyWhere, keyArgs := lexKeyConditions(lexKey)
+	where = append(where, keyWhere...)
+	args = append(args, keyArgs...)
 
 	where = append(where, "source = ?")
 	args = append(args, source)
@@ -401,9 +386,6 @@ func SearchLexItemID(ctx context.Context, db *sql.DB, lexKey LexKey, source Sour
 		var groupID sql.NullString
 		var genderArg, aspectArg sql.NullString
 		if err := row.Scan(&lexId.ID, &externalParentID, &groupID, &lexId.GroupOrder, &lexId.Homonym, &lexId.Key.Pos, &genderArg, &aspectArg, &lexId.Key.Uninflected, &lexId.Key.Plurality); err != nil {
-			if err == sql.ErrNoRows {
-				return lexIds, nil
-			}
 			return nil, fmt.Errorf("failed to scan the lex id: %w", err)
 		}
 		lexId.ParentID = externalParentID.String
@@ -416,8 +398,24 @@ func SearchLexItemID(ctx context.Context, db *sql.DB, lexKey LexKey, source Sour
 		}
 		lexIds = append(lexIds, lexId)
 	}
-
+	if err := row.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read lex ids: %w", err)
+	}
 	return lexIds, nil
+}
+
+var (
+	// corpus name is used to build table names, so it must be a plain SQL identifier
+	corpusNameRegexp = regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
+
+	ErrInvalidCorpusName = errors.New("invalid corpus name")
+)
+
+func ValidateCorpusName(corpname string) error {
+	if !corpusNameRegexp.MatchString(corpname) {
+		return fmt.Errorf("%w: %q", ErrInvalidCorpusName, corpname)
+	}
+	return nil
 }
 
 type LemmatizedTerm struct {
@@ -434,6 +432,9 @@ func (lt *LemmatizedTerm) isMultiWord() bool {
 }
 
 func LemmatizeTermWithCorpus(ctx context.Context, db *sql.DB, corpname, term string) ([]LemmatizedTerm, error) {
+	if err := ValidateCorpusName(corpname); err != nil {
+		return nil, err
+	}
 	parts := strings.Fields(term)
 	if len(parts) == 0 {
 		return []LemmatizedTerm{}, nil
@@ -457,23 +458,27 @@ func LemmatizeTermWithCorpus(ctx context.Context, db *sql.DB, corpname, term str
 			return result, fmt.Errorf("failed to lemmatize part %q: %w", part, err)
 		}
 
-		var lemma, sublemma string
-		newResult := make([]LemmatizedTerm, 0, 10)
-		for rows.Next() {
-			if err := rows.Scan(&lemma, &sublemma); err != nil {
-				return result, fmt.Errorf("failed to lemmatize part %q: %w", part, err)
-			}
-			if len(result) == 0 {
-				newResult = append(newResult, LemmatizedTerm{Term: term, Lemma: lemma, Sublemma: sublemma})
-			} else {
-				for _, r := range result {
-					r.Lemma += " " + lemma
-					r.Sublemma += " " + sublemma
-					newResult = append(newResult, r)
+		newResult, err := func() ([]LemmatizedTerm, error) {
+			defer rows.Close()
+			var lemma, sublemma string
+			newResult := make([]LemmatizedTerm, 0, 10)
+			for rows.Next() {
+				if err := rows.Scan(&lemma, &sublemma); err != nil {
+					return nil, err
+				}
+				if len(result) == 0 {
+					newResult = append(newResult, LemmatizedTerm{Term: term, Lemma: lemma, Sublemma: sublemma})
+				} else {
+					for _, r := range result {
+						r.Lemma += " " + lemma
+						r.Sublemma += " " + sublemma
+						newResult = append(newResult, r)
+					}
 				}
 			}
-		}
-		if err := rows.Err(); err != nil {
+			return newResult, rows.Err()
+		}()
+		if err != nil {
 			return result, fmt.Errorf("failed to lemmatize part %q: %w", part, err)
 		}
 		if len(newResult) == 0 {
@@ -484,23 +489,40 @@ func LemmatizeTermWithCorpus(ctx context.Context, db *sql.DB, corpname, term str
 	return result, nil
 }
 
-func LemmatizeTermWithLex(ctx context.Context, db *sql.DB, term string) (*LemmatizedTerm, error) {
-	var lemmaNull, sublemmaNull sql.NullString
-	row := db.QueryRowContext(
-		ctx,
-		"SELECT lemma, sublemma "+
-			"FROM lex_search "+
-			"WHERE term = ?",
-		term,
-	)
-	err := row.Scan(&lemmaNull, &sublemmaNull)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to lemmatize lex term %q: %w", term, err)
+// LemmatizeTermsWithLex finds lemma and sublemma of the terms in the lexicon,
+// terms not found in the lexicon are missing in the result
+func LemmatizeTermsWithLex(ctx context.Context, db *sql.DB, terms []string) (map[string]LemmatizedTerm, error) {
+	result := make(map[string]LemmatizedTerm, len(terms))
+	if len(terms) == 0 {
+		return result, nil
 	}
-	return &LemmatizedTerm{Term: term, Lemma: lemmaNull.String, Sublemma: sublemmaNull.String}, nil
+	args := make([]any, len(terms))
+	for i, term := range terms {
+		args[i] = term
+	}
+	rows, err := db.QueryContext(
+		ctx,
+		"SELECT term, lemma, sublemma "+
+			"FROM lex_search "+
+			"WHERE term IN (?"+strings.Repeat(", ?", len(terms)-1)+")",
+		args...,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to lemmatize lex terms: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var term string
+		var lemmaNull, sublemmaNull sql.NullString
+		if err := rows.Scan(&term, &lemmaNull, &sublemmaNull); err != nil {
+			return nil, fmt.Errorf("failed to lemmatize lex terms: %w", err)
+		}
+		result[term] = LemmatizedTerm{Term: term, Lemma: lemmaNull.String, Sublemma: sublemmaNull.String}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to lemmatize lex terms: %w", err)
+	}
+	return result, nil
 }
 
 func SearchLexTerms(ctx context.Context, db *sql.DB, searchTerm LemmatizedTerm) ([]LemmatizedTerm, error) {
@@ -518,12 +540,13 @@ func SearchLexTerms(ctx context.Context, db *sql.DB, searchTerm LemmatizedTerm) 
 		searchTerm.Sublemma,
 	)
 	if err != nil {
-		return result, fmt.Errorf("failed to search lex term by sublemma %q: %w", searchTerm, err)
+		return result, fmt.Errorf("failed to search lex term %q: %w", searchTerm.Term, err)
 	}
+	defer rows.Close()
 	for rows.Next() {
 		err := rows.Scan(&term, &lemmaNull, &sublemmaNull)
 		if err != nil {
-			return result, fmt.Errorf("failed to search lex term by sublemma %q: %w", searchTerm, err)
+			return result, fmt.Errorf("failed to search lex term %q: %w", searchTerm.Term, err)
 		}
 		result = append(result, LemmatizedTerm{
 			Term:     term,
@@ -532,63 +555,29 @@ func SearchLexTerms(ctx context.Context, db *sql.DB, searchTerm LemmatizedTerm) 
 			Distance: levenshtein.ComputeDistance(term, searchTerm.Term),
 		})
 	}
-	sort.Slice(result, func(i, j int) bool {
-		if result[i].Term == searchTerm.Term && result[j].Term != searchTerm.Term {
-			return true
-		}
-		if result[i].Term != searchTerm.Term && result[j].Term == searchTerm.Term {
-			return false
-		}
-		if result[i].Sublemma == searchTerm.Sublemma && result[j].Sublemma != searchTerm.Sublemma {
-			return true
-		}
-		if result[i].Sublemma != searchTerm.Sublemma && result[j].Sublemma == searchTerm.Sublemma {
-			return false
-		}
-		if result[i].Lemma == searchTerm.Lemma && result[j].Lemma != searchTerm.Lemma {
-			return true
-		}
-		if result[i].Lemma != searchTerm.Lemma && result[j].Lemma == searchTerm.Lemma {
-			return false
-		}
-		if result[i].Distance != result[j].Distance {
-			return result[i].Distance < result[j].Distance
-		}
-		return result[i].Term < result[j].Term
+	if err := rows.Err(); err != nil {
+		return result, fmt.Errorf("failed to search lex term %q: %w", searchTerm.Term, err)
+	}
+	// exact term match first, then sublemma and lemma matches, then the closest terms
+	slices.SortFunc(result, func(a, b LemmatizedTerm) int {
+		return cmp.Or(
+			preferEqual(a.Term, b.Term, searchTerm.Term),
+			preferEqual(a.Sublemma, b.Sublemma, searchTerm.Sublemma),
+			preferEqual(a.Lemma, b.Lemma, searchTerm.Lemma),
+			cmp.Compare(a.Distance, b.Distance),
+			strings.Compare(a.Term, b.Term),
+		)
 	})
 	return result, nil
 }
 
-func GetCorpusSublemmata(ctx context.Context, db *sql.DB, corpname string, term LemmatizedTerm) ([]LemmatizedTerm, error) {
-	if term.isMultiWord() {
-		return []LemmatizedTerm{}, nil
+// preferEqual is a sort comparator ordering values equal to the target first
+func preferEqual(a, b, target string) int {
+	switch {
+	case a == target && b != target:
+		return -1
+	case a != target && b == target:
+		return 1
 	}
-
-	result := make([]LemmatizedTerm, 0, 10)
-	rows, err := db.QueryContext(
-		ctx,
-		fmt.Sprintf(
-			"SELECT DISTINCT sublemma "+
-				"FROM %s_term_search AS ts "+
-				"JOIN %s_word AS w ON ts.word_id = w.id "+
-				"WHERE ts.value = ? ",
-			corpname, corpname,
-		),
-		term.Lemma,
-	)
-	if err != nil {
-		return result, fmt.Errorf("failed to get corpus sublemmata for %q: %w", term.Lemma, err)
-	}
-
-	for rows.Next() {
-		newTerm := LemmatizedTerm{Lemma: term.Lemma}
-		if err := rows.Scan(&newTerm.Sublemma); err != nil {
-			return result, fmt.Errorf("failed to get corpus sublemmata for %q: %w", term.Lemma, err)
-		}
-		result = append(result, newTerm)
-	}
-	if err := rows.Err(); err != nil {
-		return result, fmt.Errorf("failed to get corpus sublemmata for %q: %w", term.Lemma, err)
-	}
-	return result, nil
+	return 0
 }

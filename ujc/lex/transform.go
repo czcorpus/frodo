@@ -26,7 +26,30 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-type LexTransform func(context.Context, *sql.DB, []Source, Source, []LexItem) ([]LexItem, error)
+// TransformEnv holds data shared by all transformations of one search
+type TransformEnv struct {
+	DB             *sql.DB
+	SourcePriority []Source
+	// main source of the searched variants
+	VariantSource Source
+}
+
+type LexTransform func(ctx context.Context, env TransformEnv, variants []LexItem) ([]LexItem, error)
+
+// transformations applied before source data are joined to the variants
+var preSourceTransforms = []LexTransform{
+	DTIJCR__MergeItems,
+}
+
+// transformations applied after source data are joined to the variants
+var postSourceTransforms = []LexTransform{
+	DTIJCR__ResolvePos,
+	IJP__C_Is_NAP,
+	IJP__RemoveUninflected,
+	IJP__ResolveVariantKey,
+	SortVariants,
+	ResolveGroups,
+}
 
 func samePos(sources []LexID) bool {
 	for _, item := range sources {
@@ -61,36 +84,34 @@ func sourceHasHigherPriority(sourcePriority []Source, src, other Source) bool {
 	return false
 }
 
-func ApplyTransformations(ctx context.Context, db *sql.DB, sourcePriority []Source, variantSource Source, variants []LexItem, transforms ...LexTransform) ([]LexItem, error) {
+func ApplyTransformations(ctx context.Context, env TransformEnv, variants []LexItem, transforms ...LexTransform) ([]LexItem, error) {
 	var err error
 	for _, transform := range transforms {
 		if transform == nil {
 			continue
 		}
-		variants, err = transform(ctx, db, sourcePriority, variantSource, variants)
+		variants, err = transform(ctx, env, variants)
 		if err != nil {
 			return nil, fmt.Errorf("failed to transform data: %w", err)
 		}
-
 	}
 	return variants, nil
 }
 
-func SortTransformation(sortBySource Source) func(ctx context.Context, db *sql.DB, sourcePriority []Source, variantSource Source, variants []LexItem) ([]LexItem, error) {
-	return func(ctx context.Context, db *sql.DB, sourcePriority []Source, variantSource Source, variants []LexItem) ([]LexItem, error) {
-		return sortVariants2(variants, sortBySource), nil
-	}
+// SortVariants sorts variants by data of the main source
+func SortVariants(ctx context.Context, env TransformEnv, variants []LexItem) ([]LexItem, error) {
+	return sortVariants(variants, env.VariantSource), nil
 }
 
-func ResolveGroups(ctx context.Context, db *sql.DB, sourcePriority []Source, variantSource Source, variants []LexItem) ([]LexItem, error) {
+func ResolveGroups(ctx context.Context, env TransformEnv, variants []LexItem) ([]LexItem, error) {
 	groupIndex := make(map[string]int)
 	groupAssignments := make(map[int]string)
 	nextGroupID := 1
 
 	for i := range variants {
 		variant := &variants[i]
-		for _, id := range variant.Sources[variantSource] {
-			groupId := util.Ternary(id.GroupID == "", string(variantSource)+"-"+id.ID, id.GroupID)
+		for _, id := range variant.Sources[env.VariantSource] {
+			groupId := util.Ternary(id.GroupID == "", string(env.VariantSource)+"-"+id.ID, id.GroupID)
 			if gid, ok := groupIndex[groupId]; ok {
 				variant.Group = gid
 				if current, exists := groupAssignments[gid]; exists && current != groupId {
@@ -116,8 +137,8 @@ func ResolveGroups(ctx context.Context, db *sql.DB, sourcePriority []Source, var
 			if i == j || variants[j].Group != 0 {
 				continue
 			}
-			for _, id := range variants[j].Sources[variantSource] {
-				candidateGroupID := util.Ternary(id.GroupID == "", string(variantSource)+"-"+id.ID, id.GroupID)
+			for _, id := range variants[j].Sources[env.VariantSource] {
+				candidateGroupID := util.Ternary(id.GroupID == "", string(env.VariantSource)+"-"+id.ID, id.GroupID)
 				if groupAssignments[variant.Group] == candidateGroupID {
 					variants[j].Group = variant.Group
 					break
@@ -142,7 +163,7 @@ func ResolveGroups(ctx context.Context, db *sql.DB, sourcePriority []Source, var
 	return variants, nil
 }
 
-func DTIJCR__MergeItems(ctx context.Context, db *sql.DB, sourcePriority []Source, variantSource Source, variants []LexItem) ([]LexItem, error) {
+func DTIJCR__MergeItems(ctx context.Context, env TransformEnv, variants []LexItem) ([]LexItem, error) {
 	// making DTIJCR group from any DTIJ, D, T, I, J, R item
 	var result []LexItem
 	for _, item := range variants {
@@ -174,11 +195,11 @@ func DTIJCR__MergeItems(ctx context.Context, db *sql.DB, sourcePriority []Source
 	return result, nil
 }
 
-func DTIJCR__ResolvePos(ctx context.Context, db *sql.DB, sourcePriority []Source, variantSource Source, variants []LexItem) ([]LexItem, error) {
+func DTIJCR__ResolvePos(ctx context.Context, env TransformEnv, variants []LexItem) ([]LexItem, error) {
 	// reduce DTIJCR to only one value, if possible
 	for i, item := range variants {
 		if item.Key.Pos == PosDTIJCR {
-			for _, source := range sourcePriority {
+			for _, source := range env.SourcePriority {
 				if v, ok := item.Sources[source]; ok {
 					variants[i].PosSource = source
 					if samePos(v) {
@@ -192,12 +213,12 @@ func DTIJCR__ResolvePos(ctx context.Context, db *sql.DB, sourcePriority []Source
 	return variants, nil
 }
 
-func IJP__C_Is_NAP(ctx context.Context, db *sql.DB, sourcePriority []Source, variantSource Source, variants []LexItem) ([]LexItem, error) {
+func IJP__C_Is_NAP(ctx context.Context, env TransformEnv, variants []LexItem) ([]LexItem, error) {
 	// if IJP is higher than used source, there should be no ijp data
-	if sourceHasHigherPriority(sourcePriority, SourceIJP, variantSource) {
+	if sourceHasHigherPriority(env.SourcePriority, SourceIJP, env.VariantSource) {
 		return variants, nil
 
-	} else if variantSource == SourceIJP {
+	} else if env.VariantSource == SourceIJP {
 		// join C from other sources to NAP in IJP
 		for i, item := range variants {
 			if item.PosSource == SourceIJP && (item.Key.Pos == PosNoun || item.Key.Pos == PosAdj || item.Key.Pos == PosPron) && len(item.Sources) == 1 {
@@ -209,7 +230,7 @@ func IJP__C_Is_NAP(ctx context.Context, db *sql.DB, sourcePriority []Source, var
 					Uninflected: UninflectedFalse,
 					Plurality:   PluralityUnknown,
 				}
-				sources, err := SearchSources(ctx, db, search)
+				sources, err := SearchSources(ctx, env.DB, search)
 				if err != nil {
 					return nil, fmt.Errorf("failed to search C for N|A|P in IJP: %w", err)
 				}
@@ -233,7 +254,7 @@ func IJP__C_Is_NAP(ctx context.Context, db *sql.DB, sourcePriority []Source, var
 						Uninflected: UninflectedFalse,
 						Plurality:   PluralityUnknown,
 					}
-					ids, err := SearchLexItemID(ctx, db, search, SourceIJP)
+					ids, err := SearchLexItemID(ctx, env.DB, search, SourceIJP)
 					if err != nil {
 						return nil, fmt.Errorf("failed to join N|A|P to C in IJP: %w", err)
 					}
@@ -247,12 +268,12 @@ func IJP__C_Is_NAP(ctx context.Context, db *sql.DB, sourcePriority []Source, var
 	return variants, nil
 }
 
-func IJP__ResolveVariantKey(ctx context.Context, db *sql.DB, sourcePriority []Source, variantSource Source, variants []LexItem) ([]LexItem, error) {
+func IJP__ResolveVariantKey(ctx context.Context, env TransformEnv, variants []LexItem) ([]LexItem, error) {
 	// IJP should never be source of PoS/plurality
-	// select highest available source from sourcePriority list
+	// select highest available source from env.SourcePriority list
 	for i, item := range variants {
 		if item.PosSource == SourceIJP {
-			for _, source := range sourcePriority {
+			for _, source := range env.SourcePriority {
 				if v, ok := item.Sources[source]; source != SourceIJP && ok && samePos(v) {
 					item.PosSource = source
 					item.Key.Pos = v[0].Key.Pos
@@ -273,9 +294,9 @@ func IJP__ResolveVariantKey(ctx context.Context, db *sql.DB, sourcePriority []So
 	return variants, nil
 }
 
-func IJP__RemoveUninflected(ctx context.Context, db *sql.DB, sourcePriority []Source, variantSource Source, variants []LexItem) ([]LexItem, error) {
+func IJP__RemoveUninflected(ctx context.Context, env TransformEnv, variants []LexItem) ([]LexItem, error) {
 	// remove ijp source from uninflected data if inflected variant exists
-	if variantSource != SourceIJP {
+	if env.VariantSource != SourceIJP {
 		for i, item := range variants {
 			if item.Key.Uninflected == UninflectedTrue && item.HasSource(SourceIJP) {
 				search := item.Key
