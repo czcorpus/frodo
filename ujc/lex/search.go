@@ -18,12 +18,10 @@ package lex
 
 import (
 	"context"
-	"fmt"
 	"frodo/dictionary"
 	"strings"
 
 	"github.com/czcorpus/cnc-gokit/collections"
-	"github.com/czcorpus/cnc-gokit/util"
 )
 
 // search runs the whole lexicon search pipeline:
@@ -78,12 +76,17 @@ func (actions *Actions) search(ctx context.Context, corpusId, searchTerm string)
 	return LexDictResponse{Matches: variants, Suggestions: suggestions}, nil
 }
 
-func (actions *Actions) generatePossibleSearchTerms(searchTerm string) []string {
+// reflexive particles stripped from the end of the searched term
+var reflexiveParticles = []string{"si", "sis", "se", "ses"}
+
+// generatePossibleSearchTerms returns the term without reflexive particle
+// followed by its "se" and "si" variants
+func generatePossibleSearchTerms(searchTerm string) []string {
 	baseTerm := searchTerm
 	parts := strings.Fields(searchTerm)
 	if len(parts) > 1 {
 		lastPart := parts[len(parts)-1]
-		if collections.SliceContains([]string{"si", "sis", "se", "ses"}, lastPart) {
+		if collections.SliceContains(reflexiveParticles, lastPart) {
 			baseTerm = strings.Join(parts[:len(parts)-1], " ")
 		}
 	}
@@ -98,7 +101,7 @@ func (actions *Actions) generatePossibleSearchTerms(searchTerm string) []string 
 // of the first variant with any match, together with typo suggestions of all tried variants.
 func (actions *Actions) findCandidates(ctx context.Context, corpusId, searchTerm string) ([]LemmatizedTerm, []string, error) {
 	typoSuggestions := make([]string, 0, 10)
-	for _, searchTermVariant := range actions.generatePossibleSearchTerms(searchTerm) {
+	for _, searchTermVariant := range generatePossibleSearchTerms(searchTerm) {
 		values, err := SearchTypoSuggestions(ctx, actions.db.DB(), searchTermVariant)
 		if err != nil {
 			return nil, nil, err
@@ -126,7 +129,7 @@ func (actions *Actions) resolveLexItems(ctx context.Context, candidate Lemmatize
 	db := actions.db.DB()
 
 	var lexItems []LexItem
-	for _, searchTermVariant := range actions.generatePossibleSearchTerms(candidate.Term) {
+	for _, searchTermVariant := range generatePossibleSearchTerms(candidate.Term) {
 		searchCandidate := candidate
 		searchCandidate.Term = searchTermVariant
 		data, err := SearchVariants(ctx, db, searchCandidate)
@@ -188,10 +191,10 @@ func (actions *Actions) buildCorpusEntries(
 			return nil, err
 		}
 
-		if entry.ID == "corp" {
+		if entry.ID == entryOriginCorpus {
 			attachCorpusSource(&item, entry)
 		}
-		entry.ID = fmt.Sprintf("%s-%d", entry.ID, i)
+		entry.ID = entryID(entry.ID, i)
 		ensureSearchedForm(entry, usedCandidate.Sublemma, searchTerm, lemmatized.Sublemma)
 		entry.ExtraData = LexExtraData{
 			CorpusId: corpusId,
@@ -230,31 +233,16 @@ func (actions *Actions) addOtherSublemmaVariants(ctx context.Context, corpusId s
 			}
 			candidate := otherVariant
 			// continue numbering after main variants, so IDs stay unique
-			candidate.ID = fmt.Sprintf("corp-%d", len(result))
+			candidate.ID = entryID(entryOriginCorpus, len(result))
+			key := corpusLexKey(otherSublemma, candidate.PoS, candidate.Specifier)
 			candidate.ExtraData = LexExtraData{
 				CorpusId: corpusId,
 				Variant: LexItem{
-					Key: LexKey{
-						Lemma:  otherSublemma,
-						Pos:    candidate.PoS,
-						Gender: util.Ternary(candidate.PoS == PosNoun, candidate.Specifier, ""),
-						Aspect: util.Ternary(candidate.PoS == PosVerb, candidate.Specifier, ""),
-					},
+					Key:           key,
 					PosSource:     SourceCorpus,
 					VariantSource: SourceCorpus,
-					Sources: map[Source][]LexID{
-						SourceCorpus: {{
-							Key: LexKey{
-								Lemma:  otherSublemma,
-								Pos:    candidate.PoS,
-								Gender: util.Ternary(candidate.PoS == PosNoun, candidate.Specifier, ""),
-								Aspect: util.Ternary(candidate.PoS == PosVerb, candidate.Specifier, ""),
-							},
-						}},
-					},
-					// corpus variants are special group
-					// set to something high, but different than other variants
-					Group: 999,
+					Sources:       map[Source][]LexID{SourceCorpus: {{Key: key}}},
+					Group:         corpusOnlyGroup,
 				},
 			}
 			result = append(result, candidate)

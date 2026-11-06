@@ -28,6 +28,31 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// entry origin is used as a prefix of the entry ID
+const (
+	entryOriginCorpus = "corp"
+	entryOriginLex    = "lex"
+
+	// corpus-only variants are a special group,
+	// set to something high, but different than other variants
+	corpusOnlyGroup = 999
+)
+
+func entryID(origin string, idx int) string {
+	return fmt.Sprintf("%s-%d", origin, idx)
+}
+
+// corpusLexKey creates lex key from corpus entry data,
+// specifier is used as gender for nouns and as aspect for verbs
+func corpusLexKey(lemma, pos, specifier string) LexKey {
+	return LexKey{
+		Lemma:  lemma,
+		Pos:    pos,
+		Gender: util.Ternary(pos == PosNoun, specifier, ""),
+		Aspect: util.Ternary(pos == PosVerb, specifier, ""),
+	}
+}
+
 func (actions *Actions) searchCorpusEntry(ctx context.Context, corpusId, lemma, sublemma, pos string) (*dictionary.Lemma, error) {
 	if sublemma == "" {
 		return nil, nil
@@ -126,7 +151,7 @@ func (actions *Actions) mergeMultiWordCorpusEntries(item LexItem, corpusEntries 
 	mergedSpecifiers := make([]string, 0, len(corpusEntries))
 	allCorp := true
 	for _, subentry := range corpusEntries {
-		if allCorp && !strings.HasPrefix(subentry.ID, "corp") {
+		if allCorp && subentry.ID != entryOriginCorpus {
 			allCorp = false
 		}
 		mergedLemmas = append(mergedLemmas, subentry.Lemma)
@@ -141,7 +166,7 @@ func (actions *Actions) mergeMultiWordCorpusEntries(item LexItem, corpusEntries 
 	mergedLemmaText := strings.Join(mergedLemmas, " ")
 	mergedSublemmaText := strings.Join(mergedSublemmas, " ")
 	return &dictionary.Lemma{
-		ID:        util.Ternary(allCorp, "corp", "lex"),
+		ID:        util.Ternary(allCorp, entryOriginCorpus, entryOriginLex),
 		Lemma:     mergedLemmaText,
 		PoS:       strings.Join(mergedPos, " "),
 		Specifier: strings.Join(mergedSpecifiers, " "),
@@ -198,7 +223,7 @@ func (actions *Actions) findCorpusEntry(ctx context.Context, corpusId string, it
 		if entry == nil {
 			entry = newLexEntry(sublemma, pos, specifier)
 		} else {
-			entry.ID = "corp"
+			entry.ID = entryOriginCorpus
 			entry.Specifier = cmp.Or(entry.Specifier, specifier)
 		}
 		entries = append(entries, entry)
@@ -222,7 +247,7 @@ func corpusSpecifier(key LexKey) string {
 // newLexEntry creates minimal entry for a term not found in corpus
 func newLexEntry(value, pos, specifier string) *dictionary.Lemma {
 	return &dictionary.Lemma{
-		ID:        "lex",
+		ID:        entryOriginLex,
 		Lemma:     value,
 		PoS:       pos,
 		Specifier: specifier,
@@ -233,15 +258,8 @@ func newLexEntry(value, pos, specifier string) *dictionary.Lemma {
 
 // attachCorpusSource adds the corpus entry as a source of the lex item
 func attachCorpusSource(item *LexItem, entry *dictionary.Lemma) {
-	item.Sources[SourceCorpus] = []LexID{
-		{Key: LexKey{
-			Lemma: entry.Sublemmas[0].Value,
-			Pos:   entry.PoS,
-			// TODO, get specifier from corpus
-			Gender: util.Ternary(entry.PoS == PosNoun, entry.Specifier, ""),
-			Aspect: util.Ternary(entry.PoS == PosVerb, entry.Specifier, ""),
-		}},
-	}
+	// TODO, get specifier from corpus
+	item.Sources[SourceCorpus] = []LexID{{Key: corpusLexKey(entry.Sublemmas[0].Value, entry.PoS, entry.Specifier)}}
 	// use corpus PoS if pos source is unknown
 	if item.PosSource == SourceEmpty {
 		item.PosSource = SourceCorpus
