@@ -142,10 +142,8 @@ func (actions *Actions) resolveLexItems(ctx context.Context, candidate Lemmatize
 		return nil, nil
 	}
 
-	// apply special transformations before getting source data
-	lexItems, err := ApplyTransformations(ctx, db, actions.sourcePriority, candidate.Source, lexItems,
-		DTIJCR__MergeItems,
-	)
+	env := TransformEnv{DB: db, SourcePriority: actions.sourcePriority, VariantSource: candidate.Source}
+	lexItems, err := ApplyTransformations(ctx, env, lexItems, preSourceTransforms...)
 	if err != nil {
 		return nil, err
 	}
@@ -159,15 +157,7 @@ func (actions *Actions) resolveLexItems(ctx context.Context, candidate Lemmatize
 		lexItems[i].Sources = sources
 	}
 
-	// apply special transformations after getting source data
-	return ApplyTransformations(ctx, db, actions.sourcePriority, candidate.Source, lexItems,
-		DTIJCR__ResolvePos,
-		IJP__C_Is_NAP,
-		IJP__RemoveUninflected,
-		IJP__ResolveVariantKey,
-		SortTransformation(candidate.Source),
-		ResolveGroups,
-	)
+	return ApplyTransformations(ctx, env, lexItems, postSourceTransforms...)
 }
 
 // buildCorpusEntries joins each lex item with its corpus entry,
