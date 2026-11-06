@@ -17,9 +17,11 @@
 package lex
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"frodo/dictionary"
+	"slices"
 	"strings"
 
 	"github.com/czcorpus/cnc-gokit/util"
@@ -145,5 +147,117 @@ func (actions *Actions) mergeMultiWordCorpusEntries(item LexItem, corpusEntries 
 		Specifier: strings.Join(mergedSpecifiers, " "),
 		Forms:     []dictionary.Form{{Value: item.Key.Lemma, Sublemma: mergedSublemmaText}},
 		Sublemmas: []dictionary.Sublemma{{Value: mergedSublemmaText}},
+	}
+}
+
+// lemmatizeLexItem finds lemma and sublemma of the lexicon lemma,
+// lexicon lemmatization is preferred, corpus is used as a fallback
+func (actions *Actions) lemmatizeLexItem(ctx context.Context, corpusId, lemma string) (LemmatizedTerm, error) {
+	lemmatized, err := LemmatizeTermWithLex(ctx, actions.db.DB(), lemma)
+	if err != nil {
+		return LemmatizedTerm{}, err
+	}
+	if lemmatized != nil {
+		return *lemmatized, nil
+	}
+	lemmatizedTerms, err := LemmatizeTermWithCorpus(ctx, actions.db.DB(), corpusId, lemma)
+	if err != nil {
+		return LemmatizedTerm{}, err
+	}
+	if len(lemmatizedTerms) > 0 {
+		return lemmatizedTerms[0], nil
+	}
+	return LemmatizedTerm{Term: lemma, Lemma: lemma, Sublemma: lemma}, nil
+}
+
+// findCorpusEntry finds corpus entry for the lex item. Multi-word terms are searched
+// word by word and merged into a single entry. Words not found in corpus are replaced
+// with minimal entries created from lexicon data.
+func (actions *Actions) findCorpusEntry(ctx context.Context, corpusId string, item LexItem, lemmatized LemmatizedTerm) (*dictionary.Lemma, error) {
+	multiWord := lemmatized.isMultiWord()
+	specifier := util.Ternary(multiWord, "", corpusSpecifier(item.Key))
+	// use lemmatized term only for multi-word terms, otherwise use the lemma from lexicon
+	lemmas := strings.Fields(util.Ternary(multiWord, lemmatized.Lemma, item.Key.Lemma))
+	sublemmas := strings.Fields(util.Ternary(multiWord, lemmatized.Sublemma, item.Key.Lemma))
+	pos := util.Ternary(multiWord, "", item.Key.Pos)
+
+	if len(sublemmas) == 0 {
+		return newLexEntry(item.Key.Lemma, pos, specifier), nil
+	}
+
+	entries := make([]*dictionary.Lemma, 0, len(sublemmas))
+	for i, sublemma := range sublemmas {
+		lemma := sublemma
+		if i < len(lemmas) {
+			lemma = lemmas[i]
+		}
+		entry, err := actions.searchCorpusEntry(ctx, corpusId, lemma, sublemma, pos)
+		if err != nil {
+			return nil, err
+		}
+		if entry == nil {
+			entry = newLexEntry(sublemma, pos, specifier)
+		} else {
+			entry.ID = "corp"
+			entry.Specifier = cmp.Or(entry.Specifier, specifier)
+		}
+		entries = append(entries, entry)
+	}
+
+	if len(entries) == 1 {
+		return entries[0], nil
+	}
+	return actions.mergeMultiWordCorpusEntries(item, entries), nil
+}
+
+// corpusSpecifier converts lexicon gender/aspect to corpus specifier,
+// corpus uses "MI" for both "B" and "U" masculine genders
+func corpusSpecifier(key LexKey) string {
+	if key.Gender == GenderMascAnimInan || key.Gender == GenderMascUnknown {
+		return "MI"
+	}
+	return cmp.Or(key.Gender, key.Aspect)
+}
+
+// newLexEntry creates minimal entry for a term not found in corpus
+func newLexEntry(value, pos, specifier string) *dictionary.Lemma {
+	return &dictionary.Lemma{
+		ID:        "lex",
+		Lemma:     value,
+		PoS:       pos,
+		Specifier: specifier,
+		Forms:     []dictionary.Form{{Value: value, Sublemma: value}},
+		Sublemmas: []dictionary.Sublemma{{Value: value}},
+	}
+}
+
+// attachCorpusSource adds the corpus entry as a source of the lex item
+func attachCorpusSource(item *LexItem, entry *dictionary.Lemma) {
+	item.Sources[SourceCorpus] = []LexID{
+		{Key: LexKey{
+			Lemma: entry.Sublemmas[0].Value,
+			Pos:   entry.PoS,
+			// TODO, get specifier from corpus
+			Gender: util.Ternary(entry.PoS == PosNoun, entry.Specifier, ""),
+			Aspect: util.Ternary(entry.PoS == PosVerb, entry.Specifier, ""),
+		}},
+	}
+	// use corpus PoS if pos source is unknown
+	if item.PosSource == SourceEmpty {
+		item.PosSource = SourceCorpus
+	}
+}
+
+// ensureSearchedForm adds the searched term to forms of the entry,
+// if the entry belongs to the searched candidate and the form is missing
+func ensureSearchedForm(entry *dictionary.Lemma, candidateSublemma, searchTerm, formSublemma string) {
+	belongsToCandidate := slices.ContainsFunc(entry.Sublemmas, func(s dictionary.Sublemma) bool {
+		return s.Value == candidateSublemma
+	})
+	hasForm := slices.ContainsFunc(entry.Forms, func(f dictionary.Form) bool {
+		return f.Value == searchTerm
+	})
+	if belongsToCandidate && !hasForm {
+		entry.Forms = append(entry.Forms, dictionary.Form{Value: searchTerm, Sublemma: formSublemma})
 	}
 }
