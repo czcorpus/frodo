@@ -20,7 +20,9 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -420,6 +422,20 @@ func SearchLexItemID(ctx context.Context, db *sql.DB, lexKey LexKey, source Sour
 	return lexIds, nil
 }
 
+var (
+	// corpus name is used to build table names, so it must be a plain SQL identifier
+	corpusNameRegexp = regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
+
+	ErrInvalidCorpusName = errors.New("invalid corpus name")
+)
+
+func ValidateCorpusName(corpname string) error {
+	if !corpusNameRegexp.MatchString(corpname) {
+		return fmt.Errorf("%w: %q", ErrInvalidCorpusName, corpname)
+	}
+	return nil
+}
+
 type LemmatizedTerm struct {
 	Term     string
 	Lemma    string
@@ -434,6 +450,9 @@ func (lt *LemmatizedTerm) isMultiWord() bool {
 }
 
 func LemmatizeTermWithCorpus(ctx context.Context, db *sql.DB, corpname, term string) ([]LemmatizedTerm, error) {
+	if err := ValidateCorpusName(corpname); err != nil {
+		return nil, err
+	}
 	parts := strings.Fields(term)
 	if len(parts) == 0 {
 		return []LemmatizedTerm{}, nil
@@ -457,23 +476,27 @@ func LemmatizeTermWithCorpus(ctx context.Context, db *sql.DB, corpname, term str
 			return result, fmt.Errorf("failed to lemmatize part %q: %w", part, err)
 		}
 
-		var lemma, sublemma string
-		newResult := make([]LemmatizedTerm, 0, 10)
-		for rows.Next() {
-			if err := rows.Scan(&lemma, &sublemma); err != nil {
-				return result, fmt.Errorf("failed to lemmatize part %q: %w", part, err)
-			}
-			if len(result) == 0 {
-				newResult = append(newResult, LemmatizedTerm{Term: term, Lemma: lemma, Sublemma: sublemma})
-			} else {
-				for _, r := range result {
-					r.Lemma += " " + lemma
-					r.Sublemma += " " + sublemma
-					newResult = append(newResult, r)
+		newResult, err := func() ([]LemmatizedTerm, error) {
+			defer rows.Close()
+			var lemma, sublemma string
+			newResult := make([]LemmatizedTerm, 0, 10)
+			for rows.Next() {
+				if err := rows.Scan(&lemma, &sublemma); err != nil {
+					return nil, err
+				}
+				if len(result) == 0 {
+					newResult = append(newResult, LemmatizedTerm{Term: term, Lemma: lemma, Sublemma: sublemma})
+				} else {
+					for _, r := range result {
+						r.Lemma += " " + lemma
+						r.Sublemma += " " + sublemma
+						newResult = append(newResult, r)
+					}
 				}
 			}
-		}
-		if err := rows.Err(); err != nil {
+			return newResult, rows.Err()
+		}()
+		if err != nil {
 			return result, fmt.Errorf("failed to lemmatize part %q: %w", part, err)
 		}
 		if len(newResult) == 0 {
@@ -520,6 +543,7 @@ func SearchLexTerms(ctx context.Context, db *sql.DB, searchTerm LemmatizedTerm) 
 	if err != nil {
 		return result, fmt.Errorf("failed to search lex term by sublemma %q: %w", searchTerm, err)
 	}
+	defer rows.Close()
 	for rows.Next() {
 		err := rows.Scan(&term, &lemmaNull, &sublemmaNull)
 		if err != nil {
@@ -531,6 +555,9 @@ func SearchLexTerms(ctx context.Context, db *sql.DB, searchTerm LemmatizedTerm) 
 			Sublemma: sublemmaNull.String,
 			Distance: levenshtein.ComputeDistance(term, searchTerm.Term),
 		})
+	}
+	if err := rows.Err(); err != nil {
+		return result, fmt.Errorf("failed to search lex term by sublemma %q: %w", searchTerm, err)
 	}
 	sort.Slice(result, func(i, j int) bool {
 		if result[i].Term == searchTerm.Term && result[j].Term != searchTerm.Term {
@@ -563,6 +590,9 @@ func GetCorpusSublemmata(ctx context.Context, db *sql.DB, corpname string, term 
 	if term.isMultiWord() {
 		return []LemmatizedTerm{}, nil
 	}
+	if err := ValidateCorpusName(corpname); err != nil {
+		return nil, err
+	}
 
 	result := make([]LemmatizedTerm, 0, 10)
 	rows, err := db.QueryContext(
@@ -579,6 +609,7 @@ func GetCorpusSublemmata(ctx context.Context, db *sql.DB, corpname string, term 
 	if err != nil {
 		return result, fmt.Errorf("failed to get corpus sublemmata for %q: %w", term.Lemma, err)
 	}
+	defer rows.Close()
 
 	for rows.Next() {
 		newTerm := LemmatizedTerm{Lemma: term.Lemma}

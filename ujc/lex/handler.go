@@ -53,12 +53,18 @@ func (actions *Handler) addOtherSublemmaVariants(ctx context.Context, corpusId s
 	result = append(result, variants...)
 
 	for _, variant := range variants {
+		if len(variant.Sublemmas) == 0 {
+			continue
+		}
 		currentSublemma := variant.Sublemmas[0].Value
 		otherVariants, err := actions.searchOtherSublemmata(ctx, corpusId, variant.Lemma, currentSublemma, variant.PoS)
 		if err != nil {
 			return nil, err
 		}
-		for i, otherVariant := range otherVariants {
+		for _, otherVariant := range otherVariants {
+			if len(otherVariant.Sublemmas) == 0 {
+				continue
+			}
 			otherSublemma := otherVariant.Sublemmas[0].Value
 			// lemma is not compared - entries not found in corpus use lexicon lemma,
 			// which may differ from corpus lemma (e.g. lex "rekursivní" vs. corp "rekurzivní")
@@ -69,7 +75,7 @@ func (actions *Handler) addOtherSublemmaVariants(ctx context.Context, corpusId s
 				continue
 			}
 			candidate := otherVariant
-			candidate.ID = fmt.Sprintf("corp-999-%d", i)
+			candidate.ID = fmt.Sprintf("corp-%d", len(result)-len(variants))
 			candidate.ExtraData = LexExtraData{
 				CorpusId: corpusId,
 				Variant: LexItem{
@@ -129,21 +135,30 @@ func (actions *Handler) generatePossibleSearchTerms(searchTerm string) []string 
 // @Param        corpusId path string true "Used corpus"
 // @Param        term path string true "Searched term"
 // @Success      200 {object} LexDictResponse{matches=[]dictionary.Lemma{extraData=LexExtraData}}
+// @Failure      400 {object} uniresp.ActionError
 // @Failure      500 {object} uniresp.ActionError
 // @Router       /dictionary/lex/{corpusId}/search/{term} [get]
 func (actions *Handler) SearchWord(ctx *gin.Context) {
 	corpusId := ctx.Param("corpusId")
 	searchTerm := ctx.Param("term")
+	if err := ValidateCorpusName(corpusId); err != nil {
+		uniresp.RespondWithErrorJSON(ctx, err, http.StatusBadRequest)
+		return
+	}
 
 	var err error
 	var searchCandidates []LemmatizedTerm
 	typoSuggestions := make([]string, 0, 10)
 	for _, searchTermVariant := range actions.generatePossibleSearchTerms(searchTerm) {
-		if values, err := SearchTypoSuggestions(ctx, actions.db.DB(), searchTerm); err != nil {
+		if values, err := SearchTypoSuggestions(ctx, actions.db.DB(), searchTermVariant); err != nil {
 			uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
 			return
 		} else {
-			typoSuggestions = append(typoSuggestions, values...)
+			for _, v := range values {
+				if !collections.SliceContains(typoSuggestions, v) {
+					typoSuggestions = append(typoSuggestions, v)
+				}
+			}
 		}
 
 		if values, err := actions.getSearchCandidates(ctx, corpusId, searchTermVariant); err != nil {
