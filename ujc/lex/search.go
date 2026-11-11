@@ -233,7 +233,7 @@ func (actions *Actions) addCorpusSublemmaVariants(ctx context.Context, corpus co
 			continue
 		}
 		searched[key] = struct{}{}
-		otherVariants, err := actions.searchOtherSublemmata(ctx, corpus, key.lemma, key.sublemma, key.pos)
+		otherVariants, err := actions.searchOtherCorpusSublemmata(ctx, corpus, key.lemma, key.sublemma, key.pos)
 		if err != nil {
 			return nil, err
 		}

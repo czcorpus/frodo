@@ -108,7 +108,7 @@ func (actions *Actions) searchCorpusEntry(ctx context.Context, corpus corpusRef,
 	return nil, nil
 }
 
-func (actions *Actions) searchOtherSublemmata(ctx context.Context, corpus corpusRef, lemma, sublemma, pos string) ([]dictionary.Lemma, error) {
+func (actions *Actions) searchOtherCorpusSublemmata(ctx context.Context, corpus corpusRef, lemma, sublemma, pos string) ([]dictionary.Lemma, error) {
 	if sublemma == "" {
 		return nil, nil
 	}
