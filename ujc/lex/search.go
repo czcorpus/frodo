@@ -63,12 +63,12 @@ func (actions *Actions) search(ctx context.Context, corpusId, searchTerm string)
 		return LexDictResponse{}, err
 	}
 
-	variants, err := actions.buildCorpusEntries(ctx, corpus, searchTerm, usedCandidate, lexItems)
+	variants, err := actions.matchCorpusEntries(ctx, corpus, searchTerm, usedCandidate, lexItems)
 	if err != nil {
 		return LexDictResponse{}, err
 	}
 
-	variants, err = actions.addOtherSublemmaVariants(ctx, corpus, variants)
+	variants, err = actions.addCorpusSublemmaVariants(ctx, corpus, variants)
 	if err != nil {
 		return LexDictResponse{}, err
 	}
@@ -170,9 +170,9 @@ func (actions *Actions) resolveLexItems(ctx context.Context, candidate Lemmatize
 	return ApplyTransformations(ctx, env, lexItems, postSourceTransforms...)
 }
 
-// buildCorpusEntries joins each lex item with its corpus entry,
+// matchCorpusEntries joins each lex item with its corpus entry,
 // if not found, a new entry with minimal data is created
-func (actions *Actions) buildCorpusEntries(
+func (actions *Actions) matchCorpusEntries(
 	ctx context.Context,
 	corpus corpusRef,
 	searchTerm string,
@@ -214,7 +214,7 @@ func (actions *Actions) buildCorpusEntries(
 	return variants, nil
 }
 
-func (actions *Actions) addOtherSublemmaVariants(ctx context.Context, corpus corpusRef, variants []dictionary.Lemma) ([]dictionary.Lemma, error) {
+func (actions *Actions) addCorpusSublemmaVariants(ctx context.Context, corpus corpusRef, variants []dictionary.Lemma) ([]dictionary.Lemma, error) {
 	result := make([]dictionary.Lemma, 0, len(variants))
 	result = append(result, variants...)
 
@@ -233,27 +233,37 @@ func (actions *Actions) addOtherSublemmaVariants(ctx context.Context, corpus cor
 			continue
 		}
 		searched[key] = struct{}{}
-		otherVariants, err := actions.searchOtherSublemmata(ctx, corpus, variant.Lemma, currentSublemma, variant.PoS)
+		otherVariants, err := actions.searchOtherSublemmata(ctx, corpus, key.lemma, key.sublemma, key.pos)
 		if err != nil {
 			return nil, err
 		}
-		for _, otherVariant := range otherVariants {
-			if len(otherVariant.Sublemmas) == 0 {
+		for _, candidate := range otherVariants {
+			if len(candidate.Sublemmas) == 0 {
 				continue
 			}
-			otherSublemma := otherVariant.Sublemmas[0].Value
+			newSublemma := candidate.Sublemmas[0].Value
+
+			// ignore candidates that are already in results
 			// lemma is not compared - entries not found in corpus use lexicon lemma,
 			// which may differ from corpus lemma (e.g. lex "rekursivní" vs. corp "rekurzivní")
-			if collections.SliceFindIndex(result, func(item dictionary.Lemma) bool {
-				return item.PoS == otherVariant.PoS &&
-					len(item.Sublemmas) > 0 && item.Sublemmas[0].Value == otherSublemma
-			}) != -1 {
+			resultHasSublema := collections.SliceFindIndex(result, func(item dictionary.Lemma) bool {
+				return item.PoS == candidate.PoS &&
+					len(item.Sublemmas) > 0 && item.Sublemmas[0].Value == newSublemma
+			}) != -1
+			if resultHasSublema {
 				continue
 			}
-			candidate := otherVariant
-			// continue numbering after main variants, so IDs stay unique
+
+			// ignore candidates that can be found in lex dictionary
+			if sources, err := SearchAvailableSources(ctx, actions.db.DB(), newSublemma); err != nil {
+				return nil, err
+			} else if len(sources) != 0 {
+				continue
+			}
+
+			// add candidate as new variant
 			candidate.ID = entryID(entryOriginCorpus, len(result))
-			key := corpusLexKey(otherSublemma, candidate.PoS, candidate.Specifier)
+			key := corpusLexKey(newSublemma, candidate.PoS, candidate.Specifier)
 			candidate.ExtraData = LexExtraData{
 				CorpusId: corpus.ID,
 				Variant: LexItem{
