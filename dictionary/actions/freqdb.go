@@ -69,6 +69,7 @@ func (a *Actions) attachMatchTypes(term string, result []dictionary.Lemma, caseS
 				Forms:       lemma.Forms,
 				Sublemmas:   lemma.Sublemmas,
 				PoS:         lemma.PoS,
+				TagKey:      lemma.TagKey,
 				IsPname:     lemma.IsPname,
 				Count:       lemma.Count,
 				IPM:         lemma.IPM,

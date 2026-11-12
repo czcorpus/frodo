@@ -89,6 +89,7 @@ type Lemma struct {
 	Sublemmas []Sublemma `json:"sublemmas"`
 	PoS       string     `json:"pos"`
 	Specifier string     `json:"specifier"`
+	TagKey    string     `json:"tagKey,omitempty"` // selected tag positions, see corpus.TagKeyConf
 	IsPname   bool       `json:"is_pname"`
 	Count     int        `json:"count"`
 	IPM       float64    `json:"ipm,omitempty"`
@@ -193,21 +194,21 @@ func processRowsSync(rows *sql.Rows, datasetSizeForIPM int, enableMultivalues bo
 	sublemmas := make(map[string]int)
 
 	for rows.Next() {
-		var lemmaValue, sublemmaValue, wordValue, wordPos string
+		var lemmaValue, sublemmaValue, wordValue, wordPos, wordTagKey string
 		var wordCount int
 		var wordArf, simFreqScore float64
 		var isPname bool
 		var ngramSize int
 		err := rows.Scan(
 			&wordValue, &lemmaValue, &sublemmaValue, &wordCount,
-			&wordPos, &wordArf, &ngramSize, &simFreqScore, &isPname)
+			&wordPos, &wordTagKey, &wordArf, &ngramSize, &simFreqScore, &isPname)
 		if err != nil {
 			return []Lemma{}, fmt.Errorf("failed to process dictionary rows: %w", err)
 		}
 		if isValidWord(lemmaValue, enableMultivalues) {
 			newLemma := lemmaValue
 			newPos := wordPos
-			if currLemma == nil || newLemma != currLemma.Lemma || newPos != currLemma.PoS {
+			if currLemma == nil || newLemma != currLemma.Lemma || newPos != currLemma.PoS || wordTagKey != currLemma.TagKey {
 				if currLemma != nil {
 					for sValue, sCount := range sublemmas {
 						currLemma.Sublemmas = append(
@@ -232,6 +233,7 @@ func processRowsSync(rows *sql.Rows, datasetSizeForIPM int, enableMultivalues bo
 					Forms:        []Form{},
 					Sublemmas:    []Sublemma{},
 					PoS:          newPos,
+					TagKey:       wordTagKey,
 					IsPname:      isPname,
 					NgramSize:    ngramSize,
 					SimFreqScore: simFreqScore,
@@ -508,6 +510,10 @@ func Search(
 		whereSQL = append(whereSQL, "w.ngram = ?")
 		whereArgs = append(whereArgs, srchOpts.NgramSize)
 	}
+	tagKeyCol, err := tagKeyColumn(ctx, db, groupedName+"_word", "w.tag_key")
+	if err != nil {
+		return []Lemma{}, fmt.Errorf("failed to search dict. values: %w", err)
+	}
 	if srchOpts.Limit > 0 {
 		limitSQL = fmt.Sprintf("LIMIT %d", srchOpts.Limit)
 	}
@@ -515,13 +521,15 @@ func Search(
 		ctx,
 		fmt.Sprintf(
 			"SELECT w.value, w.lemma, w.sublemma, w.count, "+
-				"w.pos, w.arf, w.ngram, w.sim_freqs_score, w.initial_cap "+
+				"w.pos, %s, w.arf, w.ngram, w.sim_freqs_score, w.initial_cap "+
 				"FROM %s_word AS w "+
 				"WHERE %s "+
-				"ORDER BY w.lemma, w.pos, w.sublemma, w.value "+
+				"ORDER BY w.lemma, w.pos, %s, w.sublemma, w.value "+
 				"%s",
+			tagKeyCol,
 			groupedName,
 			strings.Join(whereSQL, " AND "),
+			tagKeyCol,
 			limitSQL,
 		),
 		whereArgs...,
