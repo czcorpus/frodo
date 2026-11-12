@@ -224,6 +224,12 @@ func (nfg *NgramFreqGenerator) createTables() error {
 		return fmt.Errorf(errMsgTpl, err)
 	}
 	if _, err := db.Exec(fmt.Sprintf(
+		`create index %s_word_tag_key_idx on %s_word(tag_key)`,
+		nfg.groupedName, nfg.groupedName,
+	)); err != nil {
+		return fmt.Errorf(errMsgTpl, err)
+	}
+	if _, err := db.Exec(fmt.Sprintf(
 		`create index %s_word_sim_freqs_score_idx on %s_word(sim_freqs_score, ngram)`,
 		nfg.groupedName, nfg.groupedName,
 	)); err != nil {

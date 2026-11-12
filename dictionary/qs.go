@@ -313,6 +313,7 @@ type SearchOptions struct {
 	NotSublemma                 string
 	Word                        string
 	PoS                         string
+	TagKey                      string
 	AnyValue                    string
 	AnyValueCS                  bool
 	AllowMultivalues            bool
@@ -343,6 +344,12 @@ func SearchWithoutSublemma(v string) SearchOption {
 func SearchWithPoS(v string) SearchOption {
 	return func(c *SearchOptions) {
 		c.PoS = v
+	}
+}
+
+func SearchWithTagKey(v string) SearchOption {
+	return func(c *SearchOptions) {
+		c.TagKey = v
 	}
 }
 
@@ -539,6 +546,11 @@ func Search(
 	tagKeyCol, err := tagKeyColumn(ctx, db, groupedName+"_word", "w.tag_key")
 	if err != nil {
 		return []Lemma{}, fmt.Errorf("failed to search dict. values: %w", err)
+	}
+	// tables without tag_key column are searched without the tag key filter
+	if srchOpts.TagKey != "" && tagKeyCol != "''" {
+		whereSQL = append(whereSQL, "w.tag_key REGEXP ?")
+		whereArgs = append(whereArgs, srchOpts.TagKey)
 	}
 	if srchOpts.Limit > 0 {
 		limitSQL = fmt.Sprintf("LIMIT %d", srchOpts.Limit)
