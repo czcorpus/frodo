@@ -23,9 +23,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"frodo/common"
+	"frodo/corpus"
 	"frodo/db/mysql"
 	"frodo/jobs"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode"
 )
@@ -88,7 +90,6 @@ type Lemma struct {
 	Forms     []Form     `json:"forms"`
 	Sublemmas []Sublemma `json:"sublemmas"`
 	PoS       string     `json:"pos"`
-	Specifier string     `json:"specifier"`
 	TagKey    string     `json:"tagKey,omitempty"` // selected tag positions, see corpus.TagKeyConf
 	IsPname   bool       `json:"is_pname"`
 	Count     int        `json:"count"`
@@ -121,6 +122,31 @@ func (lemma *Lemma) IsZero() bool {
 // and it must be also an unigram).
 func (lemma *Lemma) CanDoSimFreqScores() bool {
 	return lemma.SimFreqScore >= 0 && lemma.NgramSize == 1
+}
+
+// Merge adds forms, sublemmas and frequencies of another entry
+// (typically the same lemma with a different tag key) to the lemma.
+func (lemma *Lemma) Merge(other Lemma) {
+	lemma.Forms = append(lemma.Forms, other.Forms...)
+	mergeEqualFormsLC(lemma)
+	for _, sub := range other.Sublemmas {
+		i := slices.IndexFunc(lemma.Sublemmas, func(v Sublemma) bool { return v.Value == sub.Value })
+		if i >= 0 {
+			lemma.Sublemmas[i].Count += sub.Count
+
+		} else {
+			lemma.Sublemmas = append(lemma.Sublemmas, sub)
+		}
+	}
+	lemma.Count += other.Count
+	lemma.IPM += other.IPM
+	if lemma.SimFreqScore >= 0 && other.SimFreqScore >= 0 {
+		lemma.SimFreqScore += other.SimFreqScore
+
+	} else {
+		lemma.SimFreqScore = -1
+	}
+	lemma.TagKey = corpus.MergeTagKeys(lemma.TagKey, other.TagKey)
 }
 
 func (lemma *Lemma) ToJSON() ([]byte, error) {

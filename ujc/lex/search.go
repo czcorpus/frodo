@@ -259,6 +259,7 @@ func (actions *Actions) addCorpusSublemmaVariants(ctx context.Context, corpus co
 			// which may differ from corpus lemma (e.g. lex "rekursivní" vs. corp "rekurzivní")
 			resultHasSublema := collections.SliceFindIndex(result, func(item dictionary.Lemma) bool {
 				return item.PoS == candidate.PoS &&
+					specifiersMatch(tagKeySpecifier(item), tagKeySpecifier(candidate)) &&
 					len(item.Sublemmas) > 0 && item.Sublemmas[0].Value == newSublemma
 			}) != -1
 			if resultHasSublema {
