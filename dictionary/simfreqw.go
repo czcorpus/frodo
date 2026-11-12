@@ -133,6 +133,10 @@ func SimilarARFWords(
 			lemma.SimFreqScore, upperScoreLim, halfl,
 			lowerScoreLim, lemma.SimFreqScore, halfl,
 		)
+		if err != nil {
+			return []Lemma{}, fmt.Errorf("failed to get similar freq. words: %w", err)
+		}
+
 	} else {
 		tagKeyCol, err := tagKeyColumn(ctx, db, groupedName+"_word", "w.tag_key")
 		if err != nil {
@@ -169,11 +173,11 @@ func SimilarARFWords(
 			lemma.SimFreqScore, upperScoreLim, halfl,
 			lowerScoreLim, lemma.SimFreqScore, halfl,
 		)
+		if err != nil {
+			return []Lemma{}, fmt.Errorf("failed to get similar freq. words: %w", err)
+		}
 	}
 
-	if err != nil {
-		return []Lemma{}, fmt.Errorf("failed to get similar freq. words: %w", err)
-	}
 	defer rows.Close()
 	ans, err := processRowsSync(rows, 0, false)
 	if err != nil {
