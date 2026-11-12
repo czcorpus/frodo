@@ -87,6 +87,8 @@ type ngRecord struct {
 	lemma         string
 	sublemma      string
 	tag           string
+	pos           string
+	tagKey        string
 	abs           int
 	arf           float64
 	ngramSize     int

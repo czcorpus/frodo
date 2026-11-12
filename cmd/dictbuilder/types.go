@@ -71,6 +71,11 @@ type DictbuilderConfig struct {
 	// 1 or 2.
 	NGramSize int `json:"ngramSize"`
 
+	// TagKey specifies tag positions used to distinguish words
+	// with the same lemma and PoS (e.g. by gender or aspect).
+	// If omitted, the tag key is the same as PoS.
+	TagKey *corpus.TagKeyConf `json:"tagKey"`
+
 	DataFetchJobTimeoutSecs int `json:"dataFetchJobTimeoutSecs"`
 
 	DictBuildJobTimeoutSecs int `json:"dictBuildJobTimeoutSecs"`
@@ -111,7 +116,7 @@ func (dbconf *DictbuilderConfig) ValidateAndDefaults() error {
 		dbconf.DictBuildJobTimeoutSecs = MKDictJobDefaultTimeout
 		log.Warn().Int("timeout", dbconf.DictBuildJobTimeoutSecs).Msgf("dictBuildJobTimeoutSecs not set, using default")
 	}
-	return nil
+	return dbconf.TagKey.Validate()
 }
 
 func (dbconf *DictbuilderConfig) IsAliasedDataset() bool {

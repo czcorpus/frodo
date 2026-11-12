@@ -25,16 +25,16 @@ import (
 func TestDetermineSimFreqsScore(t *testing.T) {
 
 	items := []*ngRecord{
-		{word: "foo1", lemma: "foo", tag: "A", arf: 1.0},
-		{word: "foo2", lemma: "foo", tag: "A", arf: 2.0},
-		{word: "foo3", lemma: "foo", tag: "A", arf: 3.0},
-		{word: "foo2", lemma: "foo", tag: "B", arf: 10.0},
-		{word: "foo4", lemma: "foo", tag: "B", arf: 20.0},
-		{word: "bar1", lemma: "bar", tag: "B", arf: 100.0},
-		{word: "bar2", lemma: "bar", tag: "B", arf: 200.0},
-		{word: "bar3", lemma: "bar", tag: "B", arf: 300.0},
-		{word: "baz1", lemma: "baz", tag: "A", arf: 1000.0},
-		{word: "baz2", lemma: "baz", tag: "A", arf: 2000.0},
+		{word: "foo1", lemma: "foo", tag: "A", tagKey: "A", arf: 1.0},
+		{word: "foo2", lemma: "foo", tag: "A", tagKey: "A", arf: 2.0},
+		{word: "foo3", lemma: "foo", tag: "A", tagKey: "A", arf: 3.0},
+		{word: "foo2", lemma: "foo", tag: "B", tagKey: "B", arf: 10.0},
+		{word: "foo4", lemma: "foo", tag: "B", tagKey: "B", arf: 20.0},
+		{word: "bar1", lemma: "bar", tag: "B", tagKey: "B", arf: 100.0},
+		{word: "bar2", lemma: "bar", tag: "B", tagKey: "B", arf: 200.0},
+		{word: "bar3", lemma: "bar", tag: "B", tagKey: "B", arf: 300.0},
+		{word: "baz1", lemma: "baz", tag: "A", tagKey: "A", arf: 1000.0},
+		{word: "baz2", lemma: "baz", tag: "A", tagKey: "A", arf: 2000.0},
 	}
 	nfg := &NgramFreqGenerator{}
 	nfg.determineSimFreqsScore(items)
