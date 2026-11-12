@@ -80,13 +80,13 @@ func SimilarARFWords(
 		rows, err = db.DB().QueryContext(
 			ctx,
 			fmt.Sprintf(
-				"(SELECT '-', lemma, '-', sum_count, pos, 0, 1, avg_sim_freqs_score "+
+				"(SELECT '-', lemma, '-', sum_count, pos, 0, 1, avg_sim_freqs_score, 0 "+
 					"FROM %s_lemma_stats "+
 					"WHERE ngram = 1 AND avg_sim_freqs_score BETWEEN ? AND ? "+
 					"ORDER BY avg_sim_freqs_score ASC "+
 					"LIMIT ?) "+
 					"UNION "+
-					"(SELECT '-', lemma, '-', sum_count, pos, 0, 1, avg_sim_freqs_score "+
+					"(SELECT '-', lemma, '-', sum_count, pos, 0, 1, avg_sim_freqs_score, 0 "+
 					"FROM %s_lemma_stats "+
 					"WHERE ngram = 1 AND avg_sim_freqs_score BETWEEN ? AND ? "+
 					"ORDER BY avg_sim_freqs_score DESC "+
@@ -105,7 +105,7 @@ func SimilarARFWords(
 			ctx,
 			fmt.Sprintf(
 				"(SELECT '-', w.lemma, '-', SUM(w.count), "+
-					"w.pos, 0, 1, AVG(w.sim_freqs_score) "+
+					"w.pos, 0, 1, AVG(w.sim_freqs_score), MAX(w.initial_cap) "+
 					"FROM %s_word AS w "+
 					"WHERE w.sim_freqs_score BETWEEN ? AND ? AND w.ngram = 1 "+
 					"GROUP BY w.lemma, w.pos "+
@@ -113,7 +113,7 @@ func SimilarARFWords(
 					"LIMIT ?) "+
 					"UNION "+
 					"(SELECT '-', w.lemma, '-', SUM(w.count), "+
-					"w.pos, 0, 1, AVG(w.sim_freqs_score) "+
+					"w.pos, 0, 1, AVG(w.sim_freqs_score), MAX(w.initial_cap) "+
 					"FROM %s_word AS w "+
 					"WHERE w.sim_freqs_score BETWEEN ? AND ? AND w.ngram = 1 "+
 					"GROUP BY w.lemma, w.pos "+
