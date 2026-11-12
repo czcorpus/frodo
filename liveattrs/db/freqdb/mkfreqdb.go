@@ -822,5 +822,6 @@ func NewNgramFreqGenerator(
 		posFn:                posFn,
 		qsaAttrs:             qsaAttrs,
 		appendExisting:       appendExisting,
+		minFreq:              minFreq,
 	}
 }
