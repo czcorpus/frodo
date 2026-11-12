@@ -249,6 +249,11 @@ func (nfg *NgramFreqGenerator) createTables() error {
 // The words must be in proper order (ordered by lemma, pos, tagKey) so the method
 // is able to sum everything properly and fill in the final value to all the
 // words within the group.
+//
+// TODO: a word with arf < 0 is not handled properly - `continue` skips the group
+// boundary check, so the following words of the same group are added to -1
+// (e.g. A(2), A(-1), A(3) => 2 instead of -1) and if such a word starts a new group,
+// it is assigned to the previous group, which then gets -1 (e.g. A(2), B(-1), B(3) => A = -1).
 func (nfg *NgramFreqGenerator) determineSimFreqsScore(words []*ngRecord) {
 	var currLemma, currPos, currTagKey string
 	var prevLemmaStart int
