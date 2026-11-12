@@ -24,12 +24,12 @@ import (
 )
 
 func TestTagKeySpecifier(t *testing.T) {
-	assert.Equal(t, "F", tagKeySpecifier(dictionary.Lemma{PoS: "N", TagKey: "N-F------------"}))
-	assert.Equal(t, "Y", tagKeySpecifier(dictionary.Lemma{PoS: "N", TagKey: "N-Y------------"}))
-	assert.Equal(t, "P", tagKeySpecifier(dictionary.Lemma{PoS: "V", TagKey: "V-----------P--"}))
-	assert.Equal(t, "", tagKeySpecifier(dictionary.Lemma{PoS: "N", TagKey: "N--------------"}))
-	assert.Equal(t, "", tagKeySpecifier(dictionary.Lemma{PoS: "N", TagKey: "N"}))
-	assert.Equal(t, "", tagKeySpecifier(dictionary.Lemma{PoS: "A", TagKey: "A-F------------"}))
+	assert.Equal(t, "F", tagKeyToSpecifier(dictionary.Lemma{PoS: "N", TagKey: "N-F------------"}))
+	assert.Equal(t, "Y", tagKeyToSpecifier(dictionary.Lemma{PoS: "N", TagKey: "N-Y------------"}))
+	assert.Equal(t, "P", tagKeyToSpecifier(dictionary.Lemma{PoS: "V", TagKey: "V-----------P--"}))
+	assert.Equal(t, "", tagKeyToSpecifier(dictionary.Lemma{PoS: "N", TagKey: "N--------------"}))
+	assert.Equal(t, "", tagKeyToSpecifier(dictionary.Lemma{PoS: "N", TagKey: "N"}))
+	assert.Equal(t, "", tagKeyToSpecifier(dictionary.Lemma{PoS: "A", TagKey: "A-F------------"}))
 }
 
 func TestSetTagKeySpecifier(t *testing.T) {
@@ -68,7 +68,7 @@ func TestMergeSpecifiers(t *testing.T) {
 
 func TestCorpusLexKey(t *testing.T) {
 	assert.Equal(t, LexKey{Lemma: "pes", Pos: "N", Gender: "M"}, corpusLexKey("pes", dictionary.Lemma{PoS: "N", TagKey: "N-M------------"}))
-	assert.Equal(t, LexKey{Lemma: "pes", Pos: "N", Gender: GenderMascUnknown}, corpusLexKey("pes", dictionary.Lemma{PoS: "N", TagKey: "N-Y------------"}))
+	assert.Equal(t, LexKey{Lemma: "pes", Pos: "N", Gender: GenderMascAnimInan}, corpusLexKey("pes", dictionary.Lemma{PoS: "N", TagKey: "N-Y------------"}))
 	assert.Equal(t, LexKey{Lemma: "dělat", Pos: "V", Aspect: "I"}, corpusLexKey("dělat", dictionary.Lemma{PoS: "V", TagKey: "V-----------I--"}))
 }
 
@@ -101,4 +101,12 @@ func TestMergeTagKeyVariants(t *testing.T) {
 	}, ans[0].Forms)
 	assert.Equal(t, []dictionary.Sublemma{{Value: "pes", Count: 13}}, ans[0].Sublemmas)
 	assert.Equal(t, "A", ans[1].PoS)
+}
+
+func TestCreateTagKeyPattern(t *testing.T) {
+	assert.Equal(t, "^[N].F............", createTagKeyPattern(LexKey{Pos: "N", Gender: "F"}))
+	assert.Equal(t, "^[N].[MI]............", createTagKeyPattern(LexKey{Pos: "N", Gender: GenderMascUnknown}))
+	assert.Equal(t, "^[N]..............", createTagKeyPattern(LexKey{Pos: "N", Gender: GenderUnknown}))
+	assert.Equal(t, "^[V]...........P..", createTagKeyPattern(LexKey{Pos: "V", Aspect: "P"}))
+	assert.Equal(t, "", createTagKeyPattern(LexKey{Lemma: "pes"}))
 }

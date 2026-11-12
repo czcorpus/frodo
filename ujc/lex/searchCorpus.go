@@ -24,7 +24,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/czcorpus/cnc-gokit/collections"
 	"github.com/czcorpus/cnc-gokit/util"
 	"github.com/rs/zerolog/log"
 )
@@ -69,10 +68,10 @@ func entryID(origin string, idx int) string {
 // corpusLexKey creates lex key from corpus entry data,
 // tag key specifier is used as gender for nouns and as aspect for verbs
 func corpusLexKey(lemma string, entry dictionary.Lemma) LexKey {
-	specifier := tagKeySpecifier(entry)
+	specifier := tagKeyToSpecifier(entry)
 	gender := util.Ternary(entry.PoS == PosNoun, specifier, "")
 	if gender == tagGenderMasc {
-		gender = GenderMascUnknown
+		gender = GenderMascAnimInan
 	}
 	return LexKey{
 		Lemma:  lemma,
@@ -82,9 +81,9 @@ func corpusLexKey(lemma string, entry dictionary.Lemma) LexKey {
 	}
 }
 
-// specifierTagPos returns tag position of specifier (gender for nouns,
+// specifierTagPositions returns tag position of specifier (gender for nouns,
 // aspect for verbs) and its allowed values, zero position is returned for other PoS
-func specifierTagPos(pos string) (int, string) {
+func specifierTagPositions(pos string) (int, string) {
 	switch pos {
 	case PosNoun:
 		return tagKeyGenderPos, GenderMascAnim + GenderMascInan + GenderFem + GenderNeut + tagGenderMasc
@@ -95,10 +94,10 @@ func specifierTagPos(pos string) (int, string) {
 	}
 }
 
-// tagKeySpecifier extracts specifier (gender for nouns, aspect for verbs)
+// tagKeyToSpecifier extracts specifier (gender for nouns, aspect for verbs)
 // from the entry tag key, empty string is returned if not available
-func tagKeySpecifier(entry dictionary.Lemma) string {
-	pos, values := specifierTagPos(entry.PoS)
+func tagKeyToSpecifier(entry dictionary.Lemma) string {
+	pos, values := specifierTagPositions(entry.PoS)
 	if pos == 0 || len(entry.TagKey) < pos || !strings.Contains(values, entry.TagKey[pos-1:pos]) {
 		return ""
 	}
@@ -108,7 +107,7 @@ func tagKeySpecifier(entry dictionary.Lemma) string {
 // setTagKeySpecifier sets specifier (gender for nouns, aspect for verbs)
 // to the entry tag key, the tag key is created if missing
 func setTagKeySpecifier(entry *dictionary.Lemma, specifier string) {
-	pos, _ := specifierTagPos(entry.PoS)
+	pos, _ := specifierTagPositions(entry.PoS)
 	if pos == 0 {
 		return
 	}
@@ -147,7 +146,7 @@ func mergeTagKeyVariants(entries []dictionary.Lemma) []dictionary.Lemma {
 			return v.Lemma == entry.Lemma && v.PoS == entry.PoS
 		})
 		if i >= 0 {
-			specifier := mergeSpecifiers(tagKeySpecifier(result[i]), tagKeySpecifier(entry))
+			specifier := mergeSpecifiers(tagKeyToSpecifier(result[i]), tagKeyToSpecifier(entry))
 			result[i].Merge(entry)
 			setTagKeySpecifier(&result[i], specifier)
 
@@ -158,32 +157,34 @@ func mergeTagKeyVariants(entries []dictionary.Lemma) []dictionary.Lemma {
 	return result
 }
 
-// searchCorpusEntry finds corpus entry matching lemma, sublemma, PoS and specifier,
-// specifier is used only if corpus provides it (see tagKeySpecifier)
-func (actions *Actions) searchCorpusEntry(ctx context.Context, corpus corpusRef, lemma, sublemma, pos, specifier string) (*dictionary.Lemma, error) {
+// searchCorpusEntry finds corpus entry matching lemma, sublemma, PoS and tag key pattern,
+// if no entry matches the tag key pattern (e.g. corpus tag key does not contain gender),
+// entries are searched without it
+func (actions *Actions) searchCorpusEntry(ctx context.Context, corpus corpusRef, lemma, sublemma, pos, tagKeyPattern string) (*dictionary.Lemma, error) {
 	if sublemma == "" {
 		return nil, nil
 	}
 
-	ans, err := dictionary.Search(
-		ctx,
-		actions.db,
-		corpus.ID,
-		dictionary.SearchWithSublemma(sublemma),
-		util.Ternary(lemma != "", dictionary.SearchWithLemma(lemma), dictionary.SearchWithNoOp()),
-		util.Ternary(pos != "", dictionary.SearchWithPoS(pos), dictionary.SearchWithNoOp()),
-		dictionary.SearchWithDatasetSizeForIPM(corpus.DatasetSize),
-	)
+	search := func(tagKeyPattern string) ([]dictionary.Lemma, error) {
+		return dictionary.Search(
+			ctx,
+			actions.db,
+			corpus.ID,
+			dictionary.SearchWithSublemma(sublemma),
+			util.Ternary(lemma != "", dictionary.SearchWithLemma(lemma), dictionary.SearchWithNoOp()),
+			util.Ternary(pos != "", dictionary.SearchWithPoS(pos), dictionary.SearchWithNoOp()),
+			util.Ternary(tagKeyPattern != "", dictionary.SearchWithTagKey(tagKeyPattern), dictionary.SearchWithNoOp()),
+			dictionary.SearchWithDatasetSizeForIPM(corpus.DatasetSize),
+		)
+	}
+	ans, err := search(tagKeyPattern)
+	if err == nil && len(ans) == 0 && tagKeyPattern != "" {
+		ans, err = search("")
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to find sublemma: %w", err)
 	}
-	// if no entry matches the specifier, all entries are used
-	matching := collections.SliceFilter(ans, func(item dictionary.Lemma, i int) bool {
-		return specifiersMatch(specifier, tagKeySpecifier(item))
-	})
-	if len(matching) > 0 {
-		ans = matching
-	}
+
 	ans = mergeTagKeyVariants(ans)
 	if len(ans) > 0 {
 		if len(ans) > 1 {
@@ -340,12 +341,28 @@ func (actions *Actions) lemmatizeLexItem(ctx context.Context, corpus corpusRef, 
 	return LemmatizedTerm{Term: lemma, Lemma: lemma, Sublemma: lemma}, nil
 }
 
+// createTagKeyPattern creates a regular expression matching corpus tag keys
+// with PoS, gender and aspect of the lex key, unknown values match anything
+func createTagKeyPattern(key LexKey) string {
+	if key.Pos == "" {
+		return ""
+	}
+	gender := util.Ternary(key.Gender == GenderMascAnimInan || key.Gender == GenderMascUnknown, "[MI]", key.Gender)
+	return fmt.Sprintf(
+		"^[%s].%s.........%s..",
+		key.Pos,
+		util.Ternary(gender != "" && gender != GenderUnknown, gender, "."),
+		util.Ternary(key.Aspect != "" && key.Aspect != AspectUnknown, key.Aspect, "."),
+	)
+}
+
 // findCorpusEntry finds corpus entry for the lex item. Multi-word terms are searched
 // word by word and merged into a single entry. Words not found in corpus are replaced
 // with minimal entries created from lexicon data.
 func (actions *Actions) findCorpusEntry(ctx context.Context, corpus corpusRef, item LexItem, lemmatized LemmatizedTerm) (*dictionary.Lemma, error) {
 	multiWord := lemmatized.isMultiWord()
 	specifier := util.Ternary(multiWord, "", corpusSpecifier(item.Key))
+	tagKeyPattern := util.Ternary(multiWord, "", createTagKeyPattern(item.Key))
 	// use lemmatized term only for multi-word terms, otherwise use the lemma from lexicon
 	lemmas := strings.Fields(util.Ternary(multiWord, lemmatized.Lemma, item.Key.Lemma))
 	sublemmas := strings.Fields(util.Ternary(multiWord, lemmatized.Sublemma, item.Key.Lemma))
@@ -361,7 +378,7 @@ func (actions *Actions) findCorpusEntry(ctx context.Context, corpus corpusRef, i
 		if i < len(lemmas) {
 			lemma = lemmas[i]
 		}
-		entry, err := actions.searchCorpusEntry(ctx, corpus, lemma, sublemma, pos, specifier)
+		entry, err := actions.searchCorpusEntry(ctx, corpus, lemma, sublemma, pos, tagKeyPattern)
 		if err != nil {
 			return nil, err
 		}
@@ -369,7 +386,7 @@ func (actions *Actions) findCorpusEntry(ctx context.Context, corpus corpusRef, i
 			entry = newLexEntry(sublemma, pos, specifier)
 		} else {
 			entry.ID = entryOriginCorpus
-			if tagKeySpecifier(*entry) == "" {
+			if tagKeyToSpecifier(*entry) == "" {
 				setTagKeySpecifier(entry, specifier)
 			}
 		}
