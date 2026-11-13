@@ -45,6 +45,15 @@ type testConfig struct {
 	Descriptions map[string]string `json:"descriptions"`
 }
 
+// resolveTestPath returns p as is if absolute, otherwise
+// it is resolved relative to the directory of the config file.
+func resolveTestPath(cfgPath, p string) string {
+	if filepath.IsAbs(p) {
+		return p
+	}
+	return filepath.Join(filepath.Dir(cfgPath), p)
+}
+
 func runVariantTest(cfgPath string, verbose bool) error {
 	raw, err := os.ReadFile(cfgPath)
 	if err != nil {
@@ -62,6 +71,7 @@ func runVariantTest(cfgPath string, verbose bool) error {
 	if cfg.Path == "" {
 		return fmt.Errorf("no test path set")
 	}
+	cfg.Path = resolveTestPath(cfgPath, cfg.Path)
 	testFiles, err := os.ReadDir(cfg.Path)
 	if err != nil {
 		return fmt.Errorf("cannot read path %q: %w", cfg.Path, err)
@@ -178,6 +188,7 @@ func saveVariantData(cfgPath string, term string) error {
 	if cfg.Path == "" {
 		return fmt.Errorf("no test path set")
 	}
+	cfg.Path = resolveTestPath(cfgPath, cfg.Path)
 
 	base := fmt.Sprintf("http://%s:%d", cfg.Server.Address, cfg.Server.Port)
 	u := fmt.Sprintf("%s/dictionary/lex/%s/search/%s", base, url.PathEscape(cfg.CorpusID), url.PathEscape(term))
