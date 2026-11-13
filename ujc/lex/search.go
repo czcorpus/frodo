@@ -29,6 +29,8 @@ import (
 //  2. resolve lex items (variants) of the main candidate, including their source data
 //  3. join each lex item with corpus data
 //  4. append corpus-only sublemma variants
+//
+// If no lexicon candidate is found, only corpus entries matching the term are returned.
 func (actions *Actions) search(ctx context.Context, corpusId, searchTerm string) (LexDictResponse, error) {
 	if err := ValidateCorpusName(corpusId); err != nil {
 		return LexDictResponse{}, err
@@ -39,7 +41,16 @@ func (actions *Actions) search(ctx context.Context, corpusId, searchTerm string)
 		return LexDictResponse{}, err
 	}
 	if len(candidates) == 0 {
-		return LexDictResponse{Matches: []dictionary.Lemma{}, Suggestions: typoSuggestions}, nil
+		// term is not in lexicon, return just corpus entries
+		corpus, err := actions.loadCorpusRef(corpusId)
+		if err != nil {
+			return LexDictResponse{}, err
+		}
+		matches, err := actions.searchCorpusOnlyEntries(ctx, corpus, searchTerm)
+		if err != nil {
+			return LexDictResponse{}, err
+		}
+		return LexDictResponse{Matches: matches, Suggestions: typoSuggestions}, nil
 	}
 
 	// first candidate will be used for search, the rest will be used as suggestions
@@ -262,19 +273,7 @@ func (actions *Actions) addCorpusSublemmaVariants(ctx context.Context, corpus co
 			}
 
 			// add candidate as new variant
-			candidate.ID = entryID(entryOriginCorpus, len(result))
-			key := corpusLexKey(newSublemma, candidate.PoS, candidate.Specifier)
-			candidate.ExtraData = LexExtraData{
-				CorpusId: corpus.ID,
-				Variant: LexItem{
-					Key:           key,
-					PosSource:     SourceCorpus,
-					VariantSource: SourceCorpus,
-					Sources:       map[Source][]LexID{SourceCorpus: {{Key: key}}},
-					Group:         corpusOnlyGroup,
-				},
-			}
-			result = append(result, candidate)
+			result = append(result, newCorpusOnlyVariant(corpus, candidate, len(result)))
 		}
 	}
 	return result, nil

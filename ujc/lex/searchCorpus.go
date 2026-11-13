@@ -125,8 +125,54 @@ func (actions *Actions) searchOtherCorpusSublemmata(ctx context.Context, corpus 
 	if err != nil {
 		return nil, fmt.Errorf("failed to find sublemma: %w", err)
 	}
+	return splitBySublemma(ans), nil
+}
 
-	// expand results to have one entry per sublemma, with forms filtered to only those matching the sublemma
+// searchCorpusOnlyEntries searches the corpus for the term (as word, lemma or sublemma)
+// and returns found entries as corpus-only variants, one per sublemma
+func (actions *Actions) searchCorpusOnlyEntries(ctx context.Context, corpus corpusRef, searchTerm string) ([]dictionary.Lemma, error) {
+	ans, err := dictionary.Search(
+		ctx,
+		actions.db,
+		corpus.ID,
+		dictionary.SearchWithAnyValue(searchTerm),
+		dictionary.SearchWithDatasetSizeForIPM(corpus.DatasetSize),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search corpus entries: %w", err)
+	}
+	entries := splitBySublemma(ans)
+	result := make([]dictionary.Lemma, 0, len(entries))
+	for _, entry := range entries {
+		if len(entry.Sublemmas) == 0 {
+			continue
+		}
+		result = append(result, newCorpusOnlyVariant(corpus, entry, len(result)))
+	}
+	return result, nil
+}
+
+// newCorpusOnlyVariant turns corpus entry (with a single sublemma) into a variant
+// that has no lexicon counterpart
+func newCorpusOnlyVariant(corpus corpusRef, entry dictionary.Lemma, idx int) dictionary.Lemma {
+	entry.ID = entryID(entryOriginCorpus, idx)
+	key := corpusLexKey(entry.Sublemmas[0].Value, entry.PoS, entry.Specifier)
+	entry.ExtraData = LexExtraData{
+		CorpusId: corpus.ID,
+		Variant: LexItem{
+			Key:           key,
+			PosSource:     SourceCorpus,
+			VariantSource: SourceCorpus,
+			Sources:       map[Source][]LexID{SourceCorpus: {{Key: key}}},
+			Group:         corpusOnlyGroup,
+		},
+	}
+	return entry
+}
+
+// splitBySublemma expands corpus entries to have one entry per sublemma,
+// with forms filtered to only those matching the sublemma
+func splitBySublemma(ans []dictionary.Lemma) []dictionary.Lemma {
 	results := make([]dictionary.Lemma, 0, len(ans))
 	for _, item := range ans {
 		for _, sublemma := range item.Sublemmas {
@@ -144,8 +190,7 @@ func (actions *Actions) searchOtherCorpusSublemmata(ctx context.Context, corpus 
 			results = append(results, entry)
 		}
 	}
-
-	return results, nil
+	return results
 }
 
 func (actions *Actions) mergeMultiWordCorpusEntries(item LexItem, corpusEntries []*dictionary.Lemma) *dictionary.Lemma {
