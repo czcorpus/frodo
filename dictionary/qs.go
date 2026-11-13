@@ -23,9 +23,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"frodo/common"
+	"frodo/corpus"
 	"frodo/db/mysql"
 	"frodo/jobs"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode"
 )
@@ -88,7 +90,7 @@ type Lemma struct {
 	Forms     []Form     `json:"forms"`
 	Sublemmas []Sublemma `json:"sublemmas"`
 	PoS       string     `json:"pos"`
-	Specifier string     `json:"specifier"`
+	TagKey    string     `json:"tagKey,omitempty"` // selected tag positions, see corpus.TagKeyConf
 	IsPname   bool       `json:"is_pname"`
 	Count     int        `json:"count"`
 	IPM       float64    `json:"ipm,omitempty"`
@@ -120,6 +122,35 @@ func (lemma *Lemma) IsZero() bool {
 // and it must be also an unigram).
 func (lemma *Lemma) CanDoSimFreqScores() bool {
 	return lemma.SimFreqScore >= 0 && lemma.NgramSize == 1
+}
+
+// Merge adds forms, sublemmas and frequencies of another entry
+// (typically the same lemma with a different tag key) to the lemma.
+func (lemma *Lemma) Merge(other Lemma) {
+	lemma.Forms = append(lemma.Forms, other.Forms...)
+	mergeEqualFormsLC(lemma)
+	for _, sub := range other.Sublemmas {
+		i := slices.IndexFunc(lemma.Sublemmas, func(v Sublemma) bool { return v.Value == sub.Value })
+		if i >= 0 {
+			lemma.Sublemmas[i].Count += sub.Count
+
+		} else {
+			lemma.Sublemmas = append(lemma.Sublemmas, sub)
+		}
+	}
+	lemma.Count += other.Count
+	lemma.IPM += other.IPM
+	lemma.SimFreqScore = sumSimFreqScores(lemma.SimFreqScore, other.SimFreqScore)
+	lemma.TagKey = corpus.MergeTagKeys(lemma.TagKey, other.TagKey)
+}
+
+// sumSimFreqScores sums scores of lemma variants,
+// if any of the scores is not available (-1), the sum is not available either
+func sumSimFreqScores(score1, score2 float64) float64 {
+	if score1 < 0 || score2 < 0 {
+		return -1
+	}
+	return score1 + score2
 }
 
 func (lemma *Lemma) ToJSON() ([]byte, error) {
@@ -185,29 +216,34 @@ func mergeEqualFormsLC(lemma *Lemma) {
 	lemma.Forms = forms
 }
 
-func processRowsSync(rows *sql.Rows, datasetSizeForIPM int, enableMultivalues bool) ([]Lemma, error) {
+// processRowsSync creates lemmas from rows ordered by lemma, pos and tag key.
+// If distinguishTagKey is false, lemma variants with different tag keys are merged
+// into a single lemma (with summed simFreqScore).
+func processRowsSync(rows *sql.Rows, datasetSizeForIPM int, enableMultivalues, distinguishTagKey bool) ([]Lemma, error) {
 
 	var idBase, procRecords int
 	matchingLemmas := make([]Lemma, 0, maxExpectedNumMatchingLemmas)
 	var currLemma *Lemma
+	var currTagKey string
 	sublemmas := make(map[string]int)
 
 	for rows.Next() {
-		var lemmaValue, sublemmaValue, wordValue, wordPos string
+		var lemmaValue, sublemmaValue, wordValue, wordPos, wordTagKey string
 		var wordCount int
 		var wordArf, simFreqScore float64
 		var isPname bool
 		var ngramSize int
 		err := rows.Scan(
 			&wordValue, &lemmaValue, &sublemmaValue, &wordCount,
-			&wordPos, &wordArf, &ngramSize, &simFreqScore, &isPname)
+			&wordPos, &wordTagKey, &wordArf, &ngramSize, &simFreqScore, &isPname)
 		if err != nil {
 			return []Lemma{}, fmt.Errorf("failed to process dictionary rows: %w", err)
 		}
 		if isValidWord(lemmaValue, enableMultivalues) {
 			newLemma := lemmaValue
 			newPos := wordPos
-			if currLemma == nil || newLemma != currLemma.Lemma || newPos != currLemma.PoS {
+			isNewLemma := currLemma == nil || newLemma != currLemma.Lemma || newPos != currLemma.PoS
+			if isNewLemma || distinguishTagKey && wordTagKey != currTagKey {
 				if currLemma != nil {
 					for sValue, sCount := range sublemmas {
 						currLemma.Sublemmas = append(
@@ -238,8 +274,16 @@ func processRowsSync(rows *sql.Rows, datasetSizeForIPM int, enableMultivalues bo
 					// simFreqScore should be the same for all the forms
 					// so we just grab the last form value
 				}
+				if distinguishTagKey {
+					currLemma.TagKey = wordTagKey
+				}
 				idBase++
+
+			} else if wordTagKey != currTagKey {
+				// another tag key variant of the same lemma, its score is added
+				currLemma.SimFreqScore = sumSimFreqScores(currLemma.SimFreqScore, simFreqScore)
 			}
+			currTagKey = wordTagKey
 
 			form := Form{
 				Value:    wordValue,
@@ -285,6 +329,8 @@ type SearchOptions struct {
 	NotSublemma                 string
 	Word                        string
 	PoS                         string
+	TagKey                      string
+	DistinguishTagKey           bool
 	AnyValue                    string
 	AnyValueCS                  bool
 	AllowMultivalues            bool
@@ -315,6 +361,20 @@ func SearchWithoutSublemma(v string) SearchOption {
 func SearchWithPoS(v string) SearchOption {
 	return func(c *SearchOptions) {
 		c.PoS = v
+	}
+}
+
+func SearchWithTagKey(v string) SearchOption {
+	return func(c *SearchOptions) {
+		c.TagKey = v
+	}
+}
+
+// SearchWithTagKeyDistinction returns lemma variants with different
+// tag keys as separate lemmas (by default, they are merged)
+func SearchWithTagKeyDistinction() SearchOption {
+	return func(c *SearchOptions) {
+		c.DistinguishTagKey = true
 	}
 }
 
@@ -508,6 +568,15 @@ func Search(
 		whereSQL = append(whereSQL, "w.ngram = ?")
 		whereArgs = append(whereArgs, srchOpts.NgramSize)
 	}
+	tagKeyCol, err := tagKeyColumn(ctx, db, groupedName+"_word", "w.tag_key")
+	if err != nil {
+		return []Lemma{}, fmt.Errorf("failed to search dict. values: %w", err)
+	}
+	// tables without tag_key column are searched without the tag key filter
+	if srchOpts.TagKey != "" && tagKeyCol != "''" {
+		whereSQL = append(whereSQL, "w.tag_key REGEXP ?")
+		whereArgs = append(whereArgs, srchOpts.TagKey)
+	}
 	if srchOpts.Limit > 0 {
 		limitSQL = fmt.Sprintf("LIMIT %d", srchOpts.Limit)
 	}
@@ -515,13 +584,15 @@ func Search(
 		ctx,
 		fmt.Sprintf(
 			"SELECT w.value, w.lemma, w.sublemma, w.count, "+
-				"w.pos, w.arf, w.ngram, w.sim_freqs_score, w.initial_cap "+
+				"w.pos, %s, w.arf, w.ngram, w.sim_freqs_score, w.initial_cap "+
 				"FROM %s_word AS w "+
 				"WHERE %s "+
-				"ORDER BY w.lemma, w.pos, w.sublemma, w.value "+
+				"ORDER BY w.lemma, w.pos, %s, w.sublemma, w.value "+
 				"%s",
+			tagKeyCol,
 			groupedName,
 			strings.Join(whereSQL, " AND "),
+			tagKeyCol,
 			limitSQL,
 		),
 		whereArgs...,
@@ -529,5 +600,5 @@ func Search(
 	if err != nil {
 		return []Lemma{}, fmt.Errorf("failed to search dict. values: %w", err)
 	}
-	return processRowsSync(rows, srchOpts.SearchWithDatasetSizeForIPM, srchOpts.AllowMultivalues)
+	return processRowsSync(rows, srchOpts.SearchWithDatasetSizeForIPM, srchOpts.AllowMultivalues, srchOpts.DistinguishTagKey)
 }

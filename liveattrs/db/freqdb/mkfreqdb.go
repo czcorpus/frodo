@@ -23,6 +23,7 @@ tagset and positional attribute types and order.
 package freqdb
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"fmt"
@@ -49,6 +50,7 @@ const (
 	duplicateRowErrNo        = 1062
 	NonWordCSCNC2020Tag      = "X@-------------"
 	maxNonOptimizedNgramsLen = 1500000
+	tagKeyColSize            = 80 // must fit tag keys of all n-gram tokens
 )
 
 type NgramFreqGenerator struct {
@@ -60,6 +62,7 @@ type NgramFreqGenerator struct {
 	appendExisting       bool
 	ngramSize            int
 	posFn                *modders.StringTransformerChain
+	tagKeyConf           *corpus.TagKeyConf
 	jobActions           *jobs.Actions
 	qsaAttrs             corpus.QSAttributes
 	minFreq              int
@@ -80,6 +83,8 @@ func (nfg *NgramFreqGenerator) updateTablesStats() error {
 // BuildLemmaStats creates (or recreates) the auxiliary {groupedName}_lemma_stats table
 // and fills it with aggregated data from {groupedName}_word. This should be called
 // once the initial import into _word is complete.
+// Each lemma has rows for its tag keys and also a row aggregated over all its tag keys
+// (with an empty tag key).
 func (nfg *NgramFreqGenerator) BuildLemmaStats(ctx context.Context) error {
 	if _, err := nfg.db.DB().ExecContext(
 		ctx,
@@ -93,13 +98,29 @@ func (nfg *NgramFreqGenerator) BuildLemmaStats(ctx context.Context) error {
 			`CREATE TABLE %s_lemma_stats (
 				`+"`lemma`"+` varchar(500) NOT NULL,
 				`+"`pos`"+` varchar(20) DEFAULT NULL,
+				`+"`tag_key`"+` varchar(%d) NOT NULL,
 				`+"`ngram`"+` tinyint(4) NOT NULL,
 				`+"`sum_count`"+` bigint DEFAULT NULL,
 				`+"`avg_sim_freqs_score`"+` float DEFAULT NULL,
 				`+"`sublemma`"+` text DEFAULT NULL,
-				PRIMARY KEY (lemma, ngram, pos),
+				PRIMARY KEY (lemma, ngram, pos, tag_key),
 				KEY %s_lemma_stats_score_idx (ngram, avg_sim_freqs_score)
 			) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`,
+			nfg.groupedName,
+			tagKeyColSize,
+			nfg.groupedName,
+		),
+	); err != nil {
+		return fmt.Errorf("failed to build lemma stats: %w", err)
+	}
+	if _, err := nfg.db.DB().ExecContext(
+		ctx,
+		fmt.Sprintf(
+			`INSERT INTO %s_lemma_stats
+			SELECT lemma, pos, tag_key, ngram, SUM(count), AVG(sim_freqs_score), MIN(sublemma)
+			FROM %s_word
+			WHERE tag_key <> ''
+			GROUP BY lemma, pos, tag_key, ngram`,
 			nfg.groupedName,
 			nfg.groupedName,
 		),
@@ -110,8 +131,9 @@ func (nfg *NgramFreqGenerator) BuildLemmaStats(ctx context.Context) error {
 		ctx,
 		fmt.Sprintf(
 			`INSERT INTO %s_lemma_stats
-			SELECT lemma, pos, ngram, SUM(count), AVG(sim_freqs_score), MIN(sublemma)
-			FROM %s_word
+			SELECT lemma, pos, '', ngram, SUM(sum_count),
+				IF(MIN(avg_sim_freqs_score) < 0, -1, SUM(avg_sim_freqs_score)), MIN(sublemma)
+			FROM %s_lemma_stats
 			GROUP BY lemma, pos, ngram`,
 			nfg.groupedName,
 			nfg.groupedName,
@@ -161,6 +183,7 @@ func (nfg *NgramFreqGenerator) createTables() error {
 			lemma TEXT,
 			sublemma TEXT,
 			pos VARCHAR(20),
+			tag_key VARCHAR(%d) NOT NULL DEFAULT '',
 			count INTEGER,
 			ngram TINYINT NOT NULL,
 			arf FLOAT,
@@ -169,6 +192,7 @@ func (nfg *NgramFreqGenerator) createTables() error {
 			%s
 			) COLLATE utf8mb4_bin %s %s`,
 			nfg.groupedName,
+			tagKeyColSize,
 			primaryKeySQL,
 			partitioningSQL,
 			dataDirSQL,
@@ -217,6 +241,12 @@ func (nfg *NgramFreqGenerator) createTables() error {
 		return fmt.Errorf(errMsgTpl, err)
 	}
 	if _, err := db.Exec(fmt.Sprintf(
+		`create index %s_word_tag_key_idx on %s_word(tag_key)`,
+		nfg.groupedName, nfg.groupedName,
+	)); err != nil {
+		return fmt.Errorf(errMsgTpl, err)
+	}
+	if _, err := db.Exec(fmt.Sprintf(
 		`create index %s_word_sim_freqs_score_idx on %s_word(sim_freqs_score, ngram)`,
 		nfg.groupedName, nfg.groupedName,
 	)); err != nil {
@@ -239,11 +269,16 @@ func (nfg *NgramFreqGenerator) createTables() error {
 }
 
 // determineSimFreqsScore calculates simFreqScore for all the provided words
-// The words must be in proper order (ordered by lemma, pos) so the method
+// The words must be in proper order (ordered by lemma, pos, tagKey) so the method
 // is able to sum everything properly and fill in the final value to all the
 // words within the group.
+//
+// TODO: a word with arf < 0 is not handled properly - `continue` skips the group
+// boundary check, so the following words of the same group are added to -1
+// (e.g. A(2), A(-1), A(3) => 2 instead of -1) and if such a word starts a new group,
+// it is assigned to the previous group, which then gets -1 (e.g. A(2), B(-1), B(3) => A = -1).
 func (nfg *NgramFreqGenerator) determineSimFreqsScore(words []*ngRecord) {
-	var currLemma, currPos string
+	var currLemma, currPos, currTagKey string
 	var prevLemmaStart int
 	var score float64
 	for i, word := range words {
@@ -251,7 +286,7 @@ func (nfg *NgramFreqGenerator) determineSimFreqsScore(words []*ngRecord) {
 			score = -1
 			continue
 		}
-		if word.lemma != currLemma || word.tag[:1] != currPos {
+		if word.lemma != currLemma || word.pos != currPos || word.tagKey != currTagKey {
 			for j := prevLemmaStart; j < i; j++ {
 				words[j].simFreqsScore = score
 			}
@@ -259,7 +294,8 @@ func (nfg *NgramFreqGenerator) determineSimFreqsScore(words []*ngRecord) {
 			score = 0
 		}
 		currLemma = word.lemma
-		currPos = word.tag[:1]
+		currPos = word.pos
+		currTagKey = word.tagKey
 		score += word.arf
 	}
 	for j := prevLemmaStart; j < len(words); j++ {
@@ -282,23 +318,16 @@ func (nfg *NgramFreqGenerator) procLineGroupIgnoreErrors(
 	for i := range len(words) {
 		_, err := tx.Exec(
 			fmt.Sprintf(
-				`INSERT INTO %s_word (id, value, lemma, sublemma, pos, count, arf, initial_cap, ngram, sim_freqs_score)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				`INSERT INTO %s_word (id, value, lemma, sublemma, pos, tag_key, count, arf, initial_cap, ngram, sim_freqs_score)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 				nfg.groupedName,
 			),
 			words[i].hashId,
 			words[i].word,
 			words[i].lemma,
 			words[i].sublemma,
-			strings.Join(
-				collections.SliceMap(
-					strings.Split(words[i].tag, " "),
-					func(v string, i int) string {
-						return nfg.posFn.Transform(v)
-					},
-				),
-				" ",
-			),
+			words[i].pos,
+			words[i].tagKey,
 			words[i].abs,
 			words[i].arf,
 			words[i].initialCap,
@@ -332,24 +361,17 @@ func (nfg *NgramFreqGenerator) procLineGroup(
 	words []*ngRecord,
 ) error {
 	valPlaceholders := make([]string, len(words))
-	queryArgs := make([]any, 0, len(words)*10)
+	queryArgs := make([]any, 0, len(words)*11)
 	for i := range len(words) {
-		valPlaceholders[i] = "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+		valPlaceholders[i] = "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 		queryArgs = append(
 			queryArgs,
 			words[i].hashId,
 			words[i].word,
 			words[i].lemma,
 			words[i].sublemma,
-			strings.Join(
-				collections.SliceMap(
-					strings.Split(words[i].tag, " "),
-					func(v string, i int) string {
-						return nfg.posFn.Transform(v)
-					},
-				),
-				" ",
-			),
+			words[i].pos,
+			words[i].tagKey,
 			words[i].abs,
 			words[i].arf,
 			words[i].initialCap,
@@ -359,7 +381,7 @@ func (nfg *NgramFreqGenerator) procLineGroup(
 	}
 	if _, err := tx.Exec(
 		fmt.Sprintf(
-			`INSERT INTO %s_word (id, value, lemma, sublemma, pos, count, arf, initial_cap, ngram, sim_freqs_score)
+			`INSERT INTO %s_word (id, value, lemma, sublemma, pos, tag_key, count, arf, initial_cap, ngram, sim_freqs_score)
 			VALUES %s`,
 			nfg.groupedName,
 			strings.Join(valPlaceholders, ", "),
@@ -466,12 +488,32 @@ func (nfg *NgramFreqGenerator) preloadCols(
 			numIgnored++
 			continue
 		}
+		rec.pos = strings.Join(
+			collections.SliceMap(
+				strings.Split(rec.tag, " "),
+				func(v string, i int) string {
+					return nfg.posFn.Transform(v)
+				},
+			),
+			" ",
+		)
+		// without configuration, the tag key is the same as PoS
+		rec.tagKey = rec.pos
+		if nfg.tagKeyConf != nil {
+			rec.tagKey = nfg.tagKeyConf.MkTagKey(rec.tag)
+		}
 		ngrams = append(ngrams, rec)
 	}
 
 	slices.SortFunc(
 		ngrams,
-		func(a, b *ngRecord) int { return strings.Compare(a.lemma+a.tag, b.lemma+b.tag) },
+		func(a, b *ngRecord) int {
+			return cmp.Or(
+				strings.Compare(a.lemma, b.lemma),
+				strings.Compare(a.tagKey, b.tagKey),
+				strings.Compare(a.tag, b.tag),
+			)
+		},
 	)
 	baseStatus.CurrAction = fmt.Sprintf("sorting ngram list of size %d", len(ngrams))
 	statusCh <- baseStatus
@@ -692,7 +734,8 @@ func (nfg *NgramFreqGenerator) generateSync(
 	if !ok {
 		return
 	}
-	if numNgrams > maxNonOptimizedNgramsLen {
+	// with tag keys, lemma stats are required to search lemmas with similar frequency
+	if numNgrams > maxNonOptimizedNgramsLen || nfg.tagKeyConf != nil {
 		if err := nfg.BuildLemmaStats(ctx); err != nil {
 			status.Error = err
 			statusChan <- status
@@ -808,6 +851,7 @@ func NewNgramFreqGenerator(
 	appendExisting bool,
 	ngramSize int,
 	posFn *modders.StringTransformerChain,
+	tagKeyConf *corpus.TagKeyConf,
 	qsaAttrs corpus.QSAttributes,
 	minFreq int,
 ) *NgramFreqGenerator {
@@ -820,7 +864,9 @@ func NewNgramFreqGenerator(
 		useTablePartitioning: usePartitionedTable,
 		ngramSize:            ngramSize,
 		posFn:                posFn,
+		tagKeyConf:           tagKeyConf,
 		qsaAttrs:             qsaAttrs,
 		appendExisting:       appendExisting,
+		minFreq:              minFreq,
 	}
 }

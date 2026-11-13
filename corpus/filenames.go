@@ -22,7 +22,7 @@ import (
 )
 
 var (
-	icReg = regexp.MustCompile("intercorp_v([\\d]+)_\\w{2}")
+	icReg = regexp.MustCompile(`intercorp_v(\d+)_\w{2}`)
 )
 
 // GenCorpusGroupName generates a proper name for corpus

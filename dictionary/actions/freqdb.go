@@ -69,6 +69,7 @@ func (a *Actions) attachMatchTypes(term string, result []dictionary.Lemma, caseS
 				Forms:       lemma.Forms,
 				Sublemmas:   lemma.Sublemmas,
 				PoS:         lemma.PoS,
+				TagKey:      lemma.TagKey,
 				IsPname:     lemma.IsPname,
 				Count:       lemma.Count,
 				IPM:         lemma.IPM,
@@ -101,6 +102,7 @@ func (a *Actions) attachMatchTypes(term string, result []dictionary.Lemma, caseS
 // @Param        term path string true "Search term"
 // @Param        no-multivalues query int false "Forbid multivalues" default(0)
 // @Param        pos query string false "Search part of speach"
+// @Param        distinguish-tag-key query int false "Return lemma variants with different tag keys separately" default(0)
 // @Success      200 {object} map[string]any
 // @Router       /dictionary/{corpusId}/querySuggestions/{term} [get]
 // @Router       /dictionary/{corpusId}/search/{term} [get]
@@ -109,6 +111,7 @@ func (a *Actions) GetQuerySuggestions(ctx *gin.Context) {
 	term := ctx.Param("term")
 	noMultivalues := ctx.Query("no-multivalues") == "1"
 	caseSensitive := ctx.Query("case-sensitive") == "1"
+	distinguishTagKey := ctx.Query("distinguish-tag-key") == "1"
 
 	mvOpts := dictionary.SearchWithMultivalues()
 	if noMultivalues {
@@ -119,6 +122,11 @@ func (a *Actions) GetQuerySuggestions(ctx *gin.Context) {
 	posOpts := dictionary.SearchWithNoOp()
 	if pos != "" {
 		posOpts = dictionary.SearchWithPoS(pos)
+	}
+
+	tagKeyOpts := dictionary.SearchWithNoOp()
+	if distinguishTagKey {
+		tagKeyOpts = dictionary.SearchWithTagKeyDistinction()
 	}
 
 	datasetSize, err := a.GetDatasetSize(corpusID)
@@ -136,6 +144,7 @@ func (a *Actions) GetQuerySuggestions(ctx *gin.Context) {
 		dictionary.SearchWithDatasetSizeForIPM(int(datasetSize)),
 		mvOpts,
 		posOpts,
+		tagKeyOpts,
 	)
 
 	if err != nil {
@@ -179,6 +188,7 @@ func (a *Actions) GetDatasetSize(datasetName string) (int64, error) {
 // @Param        pos query string false "Search part of speach"
 // @Param        rangeCoeff query float64 false "Search range coefficient" default(0.2) minimum(0) maximum(1)
 // @Param        maxkItems query int false "Maximum number of items" default(20)
+// @Param        distinguish-tag-key query int false "Return lemma variants with different tag keys separately" default(0)
 // @Success      200 {object} map[string]any
 // @Router       /dictionary/{corpusId}/similarARFWords/{term} [get]
 func (a *Actions) SimilarARFWords(ctx *gin.Context) {
@@ -199,6 +209,11 @@ func (a *Actions) SimilarARFWords(ctx *gin.Context) {
 	if !ok {
 		return
 	}
+	distinguishTagKey := ctx.Query("distinguish-tag-key") == "1"
+	tagKeyOpts := dictionary.SearchWithNoOp()
+	if distinguishTagKey {
+		tagKeyOpts = dictionary.SearchWithTagKeyDistinction()
+	}
 
 	termSrch, err := dictionary.Search(
 		ctx,
@@ -207,7 +222,7 @@ func (a *Actions) SimilarARFWords(ctx *gin.Context) {
 		dictionary.SearchWithWord(word),
 		dictionary.SearchWithLemma(lemma),
 		dictionary.SearchWithPoS(pos),
-		dictionary.SearchWithLimit(1),
+		tagKeyOpts,
 	)
 	if err != nil {
 		uniresp.RespondWithErrorJSON(ctx, err, http.StatusInternalServerError)
@@ -221,6 +236,7 @@ func (a *Actions) SimilarARFWords(ctx *gin.Context) {
 			termSrch[0],
 			rangeCoeff,
 			maxNumItems,
+			distinguishTagKey,
 		)
 		datasetSize, err := a.GetDatasetSize(corpusID)
 		if err != nil {

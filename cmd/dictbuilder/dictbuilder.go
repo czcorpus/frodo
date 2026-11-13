@@ -232,6 +232,7 @@ func run(ctx context.Context, configFilePath string) {
 		UsePartitionedTable:   false,
 		MinFreq:               1,
 		SkipGroupedNameSearch: true, // required so the ngrams job don't search for the corpus in the database
+		TagKey:                config.TagKey,
 	}
 	log.Info().Msg("Running ngrams job")
 

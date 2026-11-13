@@ -93,6 +93,7 @@ type NGramsReqArgs struct {
 	UsePartitionedTable   bool                 `json:"usePartitionedTable"`
 	MinFreq               int                  `json:"minFreq"`
 	SkipGroupedNameSearch bool                 `json:"skipGroupedNameSearch"`
+	TagKey                *corpus.TagKeyConf   `json:"tagKey,omitempty"`
 }
 
 func (args NGramsReqArgs) Validate() error {
@@ -101,6 +102,9 @@ func (args NGramsReqArgs) Validate() error {
 	}
 	if err := args.PosTagset.Validate(); err != nil {
 		return fmt.Errorf("failed to validate tagset: %w", err)
+	}
+	if err := args.TagKey.Validate(); err != nil {
+		return fmt.Errorf("failed to validate tagKey: %w", err)
 	}
 
 	if args.ColMapping != nil {
@@ -339,6 +343,7 @@ func (a *Actions) GenerateNgrams(ctx *gin.Context) {
 		appendMode,
 		ngramSize,
 		posFn,
+		args.TagKey,
 		*args.ColMapping,
 		args.MinFreq,
 	)
