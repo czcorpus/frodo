@@ -22,6 +22,8 @@ import (
 	"fmt"
 	"frodo/db/mysql"
 	"sync"
+
+	"github.com/czcorpus/cnc-gokit/util"
 )
 
 type rowsAndErr struct {
@@ -81,6 +83,8 @@ func tagKeyColumn(ctx context.Context, db *mysql.Adapter, table, column string) 
 // This may sometimes lead to a situation where there will be no near items found but it should
 // be quite rare.
 // If an auxiliary `{groupedName}_lemma_stats` table exists, it is used for a faster lookup.
+// If distinguishTagKey is true, lemma variants with different tag keys are returned
+// as separate items.
 func SimilarARFWords(
 	ctx context.Context,
 	db *mysql.Adapter,
@@ -88,6 +92,7 @@ func SimilarARFWords(
 	lemma Lemma,
 	searchRangeCoeff float64,
 	maxValues int,
+	distinguishTagKey bool,
 ) ([]Lemma, error) {
 	if !lemma.CanDoSimFreqScores() {
 		return []Lemma{}, nil
@@ -111,24 +116,35 @@ func SimilarARFWords(
 		if err != nil {
 			return []Lemma{}, fmt.Errorf("failed to get similar freq. words: %w", err)
 		}
+		// rows aggregated over all tag keys of a lemma have an empty tag key
+		tagKeyFilter := ""
+		if tagKeyCol != "''" {
+			tagKeyFilter = util.Ternary(
+				distinguishTagKey,
+				"AND tag_key <> '' ",
+				"AND tag_key = '' ",
+			)
+		}
 		rows, err = db.DB().QueryContext(
 			ctx,
 			fmt.Sprintf(
 				"(SELECT '-', lemma, '-', sum_count, pos, %s, 0, 1, avg_sim_freqs_score, 0 "+
 					"FROM %s_lemma_stats "+
-					"WHERE ngram = 1 AND avg_sim_freqs_score BETWEEN ? AND ? "+
+					"WHERE ngram = 1 AND avg_sim_freqs_score BETWEEN ? AND ? %s"+
 					"ORDER BY avg_sim_freqs_score ASC "+
 					"LIMIT ?) "+
 					"UNION "+
 					"(SELECT '-', lemma, '-', sum_count, pos, %s, 0, 1, avg_sim_freqs_score, 0 "+
 					"FROM %s_lemma_stats "+
-					"WHERE ngram = 1 AND avg_sim_freqs_score BETWEEN ? AND ? "+
+					"WHERE ngram = 1 AND avg_sim_freqs_score BETWEEN ? AND ? %s"+
 					"ORDER BY avg_sim_freqs_score DESC "+
 					"LIMIT ?)",
 				tagKeyCol,
 				groupedName,
+				tagKeyFilter,
 				tagKeyCol,
 				groupedName,
+				tagKeyFilter,
 			),
 			lemma.SimFreqScore, upperScoreLim, halfl,
 			lowerScoreLim, lemma.SimFreqScore, halfl,
@@ -138,9 +154,14 @@ func SimilarARFWords(
 		}
 
 	} else {
-		tagKeyCol, err := tagKeyColumn(ctx, db, groupedName+"_word", "w.tag_key")
-		if err != nil {
-			return []Lemma{}, fmt.Errorf("failed to get similar freq. words: %w", err)
+		// without lemma stats, the tag key is expected to be the same as PoS
+		// (see freqdb BuildLemmaStats) so grouping by lemma and PoS is sufficient
+		tagKeyCol := "''"
+		if distinguishTagKey {
+			tagKeyCol, err = tagKeyColumn(ctx, db, groupedName+"_word", "w.tag_key")
+			if err != nil {
+				return []Lemma{}, fmt.Errorf("failed to get similar freq. words: %w", err)
+			}
 		}
 		// SQL note: even if it is not optimal in regards to getting the closest N values,
 		// we need to provide forced ranges (lower_bound...lemma_freq and lemma_freq...upper_bound)
@@ -179,7 +200,7 @@ func SimilarARFWords(
 	}
 
 	defer rows.Close()
-	ans, err := processRowsSync(rows, 0, false)
+	ans, err := processRowsSync(rows, 0, false, distinguishTagKey)
 	if err != nil {
 		return []Lemma{}, fmt.Errorf("failed to get similar freq. words: %w", err)
 	}

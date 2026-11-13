@@ -83,6 +83,8 @@ func (nfg *NgramFreqGenerator) updateTablesStats() error {
 // BuildLemmaStats creates (or recreates) the auxiliary {groupedName}_lemma_stats table
 // and fills it with aggregated data from {groupedName}_word. This should be called
 // once the initial import into _word is complete.
+// Each lemma has rows for its tag keys and also a row aggregated over all its tag keys
+// (with an empty tag key).
 func (nfg *NgramFreqGenerator) BuildLemmaStats(ctx context.Context) error {
 	if _, err := nfg.db.DB().ExecContext(
 		ctx,
@@ -117,7 +119,22 @@ func (nfg *NgramFreqGenerator) BuildLemmaStats(ctx context.Context) error {
 			`INSERT INTO %s_lemma_stats
 			SELECT lemma, pos, tag_key, ngram, SUM(count), AVG(sim_freqs_score), MIN(sublemma)
 			FROM %s_word
+			WHERE tag_key <> ''
 			GROUP BY lemma, pos, tag_key, ngram`,
+			nfg.groupedName,
+			nfg.groupedName,
+		),
+	); err != nil {
+		return fmt.Errorf("failed to build lemma stats: %w", err)
+	}
+	if _, err := nfg.db.DB().ExecContext(
+		ctx,
+		fmt.Sprintf(
+			`INSERT INTO %s_lemma_stats
+			SELECT lemma, pos, '', ngram, SUM(sum_count),
+				IF(MIN(avg_sim_freqs_score) < 0, -1, SUM(avg_sim_freqs_score)), MIN(sublemma)
+			FROM %s_lemma_stats
+			GROUP BY lemma, pos, ngram`,
 			nfg.groupedName,
 			nfg.groupedName,
 		),
@@ -717,7 +734,8 @@ func (nfg *NgramFreqGenerator) generateSync(
 	if !ok {
 		return
 	}
-	if numNgrams > maxNonOptimizedNgramsLen {
+	// with tag keys, lemma stats are required to search lemmas with similar frequency
+	if numNgrams > maxNonOptimizedNgramsLen || nfg.tagKeyConf != nil {
 		if err := nfg.BuildLemmaStats(ctx); err != nil {
 			status.Error = err
 			statusChan <- status

@@ -174,6 +174,7 @@ func (actions *Actions) searchCorpusEntry(ctx context.Context, corpus corpusRef,
 			util.Ternary(lemma != "", dictionary.SearchWithLemma(lemma), dictionary.SearchWithNoOp()),
 			util.Ternary(pos != "", dictionary.SearchWithPoS(pos), dictionary.SearchWithNoOp()),
 			util.Ternary(tagKeyPattern != "", dictionary.SearchWithTagKey(tagKeyPattern), dictionary.SearchWithNoOp()),
+			dictionary.SearchWithTagKeyDistinction(),
 			dictionary.SearchWithDatasetSizeForIPM(corpus.DatasetSize),
 		)
 	}
@@ -221,6 +222,7 @@ func (actions *Actions) searchOtherCorpusSublemmata(ctx context.Context, corpus 
 		util.Ternary(lemma != "", dictionary.SearchWithLemma(lemma), dictionary.SearchWithNoOp()),
 		dictionary.SearchWithoutSublemma(sublemma),
 		util.Ternary(pos != "", dictionary.SearchWithPoS(pos), dictionary.SearchWithNoOp()),
+		dictionary.SearchWithTagKeyDistinction(),
 		dictionary.SearchWithDatasetSizeForIPM(corpus.DatasetSize),
 	)
 	if err != nil {
