@@ -110,3 +110,18 @@ func TestCreateTagKeyPattern(t *testing.T) {
 	assert.Equal(t, "^[V]...........P..", createTagKeyPattern(LexKey{Pos: "V", Aspect: "P"}))
 	assert.Equal(t, "", createTagKeyPattern(LexKey{Lemma: "pes"}))
 }
+
+func TestFilterDerivedEntries(t *testing.T) {
+	ans := filterDerivedEntries([]dictionary.Lemma{
+		{Lemma: "vědomý", PoS: "A", TagKey: "A---------A----", Sublemmas: []dictionary.Sublemma{{Value: "vědomý"}}},
+		{Lemma: "vědomý", PoS: "A", TagKey: "A---------N----", Sublemmas: []dictionary.Sublemma{{Value: "vědomý"}}},
+		{Lemma: "vědomý", PoS: "A", TagKey: "A---------A----", Sublemmas: []dictionary.Sublemma{{Value: "sebevědomý"}}},
+		{Lemma: "sebevrah", PoS: "N", TagKey: "N-M------------", Sublemmas: []dictionary.Sublemma{{Value: "sebevrah"}}},
+		{Lemma: "dělat", PoS: "V", Sublemmas: []dictionary.Sublemma{{Value: "dělat"}}},
+	})
+	assert.Len(t, ans, 3)
+	assert.Equal(t, "A---------A----", ans[0].TagKey)
+	assert.Equal(t, "vědomý", ans[0].Sublemmas[0].Value)
+	assert.Equal(t, "sebevrah", ans[1].Lemma)
+	assert.Equal(t, "dělat", ans[2].Lemma)
+}
