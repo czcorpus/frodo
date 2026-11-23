@@ -187,6 +187,7 @@ func (m *model) refresh() tea.Cmd {
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	logInput(msg)
 	switch msg := msg.(type) {
 
 	case tea.WindowSizeMsg:
@@ -425,14 +426,14 @@ func (m model) footerView() string {
 	if m.mode == viewDetail {
 		items = []string{
 			helpItem("↑/↓/PgUp/PgDn", "scroll"),
-			helpItem("Esc", "back"),
+			helpItem("Esc/Bksp/←/h", "back"),
 			helpItem("r", "refresh"),
 			helpItem("q", "quit"),
 		}
 
 	} else {
 		items = []string{
-			helpItem("↑/↓", "move"),
+			helpItem("↑/↓/j/k", "move"),
 			helpItem("Enter", "detail"),
 			helpItem("u", "toggle unfinished"),
 			helpItem("r", "refresh"),

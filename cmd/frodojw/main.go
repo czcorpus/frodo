@@ -68,6 +68,8 @@ func apiURLFromConf(path string) (string, error) {
 func main() {
 	apiURL := flag.String("url", "", "Frodo API URL (e.g. http://localhost:8088); overrides the config file")
 	interval := flag.Duration("interval", 2*time.Second, "refresh interval of the active view")
+	colorMode := flag.String("color", "auto", "color mode: auto, none, 16, 256, truecolor")
+	keyLog := flag.String("debug-keys", "", "log received keyboard input to the specified file (for diagnosing terminal issues)")
 	showVersion := flag.Bool("version", false, "show version information and exit")
 	flag.Usage = func() {
 		fmt.Fprintf(
@@ -100,6 +102,19 @@ func main() {
 	if *interval < 200*time.Millisecond {
 		fmt.Fprintln(os.Stderr, "Error: refresh interval must be at least 200ms")
 		os.Exit(2)
+	}
+
+	if err := setupColors(*colorMode); err != nil {
+		fmt.Fprintln(os.Stderr, "Error:", err)
+		os.Exit(2)
+	}
+	if *keyLog != "" {
+		closeLog, err := setupKeyLog(*keyLog)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Error:", err)
+			os.Exit(1)
+		}
+		defer closeLog()
 	}
 
 	client := newAPIClient(baseURL)
