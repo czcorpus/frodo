@@ -6,21 +6,22 @@ LDFLAGS := -ldflags "-w -s -X main.version=$(VERSION) -X main.buildDate=$(BUILD)
 SERVER_BIN := frodo
 DICTBUILDER_BIN := mkdict
 SSJC_BIN := ssjc
+FRODOJW_BIN := frodojw
 
 BIN_DIR := .
 DOCS_DIR := docs
 
-.PHONY: all build server devbuild server-dev dictbuilder ssjc dictbuilder-dev test swagger clean help
+.PHONY: all build server devbuild server-dev dictbuilder ssjc frodojw dictbuilder-dev test swagger clean help
 
 all: build test
 
-build: server dictbuilder ssjc
+build: server dictbuilder ssjc frodojw
 
 server:
 	@$(MAKE) swagger
 	go build $(LDFLAGS) -o $(BIN_DIR)/$(SERVER_BIN) ./cmd/server
 
-devbuild: server-dev dictbuilder-dev ssjc
+devbuild: server-dev dictbuilder-dev ssjc frodojw
 
 server-dev:
 	go build $(LDFLAGS) -o $(BIN_DIR)/$(SERVER_BIN) ./cmd/server
@@ -30,6 +31,9 @@ dictbuilder:
 
 ssjc:
 	go build $(LDFLAGS) -o $(BIN_DIR)/$(SSJC_BIN) ./cmd/ssjc
+
+frodojw:
+	go build $(LDFLAGS) -o $(BIN_DIR)/$(FRODOJW_BIN) ./cmd/frodojw
 
 dictbuilder-dev:
 	go build $(LDFLAGS) -o $(BIN_DIR)/$(DICTBUILDER_BIN) ./cmd/dictbuilder
@@ -48,6 +52,7 @@ clean:
 	@rm -f $(BIN_DIR)/${SERVER_BIN}
 	@rm -f $(BIN_DIR)/${DICTBUILDER_BIN}
 	@rm -f $(BIN_DIR)/${SSJC_BIN}
+	@rm -f $(BIN_DIR)/${FRODOJW_BIN}
 	@rm -rf $(DOCS_DIR)
 
 deps:
@@ -65,6 +70,7 @@ help:
 	@echo "  server        - Build server binary"
 	@echo "  dictbuilder   - Build dictbuilder binary"
 	@echo "  ssjc          - Build SSJC binary"
+	@echo "  frodojw       - Build FRODO Job Watch (terminal UI for jobs)"
 	@echo "  test          - Run tests"
 	@echo "  test-coverage - Run tests with coverage"
 	@echo "  swagger       - Generate swagger documentation"
