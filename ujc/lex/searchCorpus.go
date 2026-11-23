@@ -39,9 +39,16 @@ const (
 
 	// tag positions of gender and aspect, the corpus dictionary must be
 	// generated with a tag key containing them (e.g. {"N": [1, 3], "V": [1, 13]})
-	tagKeyGenderPos = 3
-	tagKeyAspectPos = 13
-	tagLength       = 15
+	tagKeyGenderPos   = 3
+	tagKeyAspectPos   = 13
+	tagKeyNegationPos = 11
+	tagLength         = 15
+
+	// tagNegated is a tag value of negated words (on tagKeyNegationPos)
+	tagNegated = "N"
+
+	// sebePrefix is a prefix of sublemmas like "sebevědomý" (lemma "vědomý")
+	sebePrefix = "sebe"
 
 	// tagGenderMasc is a tag gender of both masculine genders (M or I)
 	tagGenderMasc = "Y"
@@ -228,7 +235,33 @@ func (actions *Actions) searchOtherCorpusSublemmata(ctx context.Context, corpus 
 	if err != nil {
 		return nil, fmt.Errorf("failed to find sublemma: %w", err)
 	}
-	return splitBySublemma(ans), nil
+	return filterDerivedEntries(splitBySublemma(ans)), nil
+}
+
+// isNegatedEntry tests whether the entry is negated (tag `..........N....`),
+// the corpus dictionary must be generated with a tag key containing negation position
+func isNegatedEntry(entry dictionary.Lemma) bool {
+	return len(entry.TagKey) >= tagKeyNegationPos &&
+		entry.TagKey[tagKeyNegationPos-1:tagKeyNegationPos] == tagNegated
+}
+
+// isSebeEntry tests whether the entry has "sebe" prefixed sublemma
+// while its lemma is not prefixed (`[sublemma="sebe.*" & lemma!="sebe.*"]`)
+func isSebeEntry(entry dictionary.Lemma) bool {
+	if strings.HasPrefix(entry.Lemma, sebePrefix) {
+		return false
+	}
+	return slices.ContainsFunc(entry.Sublemmas, func(s dictionary.Sublemma) bool {
+		return strings.HasPrefix(s.Value, sebePrefix)
+	})
+}
+
+// filterDerivedEntries removes negated entries and entries with "sebe" prefixed sublemma,
+// entries are expected to have a single sublemma (see splitBySublemma)
+func filterDerivedEntries(entries []dictionary.Lemma) []dictionary.Lemma {
+	return slices.DeleteFunc(entries, func(entry dictionary.Lemma) bool {
+		return isNegatedEntry(entry) || isSebeEntry(entry)
+	})
 }
 
 // searchCorpusOnlyEntries searches the corpus for the term (as word, lemma or sublemma)
