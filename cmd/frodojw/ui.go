@@ -25,6 +25,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 
 	"frodo/jobs"
 )
@@ -116,6 +117,14 @@ func newModel(client *apiClient, interval time.Duration) model {
 	}
 }
 
+// noColors tells whether the output is monochrome. In such case, styles
+// cannot highlight the selected row so we use an explicit marker column.
+func noColors() bool {
+	return lipgloss.ColorProfile() == termenv.Ascii
+}
+
+const cursorMarker = "▶"
+
 func columns(width int) []table.Column {
 	// fixed widths; each of the 7 columns gets also 2 chars of padding
 	const (
@@ -130,7 +139,7 @@ func columns(width int) []table.Column {
 	if corpusW < 10 {
 		corpusW = 10
 	}
-	return []table.Column{
+	ans := []table.Column{
 		{Title: "ID", Width: idW},
 		{Title: "Type", Width: typeW},
 		{Title: "Corpus", Width: corpusW},
@@ -139,6 +148,29 @@ func columns(width int) []table.Column {
 		{Title: "Updated", Width: startW},
 		{Title: "Duration", Width: durW},
 	}
+	if noColors() {
+		ans[2].Width = max(ans[2].Width-3, 10)
+		ans = append([]table.Column{{Title: "", Width: 1}}, ans...)
+	}
+	return ans
+}
+
+// markCursor updates the marker column (if used) according
+// to the current cursor position
+func (m *model) markCursor() {
+	if !noColors() {
+		return
+	}
+	rows := m.table.Rows()
+	for i, row := range rows {
+		if i == m.table.Cursor() {
+			row[0] = cursorMarker
+
+		} else {
+			row[0] = " "
+		}
+	}
+	m.table.SetRows(rows)
 }
 
 func (m model) Init() tea.Cmd {
@@ -262,6 +294,7 @@ func (m model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	var cmd tea.Cmd
 	m.table, cmd = m.table.Update(msg)
+	m.markCursor()
 	return m, cmd
 }
 
@@ -375,6 +408,9 @@ func (m *model) setJobs(newJobs jobs.JobInfoListCompact) {
 			fmtTime(j.Update),
 			jobDuration(j),
 		}
+		if noColors() {
+			rows[i] = append(table.Row{" "}, rows[i]...)
+		}
 		if j.ID == selectedID {
 			newCursor = i
 		}
@@ -386,6 +422,7 @@ func (m *model) setJobs(newJobs jobs.JobInfoListCompact) {
 		}
 		m.table.SetCursor(newCursor)
 	}
+	m.markCursor()
 }
 
 func (m model) headerView() string {

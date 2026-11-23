@@ -28,8 +28,10 @@ go.work.sum
 .vscode/
 
 #
-frodo
+/frodo
 /mkdict
 /ssjc
 conf*.json
 docs/*
+/frodojw
+/scripts/__pycache__/
