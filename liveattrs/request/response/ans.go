@@ -20,10 +20,33 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/czcorpus/cnc-gokit/collections"
+	"github.com/rs/zerolog/log"
+	"golang.org/x/text/collate"
+	"golang.org/x/text/language"
 )
+
+// newCollator creates a case-insensitive collator for the provided locale.
+// If the locale is empty, a general (root) case-insensitive collation is used.
+// If the locale cannot be parsed, a warning is logged and the general
+// case-insensitive collation is used as well.
+func newCollator(locale string) *collate.Collator {
+	tag := language.Und
+	if locale != "" {
+		parsed, err := language.Parse(locale)
+		if err != nil {
+			log.Warn().
+				Err(err).
+				Str("locale", locale).
+				Msg("failed to parse corpus locale, using general case-insensitive collation")
+
+		} else {
+			tag = parsed
+		}
+	}
+	return collate.New(tag, collate.IgnoreCase)
+}
 
 type ListedValue struct {
 	ID         string
@@ -118,16 +141,17 @@ func ExportAttrValues(
 	collatorLocale string,
 	maxAttrListSize int,
 ) {
+	coll := newCollator(collatorLocale)
 	values := make(map[string]any)
 	for k, v := range data.AttrValues {
 		switch tVal := v.(type) {
 		case []*ListedValue:
 			if maxAttrListSize == 0 || len(tVal) <= maxAttrListSize ||
 				collections.SliceContains(expandAttrs, k) {
-				sort.Slice(
+				sort.SliceStable(
 					tVal,
 					func(i, j int) bool {
-						return strings.Compare(tVal[i].Label, tVal[j].Label) == -1
+						return coll.CompareString(tVal[i].Label, tVal[j].Label) < 0
 					},
 				)
 				values[k] = tVal
